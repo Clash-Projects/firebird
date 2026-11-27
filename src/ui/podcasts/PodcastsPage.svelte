@@ -41,11 +41,13 @@
           ...loadedEpisodes,
           [show.id]: res.episodes.map((ep) => ({
             id: ep.videoId,
+            showId: show.id,
             title: ep.title,
             description: ep.description || '',
             publishedAt: ep.publishedAt || '',
             durationSec: Number(ep.durationSeconds) || 0,
             resumeSec: 0,
+            artworkUrl: show.artworkUrl,
           })),
         };
       })
