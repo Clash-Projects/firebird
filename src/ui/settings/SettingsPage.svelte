@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { getPlatformAudioCopy } from '$src/features/audio_output/platformAudio';
   import { APP_FONTS } from '$src/features/settings/appFonts.svelte';
   import { setCustomBase, setThemeMode, syncThemeDocument } from '$src/features/settings/themeController.svelte';
   import { setUiScale, UI_SCALE_OPTIONS } from '$src/features/settings/uiScale.svelte';
   import NowPlayingStylePicker from '$src/features/settings/widgets/NowPlayingStylePicker.svelte';
+  import { ipcInvoke } from '$src/lib/ipc';
   import { playerStore } from '$src/state/player.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
   import LastfmKeyGuide from '$src/ui/auth/LastfmKeyGuide.svelte';
@@ -53,7 +55,15 @@
     }
   });
 
-  let searchHits = $derived(searchSettings(query));
+  let searchHits = $derived(searchSettings(query, settingsStore.platform));
+  let audioCopy = $derived(getPlatformAudioCopy(settingsStore.platform));
+
+  function toggleBitPerfect(enabled: boolean) {
+    settingsStore.bitPerfectEnabled = enabled;
+    settingsStore.exclusiveMode = enabled;
+    void ipcInvoke('audio_output_set_bit_perfect', { enabled });
+    void ipcInvoke('audio_output_set_exclusive', { enabled });
+  }
 </script>
 
 <div data-lw="settings-page" class="flex h-full flex-col">
@@ -150,7 +160,7 @@
         </label>
         <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
           <div>
-            <div class="text-[13.5px] font-semibold">OS Media Controls (SMTC / MPRIS)</div>
+            <div class="text-[13.5px] font-semibold">{audioCopy.mediaControlsTitle}</div>
             <div class="text-[12px] text-[var(--lw-text-secondary)]">Expose transport controls and timeline to the OS</div>
           </div>
           <input type="checkbox" bind:checked={settingsStore.smtcEnabled} class="h-4 w-4 accent-[var(--lw-accent)]" />
@@ -216,10 +226,15 @@
         </div>
         <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
           <div>
-            <div class="text-[13.5px] font-semibold">WASAPI Exclusive Mode</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">Hardware exclusive DAC handoff</div>
+            <div class="text-[13.5px] font-semibold">{audioCopy.exclusiveTitle}</div>
+            <div class="text-[12px] text-[var(--lw-text-secondary)]">{audioCopy.exclusiveDescription}</div>
           </div>
-          <input type="checkbox" bind:checked={settingsStore.exclusiveMode} class="h-4 w-4 accent-[var(--lw-accent)]" />
+          <input
+            type="checkbox"
+            checked={settingsStore.bitPerfectEnabled && settingsStore.exclusiveMode}
+            onchange={(e) => toggleBitPerfect(e.currentTarget.checked)}
+            class="h-4 w-4 accent-[var(--lw-accent)]"
+          />
         </label>
       </div>
     {:else if activeSection === 'downloads'}

@@ -1,3 +1,4 @@
+import { detectHostPlatform, type HostPlatform } from '$src/features/audio_output/platformAudio';
 import type { NowPlayingStyle } from './types';
 
 export type ThemeMode = 'dark' | 'light' | 'amoled' | 'custom' | 'artwork';
@@ -26,10 +27,11 @@ class SettingsStore {
   performanceMode = $state(false);
   reduceMotion = $state(false);
 
+  platform = $state<HostPlatform>(detectHostPlatform());
   qualityTier = $state<'auto' | 'high' | 'cdFlac' | 'hiRes96' | 'hiRes192' | 'atmos'>('hiRes192');
   loudnessMode = $state<'off' | 'track' | 'album' | 'lufs'>('track');
   exclusiveMode = $state(false);
-  bitPerfectEnabled = $state(true);
+  bitPerfectEnabled = $state(false);
   gaplessPlayback = $state(true);
   discordRpcEnabled = $state(true);
   smtcEnabled = $state(true);

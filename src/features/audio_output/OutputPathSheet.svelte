@@ -1,5 +1,7 @@
 <script lang="ts">
   import { windowState } from '$src/app/window.svelte';
+  import { getPlatformAudioCopy } from '$src/features/audio_output/platformAudio';
+  import { ipcInvoke } from '$src/lib/ipc';
   import { featuresStore } from '$src/state/features.svelte';
   import { playerStore } from '$src/state/player.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
@@ -8,23 +10,29 @@
 
   let track = $derived(playerStore.currentTrack);
   let device = $derived(featuresStore.selectedDevice);
+  let audioCopy = $derived(getPlatformAudioCopy(settingsStore.platform));
   let bitPerfectActive = $derived(
     settingsStore.exclusiveMode &&
       settingsStore.bitPerfectEnabled &&
-      Boolean(device?.supportsExclusive) &&
+      (device ? device.supportsExclusive : true) &&
       !featuresStore.eqEnabled
   );
   let blockingReason = $derived(
-    !device
-      ? 'No audio output device detected'
-      : !settingsStore.exclusiveMode
-        ? 'WASAPI Exclusive mode is off'
-        : !device.supportsExclusive
-          ? 'Selected device does not support Exclusive mode'
-          : featuresStore.eqEnabled
-            ? 'Parametric EQ DSP is active'
-            : null
+    !settingsStore.bitPerfectEnabled || !settingsStore.exclusiveMode
+      ? audioCopy.exclusiveOffReason
+      : device && !device.supportsExclusive
+        ? 'Selected device does not support exclusive output'
+        : featuresStore.eqEnabled
+          ? 'Parametric EQ DSP is active'
+          : null
   );
+
+  function toggleBitPerfect(enabled: boolean) {
+    settingsStore.bitPerfectEnabled = enabled;
+    settingsStore.exclusiveMode = enabled;
+    void ipcInvoke('audio_output_set_bit_perfect', { enabled });
+    void ipcInvoke('audio_output_set_exclusive', { enabled });
+  }
 </script>
 
 <WaveHaze
@@ -61,7 +69,7 @@
         <div class="mt-3 space-y-1 border-t border-[var(--lw-divider)] pt-2.5 text-[12px] text-[var(--lw-text-secondary)]">
           <div class="flex justify-between"><span>Source</span><span class="text-[var(--lw-text-primary)]">{track.codec}</span></div>
           <div class="flex justify-between"><span>Sample Rate</span><span class="lw-tabular text-[var(--lw-text-primary)]">{(track.sampleRateHz / 1000).toFixed(1)} kHz / {track.bitDepth}-bit</span></div>
-          <div class="flex justify-between"><span>Output Driver</span><span class="text-[var(--lw-text-primary)]">{device?.driver ?? 'System Default'} {settingsStore.exclusiveMode ? 'Exclusive' : 'Shared'}</span></div>
+          <div class="flex justify-between"><span>Output Driver</span><span class="text-[var(--lw-text-primary)]">{device?.driver ?? audioCopy.driverName} {settingsStore.exclusiveMode ? 'Exclusive' : 'Shared'}</span></div>
         </div>
       {/if}
     </div>
@@ -98,10 +106,15 @@
 
     <label class="flex cursor-pointer items-center justify-between rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] px-3 py-2.5">
       <div>
-        <div class="text-[12.5px] font-semibold">WASAPI Exclusive Mode</div>
-        <div class="text-[11px] text-[var(--lw-text-tertiary)]">Bypass Windows mixer for direct DAC output</div>
+        <div class="text-[12.5px] font-semibold">{audioCopy.exclusiveTitle}</div>
+        <div class="text-[11px] text-[var(--lw-text-tertiary)]">{audioCopy.exclusiveDescription}</div>
       </div>
-      <input type="checkbox" bind:checked={settingsStore.exclusiveMode} class="h-4 w-4 accent-[var(--lw-accent)]" />
+      <input
+        type="checkbox"
+        checked={settingsStore.bitPerfectEnabled && settingsStore.exclusiveMode}
+        onchange={(e) => toggleBitPerfect(e.currentTarget.checked)}
+        class="h-4 w-4 accent-[var(--lw-accent)]"
+      />
     </label>
   </div>
 </WaveHaze>

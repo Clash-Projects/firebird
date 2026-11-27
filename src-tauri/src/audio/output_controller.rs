@@ -20,6 +20,8 @@ use crate::storage::prefs::Prefs;
 #[serde(rename_all = "camelCase")]
 pub struct AudioOutputState {
     #[serde(default)]
+    pub platform: String,
+    #[serde(default)]
     pub devices: Vec<DacDevice>,
     #[serde(default)]
     pub selected_id: String,
@@ -33,6 +35,14 @@ pub struct AudioOutputState {
     pub last_opened_format: Option<PcmFormat>,
     #[serde(default)]
     pub probing: bool,
+}
+
+fn current_platform_name() -> String {
+    match std::env::consts::OS {
+        "windows" => "windows".to_string(),
+        "macos" => "macos".to_string(),
+        _ => "linux".to_string(),
+    }
 }
 
 impl AudioOutputState {
@@ -155,6 +165,7 @@ impl AudioOutputController {
     ) -> Self {
         let exclusive = prefs.wasapi_exclusive() || prefs.bit_perfect();
         let initial_state = AudioOutputState {
+            platform: current_platform_name(),
             selected_id: prefs.audio_device_id(),
             exclusive_requested: exclusive,
             bit_perfect_requested: exclusive,

@@ -3756,7 +3756,20 @@ impl PlaybackService {
 
         let full_vol = {
             let _guard = self.mpv_lock.lock().await;
-            let _ = player.set_property("ao", "wasapi");
+            #[cfg(windows)]
+            let ao_driver = "wasapi";
+            #[cfg(target_os = "macos")]
+            let ao_driver = "coreaudio";
+            #[cfg(target_os = "linux")]
+            let ao_driver = if mpv_device.starts_with("alsa/") {
+                "alsa"
+            } else {
+                "pipewire,pulse,alsa"
+            };
+            #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+            let ao_driver = "auto";
+
+            let _ = player.set_property("ao", ao_driver);
             let mut err: Option<String> = None;
             if let Err(e) = player.set_property("audio-exclusive", if exclusive { "yes" } else { "no" })
             {
@@ -3778,6 +3791,7 @@ impl PlaybackService {
                         d.af_written.insert(player.id(), String::new());
                     }
                 }
+                let _ = player.set_property("audio-samplerate", "0");
                 let _ = player.set_property("replaygain", "no");
                 let _ = player.set_property("replaygain-fallback", "0");
                 let _ = player.set_property("audio-normalize-downmix", "no");
