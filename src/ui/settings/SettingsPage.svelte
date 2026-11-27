@@ -6,6 +6,7 @@
   import { setUiScale, UI_SCALE_OPTIONS } from '$src/features/settings/uiScale.svelte';
   import NowPlayingStylePicker from '$src/features/settings/widgets/NowPlayingStylePicker.svelte';
   import { ipcInvoke } from '$src/lib/ipc';
+  import { pluginManager } from '$src/lib/plugins/pluginManager.svelte';
   import { featuresStore, LYRICS_PROVIDERS } from '$src/state/features.svelte';
   import { playerStore } from '$src/state/player.svelte';
   import { settingsStore, THEME_MODES } from '$src/state/settings.svelte';
@@ -256,8 +257,35 @@
           </div>
         </div>
       {:else if activeSection === 'appearance'}
+        {@const activePluginTheme = !pluginManager.safeMode && !pluginManager.allDisabled ? pluginManager.plugins.find((p) => p.manifest.id === pluginManager.activeThemeId) : null}
+        {@const activePluginPalette = !pluginManager.safeMode && !pluginManager.allDisabled ? pluginManager.plugins.find((p) => p.manifest.id === pluginManager.activePaletteId) : null}
         <div class="space-y-4">
-          <div class="space-y-2.5 rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+          {#if activePluginTheme || activePluginPalette}
+            <div class="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-[var(--lw-accent)]/40 bg-[var(--lw-accent-subtle)] px-4 py-3 text-[12.5px]">
+              <div class="min-w-0 flex-1">
+                <div class="font-semibold text-[var(--lw-text-primary)]">
+                  Plugin override active: {activePluginTheme?.manifest.name || activePluginPalette?.manifest.name}
+                </div>
+                <div class="mt-0.5 text-[11.5px] text-[var(--lw-text-secondary)]">
+                  Built-in Theme Mode and Custom Base colors are overridden while a plugin Theme or Palette is enabled.
+                </div>
+              </div>
+              <Buttons
+                variant="secondary"
+                size="sm"
+                onclick={() => {
+                  if (activePluginTheme) pluginManager.activateTheme(null);
+                  if (activePluginPalette) pluginManager.activatePalette(null);
+                }}
+              >
+                Disable Override
+              </Buttons>
+            </div>
+          {/if}
+
+          <div
+            class="space-y-2.5 rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4 transition-opacity {activePluginTheme || activePluginPalette ? 'pointer-events-none opacity-45' : ''}"
+          >
             <div class="text-[13.5px] font-semibold">Theme Mode</div>
             <div class="flex flex-wrap gap-2">
               {#each THEME_MODES as mode (mode.value)}

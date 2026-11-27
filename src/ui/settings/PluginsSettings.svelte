@@ -14,6 +14,7 @@
   import Buttons from '$src/ui/components/Buttons.svelte';
   import Input from '$src/ui/components/Input.svelte';
   import Select from '$src/ui/components/Select.svelte';
+  import Switch from '$src/ui/components/Switch.svelte';
   import WaveIcon, { type WaveIconName } from '$src/ui/theme/WaveIcon.svelte';
   import GithubInstallModal from './GithubInstallModal.svelte';
   import LocalInstallModal from './LocalInstallModal.svelte';
@@ -67,6 +68,14 @@
       ? 0
       : pluginManager.plugins.filter((p) => p.enabled).length
   );
+  let activeThemeCount = $derived(pluginManager.activeThemeId ? 1 : 0);
+  let activePaletteCount = $derived(pluginManager.activePaletteId ? 1 : 0);
+  let activeSnippetCount = $derived(
+    pluginManager.safeMode || pluginManager.allDisabled
+      ? 0
+      : pluginManager.plugins.filter((p) => p.manifest.type === 'snippet' && p.enabled).length
+  );
+  let activeWidgetCount = $derived(pluginManager.activeWidgets.length);
 
   function installedFor(id: string): PluginRecord | undefined {
     return pluginManager.plugins.find((p) => p.manifest.id === id);
@@ -378,19 +387,42 @@
         Plugin Storefront ({activeCount} active)
       </div>
       <div class="text-[11.5px] text-[var(--lw-text-secondary)]">
-        Palettes, Themes, Snippets & Sandboxed Widgets · API v1 sandbox · stored in app data
+        Active Stack: Theme {activeThemeCount}/1 · Palette {activePaletteCount}/1 · Snippets {activeSnippetCount} · Widgets {activeWidgetCount}
       </div>
     </div>
 
-    <label class="flex cursor-pointer items-center gap-2 text-[12px] font-semibold text-[var(--lw-danger)]">
-      <input
-        type="checkbox"
-        checked={pluginManager.allDisabled}
-        onchange={(e) => void pluginManager.setAllDisabled(e.currentTarget.checked)}
-        class="h-4 w-4 accent-[var(--lw-danger)]"
-      />
-      Disable All Plugins
-    </label>
+    <div class="flex flex-wrap items-center gap-4">
+      {#if pluginManager.availableUpdates.length > 0}
+        <Buttons
+          variant="primary"
+          size="sm"
+          disabled={pluginManager.updatingAll}
+          onclick={() => void pluginManager.updateAllPlugins(false)}
+        >
+          {pluginManager.updatingAll
+            ? 'Updating...'
+            : `Update All (${pluginManager.availableUpdates.length})`}
+        </Buttons>
+      {/if}
+
+      <div class="flex items-center gap-2 text-[12px] text-[var(--lw-text-secondary)]">
+        <span>Auto-update</span>
+        <Switch
+          checked={pluginManager.autoUpdatePlugins}
+          label="Auto-update plugins"
+          onchange={(checked) => pluginManager.setAutoUpdate(checked)}
+        />
+      </div>
+
+      <div class="flex items-center gap-2 text-[12px] font-semibold text-[var(--lw-danger)]">
+        <span>Disable All</span>
+        <Switch
+          checked={pluginManager.allDisabled}
+          label="Disable all plugins"
+          onchange={(checked) => void pluginManager.setAllDisabled(checked)}
+        />
+      </div>
+    </div>
   </div>
 
   <div

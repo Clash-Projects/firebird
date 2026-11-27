@@ -28,6 +28,7 @@ import { uiSlots } from './uiSlots.svelte';
 
 const VALID_TYPES = new Set<PluginType>(['palette', 'theme', 'snippet', 'widget']);
 const SUPPORTED_API_VERSION = 1;
+const AUTO_UPDATE_KEY = 'lw_plugins_auto_update';
 const REGISTRY_PRIMARY_URL =
   'https://raw.githubusercontent.com/Clash-Projects/lastwave-plugins/main/registry.json';
 const REGISTRY_FALLBACK_URL =
@@ -129,8 +130,28 @@ class PluginManager {
   pluginsDir = $state('');
   activePaletteId = $state<string | null>(null);
   activeThemeId = $state<string | null>(null);
+  autoUpdatePlugins = $state(
+    typeof localStorage !== 'undefined' ? localStorage.getItem(AUTO_UPDATE_KEY) !== 'false' : true
+  );
+  updatingAll = $state(false);
   private initialized = false;
   private scriptCleanups = new Map<string, () => void>();
+
+  availableUpdates = $derived.by(() => {
+    const marketById = new Map(this.marketplace.map((m) => [m.id, m]));
+    const out: Array<{ record: PluginRecord; marketEntry: MarketplacePluginEntry }> = [];
+    for (const rec of this.plugins) {
+      if (rec.builtin) continue;
+      const entry = marketById.get(rec.manifest.id);
+      if (!entry) continue;
+      const versionChanged = entry.version !== rec.manifest.version;
+      const commitChanged = Boolean(entry.commit && rec.manifest.commit && entry.commit !== rec.manifest.commit);
+      if (versionChanged || commitChanged) {
+        out.push({ record: rec, marketEntry: entry });
+      }
+    }
+    return out;
+  });
 
   activeWidgets = $derived(
     this.safeMode || this.allDisabled
@@ -197,6 +218,46 @@ class PluginManager {
     this.plugins = Array.from(byId.values());
     savePluginRecords(this.plugins);
     this.reapplyActiveMods();
+    void this.checkAndAutoUpdate();
+  }
+
+  setAutoUpdate(enabled: boolean) {
+    this.autoUpdatePlugins = enabled;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(AUTO_UPDATE_KEY, enabled ? 'true' : 'false');
+    }
+  }
+
+  async checkAndAutoUpdate() {
+    await this.fetchMarketplace();
+    if (this.autoUpdatePlugins && this.availableUpdates.length > 0) {
+      await this.updateAllPlugins(true);
+    }
+  }
+
+  async updateAllPlugins(silent = false) {
+    const updates = [...this.availableUpdates];
+    if (updates.length === 0 || this.updatingAll) return;
+    this.updatingAll = true;
+    let updated = 0;
+    try {
+      for (const { marketEntry } of updates) {
+        try {
+          await this.installFromRegistry(marketEntry);
+          updated++;
+        } catch {
+          // Continue updating remaining plugins
+        }
+      }
+      if (updated > 0 && !silent) {
+        featuresStore.showToast({
+          title: `Updated ${updated} ${updated === 1 ? 'plugin' : 'plugins'}`,
+          severity: 'success',
+        });
+      }
+    } finally {
+      this.updatingAll = false;
+    }
   }
 
   private checkCompatibility(rec: PluginRecord): boolean {
@@ -225,7 +286,6 @@ class PluginManager {
       }
       this.scriptCleanups.delete(id);
     }
-    this.stopPluginScript(id);
     uiSlots.clearForPlugin(id);
   }
 
