@@ -43,6 +43,28 @@ export function attachWaveHotkeys(): () => void {
     }
   };
 
+  const onMouseDown = (e: MouseEvent) => {
+    if (e.button === 3 || e.button === 4) {
+      e.preventDefault();
+    }
+  };
+
+  const onMouseUp = (e: MouseEvent) => {
+    if (e.button === 3) {
+      e.preventDefault();
+      router.back();
+    } else if (e.button === 4) {
+      e.preventDefault();
+      router.forward();
+    }
+  };
+
   window.addEventListener('keydown', onKeyDown);
-  return () => window.removeEventListener('keydown', onKeyDown);
+  window.addEventListener('mousedown', onMouseDown);
+  window.addEventListener('mouseup', onMouseUp);
+  return () => {
+    window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('mousedown', onMouseDown);
+    window.removeEventListener('mouseup', onMouseUp);
+  };
 }
