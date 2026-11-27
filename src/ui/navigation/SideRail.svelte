@@ -63,8 +63,8 @@
 
         <span
           class="flex h-full w-[46px] shrink-0 items-center justify-center transition-transform duration-[110ms] {active
-            ? 'scale-[1.06] text-[var(--lw-accent)]'
-            : 'group-hover:scale-[1.03]'}"
+            ? 'text-[var(--lw-accent)]'
+            : ''}"
         >
           <WaveIcon name={item.icon} size={18} />
         </span>
