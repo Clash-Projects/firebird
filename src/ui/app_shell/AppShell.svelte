@@ -69,7 +69,7 @@
             <AmbientStage intensity={0.14} />
           {/if}
 
-          <div class="lw-scroll relative z-10 h-full w-full">
+          <div class="lw-scroll relative z-10 h-full w-full scrollbar-gutter-stable">
             <BranchSwitcher routeKey={router.path}>
               {#if customApp}
                 <CustomAppHost app={customApp} />
