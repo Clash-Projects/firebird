@@ -10,6 +10,10 @@
   import WaveHaze from '$src/ui/theme/WaveHaze.svelte';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
 
+  import { getCurrentWindow } from '@tauri-apps/api/window';
+  
+  const appWindow = getCurrentWindow();
+
   let searchQuery = $state('');
   let searchFocused = $state(false);
   let menuOpen = $state(false);
@@ -185,7 +189,7 @@
     <div class="ml-1 flex items-center">
       <button
         type="button"
-        onclick={() => windowState.toggleMiniPlayer()}
+        onclick={() => appWindow.minimize()}
         title="Mini player"
         class="flex h-8 w-9 cursor-pointer items-center justify-center rounded-[6px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)]"
       >
@@ -193,7 +197,7 @@
       </button>
       <button
         type="button"
-        onclick={() => windowState.toggleFullscreen()}
+        onclick={() => appWindow.toggleMaximize()}
         title="Maximize"
         class="flex h-8 w-9 cursor-pointer items-center justify-center rounded-[6px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)]"
       >
@@ -201,7 +205,7 @@
       </button>
       <button
         type="button"
-        onclick={() => featuresStore.showToast({ title: 'LastWave Firebird', subtitle: 'Running standalone in browser', severity: 'info' })}
+        onclick={() => appWindow.close()}
         title="Close"
         class="flex h-8 w-9 cursor-pointer items-center justify-center rounded-[6px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-danger)] hover:text-white"
       >

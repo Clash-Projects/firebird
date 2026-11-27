@@ -22,6 +22,7 @@
 </script>
 
 <div
+  data-tauri-drag-region
   data-lw={dataLw}
   class={className}
   style:backdrop-filter={blurPx > 0 ? `blur(${blurPx}px)` : undefined}
