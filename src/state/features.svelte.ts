@@ -73,11 +73,22 @@ interface BackendLyricsResult {
 }
 
 interface BackendPodcastShelf {
+  title?: string;
   shows?: Array<{
     showId: string;
     title: string;
     publisher?: string;
     description?: string;
+    artworkUrl?: string;
+  }>;
+  episodes?: Array<{
+    videoId: string;
+    title: string;
+    showId?: string;
+    showTitle?: string;
+    description?: string;
+    publishedAt?: string;
+    durationSeconds?: number;
     artworkUrl?: string;
   }>;
 }
@@ -103,6 +114,7 @@ class FeaturesStore {
   lyricsFontScale = $state(1.0);
 
   podcasts = $state<PodcastShow[]>([]);
+  podcastsLoading = $state(false);
 
   jamConnected = $state(false);
   jamRoomCode = $state('');
@@ -177,25 +189,56 @@ class FeaturesStore {
     void ipcInvoke('audio_output_select_device', { id: deviceId });
   }
 
-  async loadPodcasts() {
+  async loadPodcasts(force = false) {
     if (!isTauriRuntime()) return;
-    const shelves = await ipcInvoke<BackendPodcastShelf[]>('podcasts_home');
-    if (!Array.isArray(shelves)) return;
-    const byId = new Map<string, PodcastShow>();
-    for (const shelf of shelves) {
-      for (const s of shelf.shows ?? []) {
-        if (!s.showId || byId.has(s.showId)) continue;
-        byId.set(s.showId, {
-          id: s.showId,
-          title: s.title,
-          publisher: s.publisher || '',
-          description: s.description || '',
-          artworkUrl: s.artworkUrl || '',
-          episodes: [],
-        });
+    this.podcastsLoading = true;
+    try {
+      const shelves = await ipcInvoke<BackendPodcastShelf[]>('podcasts_home', { force });
+      if (!Array.isArray(shelves)) return;
+      const byId = new Map<string, PodcastShow>();
+      for (const shelf of shelves) {
+        for (const s of shelf.shows ?? []) {
+          if (!s.showId || byId.has(s.showId)) continue;
+          byId.set(s.showId, {
+            id: s.showId,
+            title: s.title,
+            publisher: s.publisher || '',
+            description: s.description || '',
+            artworkUrl: s.artworkUrl || '',
+            episodes: [],
+          });
+        }
+        if (shelf.episodes && shelf.episodes.length > 0) {
+          const shelfId = `shelf-${(shelf.title || 'episodes').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+          const existing = byId.get(shelfId);
+          const eps = shelf.episodes.map((ep) => ({
+            id: ep.videoId,
+            showId: ep.showId || shelfId,
+            title: ep.title,
+            description: ep.description || ep.showTitle || '',
+            publishedAt: ep.publishedAt || '',
+            durationSec: Number(ep.durationSeconds) || 0,
+            resumeSec: 0,
+            artworkUrl: ep.artworkUrl || '',
+          }));
+          if (existing) {
+            existing.episodes = [...existing.episodes, ...eps];
+          } else {
+            byId.set(shelfId, {
+              id: shelfId,
+              title: shelf.title || 'Featured Episodes',
+              publisher: 'YouTube Music Podcasts',
+              description: `${eps.length} episodes`,
+              artworkUrl: eps[0]?.artworkUrl || '',
+              episodes: eps,
+            });
+          }
+        }
       }
+      this.podcasts = Array.from(byId.values());
+    } finally {
+      this.podcastsLoading = false;
     }
-    this.podcasts = Array.from(byId.values());
   }
 
   getLyricsOffset(trackId: string): number {
