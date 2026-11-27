@@ -49,7 +49,7 @@
       box-sizing: border-box;
       inline-size: anchor-size(self-inline);
       min-inline-size: 0;
-      max-block-size: min(360px, 60dvh);
+      max-block-size: var(--lw-select-picker-max-height, min(360px, 60dvh));
       margin-block: 4px;
       padding: 5px;
       border: 1px solid var(--lw-outline);

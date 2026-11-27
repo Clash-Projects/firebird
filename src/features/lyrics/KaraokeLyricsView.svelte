@@ -54,6 +54,20 @@
         overflow: hidden;
         visibility: hidden;
       }
+      :host(.sidebar-renderer) .lyrics-container {
+        /* Reserve space so opening a translation keeps the final line visible. */
+        padding-block: 22px calc(var(--lw-lyrics-translation-max) + var(--lw-lyrics-edge-fade));
+        scrollbar-width: thin;
+        scrollbar-color: var(--lw-scrollbar-thumb) transparent;
+      }
+      :host(.sidebar-renderer) .lyrics-container::-webkit-scrollbar {
+        display: block;
+        width: 6px;
+      }
+      :host(.sidebar-renderer) .lyrics-container::-webkit-scrollbar-thumb {
+        border-radius: 8px;
+        background: var(--lw-scrollbar-thumb);
+      }
     `;
     void element.updateComplete.then(() => element.shadowRoot?.prepend(chrome));
 
@@ -86,33 +100,36 @@
     {#key doc.trackId}
       <am-lyrics
         use:configureRenderer
+        class:sidebar-renderer={compact}
         ttml={timedText}
         currentTime={posMs}
         duration={durationMs || undefined}
         paused={!playerStore.isPlaying || playerStore.isBuffering}
         interpolate={playerStore.speed === 1}
         noAutoAlternates={true}
-        noBlur={settingsStore.reduceMotion}
+        noBlur={compact || settingsStore.reduceMotion}
         reducedMotion={settingsStore.reduceMotion}
         fontFamily="var(--lw-font-family)"
         style:--lw-lyrics-scale={featuresStore.lyricsFontScale}
       ></am-lyrics>
     {/key}
-    {#if (featuresStore.showTranslation && activeLine?.translation) || (featuresStore.showRomanized && activeLine?.romanized)}
-      <div class="active-translation">
-        {#if featuresStore.showRomanized && activeLine?.romanized}<div>{activeLine.romanized}</div>{/if}
-        {#if featuresStore.showTranslation && activeLine?.translation}<div>{activeLine.translation}</div>{/if}
-      </div>
-    {/if}
-    <div class="lyrics-meta">
-      <span title={doc.provider}>Source: {doc.provider}</span>
-      {#if onShareLine && activeLine?.text}
-        <button type="button" onclick={shareActiveLine} title="Share lyric card">Share line</button>
+    <footer class="lyrics-footer">
+      {#if (featuresStore.showTranslation && activeLine?.translation) || (featuresStore.showRomanized && activeLine?.romanized)}
+        <div class="active-translation lw-scroll">
+          {#if featuresStore.showRomanized && activeLine?.romanized}<div>{activeLine.romanized}</div>{/if}
+          {#if featuresStore.showTranslation && activeLine?.translation}<div>{activeLine.translation}</div>{/if}
+        </div>
       {/if}
-    </div>
+      <div class="lyrics-meta">
+        <span title={doc.provider}>Source: {doc.provider}</span>
+        {#if onShareLine && activeLine?.text}
+          <button type="button" onclick={shareActiveLine} title="Share lyric card">Share line</button>
+        {/if}
+      </div>
+    </footer>
   </div>
 {:else}
-<div bind:this={lyricsView} onwheel={() => (lastManualScroll = performance.now())} data-lw="lyrics-view" class="mx-auto w-full max-w-[660px] py-4" class:compact style:--lw-lyrics-scale={featuresStore.lyricsFontScale}>
+<div bind:this={lyricsView} onwheel={() => (lastManualScroll = performance.now())} data-lw="lyrics-view" class="lyrics-fallback mx-auto w-full max-w-[660px] py-4" class:compact class:lw-scroll={compact} style:--lw-lyrics-scale={featuresStore.lyricsFontScale}>
   {#if doc}
     {#each doc.lines as line, i}
       {@const active = doc.synced && i === activeIdx}
@@ -199,13 +216,19 @@
   .compact {
     --lw-sidebar-lyric-size: 24px;
     --lw-sidebar-lyric-spacing: 22px;
+    --lw-lyrics-translation-max: min(96px, 14dvh);
+    --lw-lyrics-edge-fade: 22px;
   }
   .compact am-lyrics {
+    mask-image: linear-gradient(to bottom, transparent, black 10px, black calc(100% - var(--lw-lyrics-edge-fade)), transparent);
     --am-lyrics-compact-font-size: calc(var(--lw-sidebar-lyric-size) * var(--lw-lyrics-scale));
     --am-lyrics-wide-font-size: var(--am-lyrics-compact-font-size);
     --am-lyrics-compact-line-spacing: var(--lw-sidebar-lyric-spacing);
     --am-lyrics-wide-line-spacing: var(--lw-sidebar-lyric-spacing);
   }
+  .lyrics-fallback.compact { min-height: 0; flex: 1; }
+  .lyrics-footer { flex: none; }
+  .compact .lyrics-footer { border-top: 1px solid var(--lw-divider); }
   .lyrics-meta {
     display: flex;
     min-height: 34px;
@@ -234,6 +257,7 @@
     font-size: 13px;
     overflow-wrap: anywhere;
   }
+  .compact .active-translation { max-block-size: var(--lw-lyrics-translation-max); border-top: 0; }
   .lyric-line {
     position: relative;
     display: flex;
@@ -262,5 +286,8 @@
   .compact .lyric-text { font-size: calc(var(--lw-sidebar-lyric-size) * var(--lw-lyrics-scale)); line-height: 1.22; }
   @media (hover: hover) and (pointer: fine) {
     .lyric-line[data-active="false"]:hover { background: var(--lw-wash-hover); color: var(--lw-text-primary); }
+  }
+  @media (forced-colors: active) {
+    .compact am-lyrics { mask-image: none; }
   }
 </style>
