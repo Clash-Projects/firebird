@@ -13,9 +13,9 @@
   type StatsTab = 'overview' | 'tracks' | 'artists' | 'albums' | 'history' | 'genres';
 
   const PERIODS: ReadonlyArray<{ id: Period; label: string; backend: string }> = [
-    { id: '7d', label: '7 Days', backend: 'Week' },
-    { id: '1m', label: '30 Days', backend: 'Month' },
-    { id: 'all', label: 'All Time', backend: 'AllTime' },
+    { id: '7d', label: '7 Days', backend: 'week' },
+    { id: '1m', label: '30 Days', backend: 'month' },
+    { id: 'all', label: 'All Time', backend: 'allTime' },
   ];
 
   const TABS: ReadonlyArray<{ id: StatsTab; label: string }> = [
