@@ -174,7 +174,9 @@ class PluginManager {
       }
     }
 
-    const saved = loadSavedPluginRecords().filter((r) => VALID_TYPES.has(r.manifest?.type));
+    const saved = loadSavedPluginRecords().filter(
+      (r) => !r.builtin && VALID_TYPES.has(r.manifest?.type)
+    );
     for (const s of saved) {
       const existing = byId.get(s.manifest.id);
       if (existing) {
@@ -186,6 +188,7 @@ class PluginManager {
     }
 
     this.plugins = Array.from(byId.values());
+    savePluginRecords(this.plugins);
     this.reapplyActiveMods();
   }
 

@@ -336,7 +336,13 @@
     </div>
   {:else if visibleCards.length === 0}
     <div class="rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] py-12 text-center text-[13px] text-[var(--lw-text-secondary)]">
-      No matching plugins found.
+      {#if activeTab !== 'installed' && pluginManager.marketplace.length === 0 && !search.trim()}
+        No plugins published in the registry yet. Install one via GitHub URL above.
+      {:else if activeTab === 'installed' && pluginManager.plugins.length === 0 && !search.trim()}
+        No plugins installed yet.
+      {:else}
+        No matching plugins found.
+      {/if}
     </div>
   {:else}
     <!-- Responsive Store Grid -->

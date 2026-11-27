@@ -91,7 +91,7 @@
       <form onsubmit={handleSubmit} class="mt-4 space-y-3">
         <Input
           bind:value={repoInput}
-          placeholder="e.g. username/lastwave-midnight or owner/repo@a1b2c3d"
+          placeholder="owner/repo, owner/repo@commit, or manifest.json URL"
         />
 
         {#if errorMsg}
