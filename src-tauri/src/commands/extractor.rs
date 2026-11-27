@@ -349,16 +349,47 @@ pub async fn yt_connect_cookies(
     profile_email: Option<String>,
     page_id: Option<String>,
 ) -> Result<YtConnection, String> {
+    let pid = page_id.as_deref().unwrap_or("");
+    let initial_email = profile_email.as_deref().unwrap_or("");
     state
         .tube
-        .connect_as(
-            &cookies,
-            profile_email.as_deref().unwrap_or(""),
-            page_id.as_deref().unwrap_or(""),
-        )
+        .connect_as(&cookies, initial_email, pid)
         .await
         .map_err(|e| e.to_string())?;
-    let conn = state.tube.connection();
+    let mut conn = state.tube.connection();
+    if let Some(acc) = state.tube.fetch_account_info(true, pid).await {
+        if conn.account_name.is_empty() && !acc.name.is_empty() {
+            conn.account_name = acc.name;
+        }
+        if conn.channel_handle.is_empty() && !acc.handle.is_empty() {
+            conn.channel_handle = acc.handle;
+        }
+        if conn.photo_url.is_empty() && !acc.photo_url.is_empty() {
+            conn.photo_url = acc.photo_url;
+        }
+        if conn.profile_email.is_empty() && !acc.email.is_empty() {
+            conn.profile_email = acc.email;
+        }
+    }
+    if !conn.profile_email.is_empty() {
+        let mut profiles = yt_list_profiles(state.clone());
+        let now = chrono::Utc::now().timestamp_millis();
+        if let Some(existing) = profiles.iter_mut().find(|p| p.email == conn.profile_email) {
+            existing.cookies = conn.cookies.clone();
+            existing.active_page_id = conn.active_page_id.clone();
+            existing.last_used_millis = now;
+        } else {
+            profiles.push(YtProfile {
+                email: conn.profile_email.clone(),
+                cookies: conn.cookies.clone(),
+                channels: Vec::new(),
+                active_page_id: conn.active_page_id.clone(),
+                last_used_millis: now,
+            });
+        }
+        let encoded = YtProfile::list_to_json(&profiles);
+        state.secure.write_yt_profiles(Some(&encoded));
+    }
     state.emit_event("yt-connection-changed", conn.clone());
     state.yt_library_sync.kick();
     Ok(conn)
