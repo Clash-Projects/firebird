@@ -32,7 +32,7 @@
   onclick={() => playTrackNow(track, list)}
   onkeydown={(e) => e.key === 'Enter' && playTrackNow(track, list)}
   oncontextmenu={(e) => contextMenu.showForTrack(e, track)}
-  class="group flex h-[54px] cursor-pointer items-center rounded-[12px] px-2 transition-colors duration-[110ms] hover:bg-[var(--lw-wash-hover)]"
+  class="group flex h-[54px] cursor-pointer items-center rounded-[12px] px-2 transition-all duration-[160ms] ease-[var(--ease-native)] hover:bg-[var(--lw-wash-hover)]"
 >
   {#if index !== undefined}
     <div class="flex w-[30px] shrink-0 items-center justify-center text-[12px] lw-tabular">

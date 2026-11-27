@@ -46,7 +46,7 @@
 <WaveHaze
   level="l1"
   dataLw="player-bar"
-  class="flex h-[68px] shrink-0 items-center justify-between gap-3 border-t border-[var(--lw-divider)] bg-[var(--lw-dock-translucent)] px-3"
+  class="lw-dock-lit flex h-[68px] shrink-0 items-center justify-between gap-3 bg-[var(--lw-dock-translucent)] px-3"
 >
   <div class="flex w-[220px] shrink-0 items-center gap-2.5 lg:w-[290px]">
     {#if track}

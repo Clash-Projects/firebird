@@ -80,7 +80,7 @@
 
   {#if featured}
     <WaveEntrance index={1}>
-      <section class="relative overflow-hidden rounded-[20px] bg-white/[0.035] p-5">
+      <section class="lw-surface-lit relative overflow-hidden rounded-[20px] bg-white/[0.035] p-5">
         <div class="flex flex-col gap-5 lg:flex-row lg:items-center">
           <div class="flex min-w-0 flex-[58] items-center gap-5">
             <div class="relative h-[132px] w-[132px] shrink-0 sm:h-[176px] sm:w-[176px]">

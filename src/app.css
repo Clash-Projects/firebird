@@ -34,7 +34,8 @@
   --spacing-x28: 32px;
   --spacing-x32: 40px;
 
-  --ease-wave: cubic-bezier(0.33, 1, 0.68, 1);
+  --ease-wave: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-native: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 :root {
@@ -54,8 +55,8 @@
   --lw-divider: #1f1f1f;
 
   --lw-text-primary: #f5f4f0;
-  --lw-text-secondary: #a8a6a0;
-  --lw-text-tertiary: #8a8880;
+  --lw-text-secondary: #b5b3ad;
+  --lw-text-tertiary: #96948c;
 
   --lw-accent: #f5f4f0;
   --lw-on-accent: #000000;
@@ -181,13 +182,78 @@ body,
   margin: 0;
   padding: 0;
   overflow: hidden;
+  overscroll-behavior: none;
   background-color: var(--lw-bg-deep);
   color: var(--lw-text-primary);
   font-family: var(--lw-font-family);
   font-size: 13px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+input,
+textarea,
+[contenteditable] {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+img,
+svg {
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+
+h1,
+h2 {
+  letter-spacing: -0.025em;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.lw-surface-lit {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+  border-left: 1px solid rgba(255, 255, 255, 0.05);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.lw-dock-lit {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 -8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.lw-search-lit {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 14px rgba(0, 0, 0, 0.28);
+}
+
+:root[data-theme="light"] .lw-surface-lit,
+:root[data-theme="light"] .lw-search-lit {
+  border-top: 1px solid rgba(255, 255, 255, 0.85);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  border-left: 1px solid rgba(0, 0, 0, 0.06);
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="light"] .lw-dock-lit {
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 -6px 18px rgba(0, 0, 0, 0.06);
 }
 
 .lw-scroll {

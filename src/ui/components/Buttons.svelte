@@ -46,7 +46,7 @@
   {disabled}
   {title}
   {onclick}
-  class="inline-flex cursor-pointer items-center justify-center gap-2 transition-all duration-[110ms] ease-[var(--ease-wave)] disabled:cursor-not-allowed disabled:opacity-45 {variant === 'chip' ? 'rounded-full' : 'rounded-[10px]'} {sizeClasses[size]} {variantClasses[variant]} {active ? '!bg-[var(--lw-accent)] !text-[var(--lw-on-accent)] !border-transparent' : ''} {className}"
+  class="inline-flex cursor-pointer items-center justify-center gap-2 transition-all duration-[160ms] ease-[var(--ease-native)] disabled:cursor-not-allowed disabled:opacity-45 {variant === 'chip' ? 'rounded-full' : 'rounded-[10px]'} {sizeClasses[size]} {variantClasses[variant]} {active ? '!bg-[var(--lw-accent)] !text-[var(--lw-on-accent)] !border-transparent' : ''} {className}"
 >
   {@render children()}
 </button>

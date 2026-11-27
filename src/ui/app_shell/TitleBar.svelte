@@ -10,9 +10,10 @@
   import WaveHaze from '$src/ui/theme/WaveHaze.svelte';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
 
+  import { isTauriRuntime } from '$src/lib/ipc';
   import { getCurrentWindow } from '@tauri-apps/api/window';
-  
-  const appWindow = getCurrentWindow();
+
+  const appWindow = isTauriRuntime() ? getCurrentWindow() : null;
 
   let searchQuery = $state('');
   let searchFocused = $state(false);
@@ -82,7 +83,7 @@
           onfocus={() => (searchFocused = true)}
           onblur={() => setTimeout(() => (searchFocused = false), 140)}
           placeholder="Search music..."
-          class="h-[30px] w-full rounded-[10px] border border-[var(--lw-outline)] bg-[var(--lw-surface)] pr-7 pl-8 text-[12.5px] text-[var(--lw-text-primary)] placeholder:text-[var(--lw-text-tertiary)] focus:border-[var(--lw-accent)] focus:outline-none"
+          class="lw-search-lit h-[30px] w-full rounded-[10px] bg-[var(--lw-surface)] pr-7 pl-8 text-[12.5px] text-[var(--lw-text-primary)] placeholder:text-[var(--lw-text-tertiary)] transition-all duration-[160ms] ease-[var(--ease-native)] focus:border-[var(--lw-accent)] focus:outline-none"
         />
         {#if searchQuery}
           <button
@@ -183,15 +184,15 @@
       <div class="ml-1 flex items-center">
         <button
           type="button"
-          onclick={() => appWindow.minimize()}
-          title="Mini player"
+          onclick={() => appWindow?.minimize()}
+          title="Minimize"
           class="flex h-8 w-9 cursor-pointer items-center justify-center rounded-[6px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)]"
         >
           <span class="h-[1.5px] w-2.5 bg-current"></span>
         </button>
         <button
           type="button"
-          onclick={() => appWindow.toggleMaximize()}
+          onclick={() => appWindow?.toggleMaximize()}
           title="Maximize"
           class="flex h-8 w-9 cursor-pointer items-center justify-center rounded-[6px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)]"
         >
@@ -199,7 +200,7 @@
         </button>
         <button
           type="button"
-          onclick={() => appWindow.close()}
+          onclick={() => appWindow?.close()}
           title="Close"
           class="flex h-8 w-9 cursor-pointer items-center justify-center rounded-[6px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-danger)] hover:text-white"
         >

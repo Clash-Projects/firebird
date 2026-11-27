@@ -51,18 +51,18 @@
         data-active={active}
         onclick={() => router.navigate(item.route)}
         title={windowState.railExpanded ? undefined : label}
-        class="group relative my-[1.5px] flex h-[40px] w-full cursor-pointer items-center overflow-hidden rounded-[10px] transition-colors duration-[110ms] {active
+        class="group relative my-[1.5px] flex h-[40px] w-full cursor-pointer items-center overflow-hidden rounded-[10px] transition-all duration-[160ms] ease-[var(--ease-native)] {active
           ? 'bg-white/[0.08] text-[var(--lw-text-primary)]'
           : 'text-[var(--lw-text-secondary)] hover:bg-white/[0.04] hover:text-[var(--lw-text-primary)]'}"
       >
         <span
-          class="absolute top-1/2 left-0 h-4 w-[3px] -translate-y-1/2 rounded-[6px] bg-[var(--lw-accent)] transition-all duration-[110ms]"
+          class="absolute top-1/2 left-0 h-4 w-[3px] -translate-y-1/2 rounded-[6px] bg-[var(--lw-accent)] transition-all duration-[160ms] ease-[var(--ease-native)]"
           style:opacity={active ? 1 : 0}
           style:transform={active ? 'translateY(-50%) translateX(0)' : 'translateY(-50%) translateX(-4px)'}
         ></span>
 
         <span
-          class="flex h-full w-[46px] shrink-0 items-center justify-center transition-transform duration-[110ms] {active
+          class="flex h-full w-[46px] shrink-0 items-center justify-center transition-transform duration-[160ms] ease-[var(--ease-native)] {active
             ? 'text-[var(--lw-accent)]'
             : ''}"
         >
