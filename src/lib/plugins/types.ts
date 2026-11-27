@@ -180,6 +180,11 @@ export interface LastWaveAPI {
     readonly back: () => void;
     readonly getPath: () => string;
   };
+  readonly window: {
+    readonly toggleRail: () => void;
+    readonly toggleMiniPlayer: () => void;
+    readonly toggleRightPanel: (panel: 'queue' | 'lyrics' | 'eq' | 'output') => void;
+  };
   readonly events: {
     readonly on: (event: PlayerEventType, fn: (payload: unknown) => void) => () => void;
     readonly off: (event: PlayerEventType, fn: (payload: unknown) => void) => void;
@@ -191,6 +196,9 @@ export interface LastWaveAPI {
     readonly registerCustomApp: (item: Omit<CustomAppRouteSlot, 'pluginId'>, pluginId: string) => () => void;
     readonly registerNowPlayingView: (item: Omit<OverrideViewSlot, 'pluginId'>, pluginId: string) => () => void;
     readonly registerPlayerBar: (item: Omit<OverrideViewSlot, 'pluginId'>, pluginId: string) => () => void;
+    readonly registerTitleBar: (item: Omit<OverrideViewSlot, 'pluginId'>, pluginId: string) => () => void;
+    readonly registerSideRail: (item: Omit<OverrideViewSlot, 'pluginId'>, pluginId: string) => () => void;
+    readonly registerIconPack: (icons: Record<string, string>, pluginId: string) => () => void;
     readonly showToast: (title: string, subtitle?: string, severity?: 'info' | 'success' | 'warning' | 'error') => void;
   };
   readonly storage: (pluginId: string) => ScopedPluginStorage;

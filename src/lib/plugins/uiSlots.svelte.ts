@@ -6,6 +6,12 @@ import type {
   TrackContextMenuItemSlot,
 } from './types';
 
+function sanitizeSvg(raw: string): string {
+  return raw
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+}
+
 class UiSlotsRegistry {
   sidebarItems = $state<SidebarSlotItem[]>([]);
   playerBarControls = $state<PlayerBarControlSlot[]>([]);
@@ -13,6 +19,10 @@ class UiSlotsRegistry {
   customAppRoutes = $state<CustomAppRouteSlot[]>([]);
   nowPlayingOverride = $state<OverrideViewSlot | null>(null);
   playerBarOverride = $state<OverrideViewSlot | null>(null);
+  titleBarOverride = $state<OverrideViewSlot | null>(null);
+  sideRailOverride = $state<OverrideViewSlot | null>(null);
+  iconPackPluginId = $state<string | null>(null);
+  iconOverrides = $state<Record<string, string>>({});
 
   registerSidebarItem(item: SidebarSlotItem): () => void {
     this.sidebarItems = [...this.sidebarItems.filter((x) => x.id !== item.id), item];
@@ -60,6 +70,41 @@ class UiSlotsRegistry {
     };
   }
 
+  registerTitleBar(item: OverrideViewSlot): () => void {
+    this.titleBarOverride = item;
+    return () => {
+      if (this.titleBarOverride?.id === item.id) {
+        this.titleBarOverride = null;
+      }
+    };
+  }
+
+  registerSideRail(item: OverrideViewSlot): () => void {
+    this.sideRailOverride = item;
+    return () => {
+      if (this.sideRailOverride?.id === item.id) {
+        this.sideRailOverride = null;
+      }
+    };
+  }
+
+  registerIconPack(icons: Record<string, string>, pluginId: string): () => void {
+    const clean: Record<string, string> = {};
+    for (const [k, v] of Object.entries(icons || {})) {
+      if (typeof v === 'string' && v.trim()) {
+        clean[k] = sanitizeSvg(v.trim());
+      }
+    }
+    this.iconPackPluginId = pluginId;
+    this.iconOverrides = clean;
+    return () => {
+      if (this.iconPackPluginId === pluginId) {
+        this.iconPackPluginId = null;
+        this.iconOverrides = {};
+      }
+    };
+  }
+
   clearForPlugin(pluginId: string) {
     this.sidebarItems = this.sidebarItems.filter((x) => x.pluginId !== pluginId);
     this.playerBarControls = this.playerBarControls.filter((x) => x.pluginId !== pluginId);
@@ -70,6 +115,16 @@ class UiSlotsRegistry {
     }
     if (this.playerBarOverride?.pluginId === pluginId) {
       this.playerBarOverride = null;
+    }
+    if (this.titleBarOverride?.pluginId === pluginId) {
+      this.titleBarOverride = null;
+    }
+    if (this.sideRailOverride?.pluginId === pluginId) {
+      this.sideRailOverride = null;
+    }
+    if (this.iconPackPluginId === pluginId) {
+      this.iconPackPluginId = null;
+      this.iconOverrides = {};
     }
   }
 }

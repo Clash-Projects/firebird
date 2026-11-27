@@ -1,6 +1,7 @@
 import { Channel } from '@tauri-apps/api/core';
 import { router } from '$src/app/router.svelte';
 import { toggleTrackLike } from '$src/app/trackActions';
+import { windowState } from '$src/app/window.svelte';
 import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
 import { featuresStore } from '$src/state/features.svelte';
 import { libraryStore } from '$src/state/library.svelte';
@@ -98,6 +99,11 @@ export function installLastWaveApi(): LastWaveAPI {
       back: () => router.back(),
       getPath: () => router.path,
     }),
+    window: Object.freeze({
+      toggleRail: () => windowState.toggleRail(),
+      toggleMiniPlayer: () => windowState.toggleMiniPlayer(),
+      toggleRightPanel: (panel: 'queue' | 'lyrics' | 'eq' | 'output') => windowState.toggleRightPanel(panel),
+    }),
     events: Object.freeze({
       on: (event: PlayerEventType, fn: (payload: unknown) => void) => playerStore.on(event, fn),
       off: (event: PlayerEventType, fn: (payload: unknown) => void) => playerStore.off(event, fn),
@@ -115,6 +121,12 @@ export function installLastWaveApi(): LastWaveAPI {
         uiSlots.registerNowPlayingView({ ...item, pluginId }),
       registerPlayerBar: (item: Omit<OverrideViewSlot, 'pluginId'>, pluginId: string) =>
         uiSlots.registerPlayerBar({ ...item, pluginId }),
+      registerTitleBar: (item: Omit<OverrideViewSlot, 'pluginId'>, pluginId: string) =>
+        uiSlots.registerTitleBar({ ...item, pluginId }),
+      registerSideRail: (item: Omit<OverrideViewSlot, 'pluginId'>, pluginId: string) =>
+        uiSlots.registerSideRail({ ...item, pluginId }),
+      registerIconPack: (icons: Record<string, string>, pluginId: string) =>
+        uiSlots.registerIconPack(icons, pluginId),
       showToast: (
         title: string,
         subtitle?: string,

@@ -64,11 +64,23 @@
       class="flex h-full w-full flex-col bg-[var(--lw-bg)] text-[var(--lw-text-primary)]"
       style:--lw-shell-rail-width="{windowState.railExpanded ? WaveDensity.railExpanded : WaveDensity.railCollapsed}px"
     >
-      <TitleBar />
+      {#if uiSlots.titleBarOverride}
+        <div data-lw="title-bar" class="h-[var(--lw-titlebar-h,42px)] w-full flex-none">
+          <CustomAppHost app={uiSlots.titleBarOverride} />
+        </div>
+      {:else}
+        <TitleBar />
+      {/if}
 
       <div class="relative flex min-h-0 flex-1 overflow-hidden">
         {#if !isNowPlaying}
-          <SideRail />
+          {#if uiSlots.sideRailOverride}
+            <div data-lw="sidebar" class="h-full flex-none">
+              <CustomAppHost app={uiSlots.sideRailOverride} />
+            </div>
+          {:else}
+            <SideRail />
+          {/if}
         {/if}
 
         <main data-lw="main-stage" class="relative min-w-0 flex-1 overflow-hidden">

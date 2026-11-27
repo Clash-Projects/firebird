@@ -145,6 +145,8 @@
 </script>
 
 <script lang="ts">
+  import { uiSlots } from '$src/lib/plugins/uiSlots.svelte';
+
   interface Props {
     name: WaveIconName;
     size?: number;
@@ -153,6 +155,7 @@
   }
 
   let { name, size = 18, filled = false, class: className = '' }: Props = $props();
+  let customSvg = $derived(uiSlots.iconOverrides[name]);
   let Icon = $derived(ICONS[name] ?? Music);
   const FLUENT_NAV = new Set<WaveIconName>([
     'home',
@@ -167,7 +170,16 @@
   ]);
 </script>
 
-{#if FLUENT_NAV.has(name)}
+{#if customSvg}
+  <span
+    class="inline-flex shrink-0 items-center justify-center [&>svg]:h-full [&>svg]:w-full {className}"
+    style:width="{size}px"
+    style:height="{size}px"
+    aria-hidden="true"
+  >
+    {@html customSvg}
+  </span>
+{:else if FLUENT_NAV.has(name)}
   <svg
     width={size}
     height={size}
