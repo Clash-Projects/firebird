@@ -24,7 +24,7 @@
   }
 </script>
 
-<div class="flex items-center justify-between gap-3 rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+<div class="flex items-center justify-between gap-3 rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
   <div>
     <div class="text-[13.5px] font-semibold">Disk Cache</div>
     <p class="text-[12px] text-[var(--lw-text-secondary)] lw-tabular">

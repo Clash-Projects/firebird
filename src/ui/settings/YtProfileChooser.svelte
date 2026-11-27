@@ -217,7 +217,7 @@
   }
 </script>
 
-<div class="space-y-3 rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+<div class="space-y-3 rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
   <div class="flex items-center justify-between gap-3">
     <div class="flex items-center gap-3">
       {#if settingsStore.ytConnected && activePhotoUrl}
@@ -284,7 +284,7 @@
         bind:value={cookiesInput}
         rows={4}
         placeholder="SAPISID=...; SID=...; HSID=...; SSID=... (or paste cookies.txt / JSON)"
-        class="w-full resize-y rounded-[10px] border border-[var(--lw-outline)] bg-[var(--lw-bg)] p-2.5 font-mono text-[12px] text-[var(--lw-text-primary)] placeholder:text-[var(--lw-text-tertiary)] focus:border-[var(--lw-accent)] focus:outline-none"
+        class="lw-text-field w-full resize-y rounded-[10px] border border-[var(--lw-outline)] bg-[var(--lw-surface)] p-2.5 font-mono text-[12px] text-[var(--lw-text-primary)] placeholder:text-[var(--lw-text-tertiary)] focus:outline-none"
       ></textarea>
       {#if cookieError}
         <div class="text-[12px] text-[var(--lw-danger,#ef4444)]">{cookieError}</div>

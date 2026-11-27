@@ -56,7 +56,7 @@
   </div>
 
   <div use:waveSmoothScroll class="lw-scroll flex-1 space-y-4">
-    <div class="rounded-[16px] border border-[var(--lw-outline)] bg-[var(--lw-surface)] p-3.5">
+    <div class="rounded-[12px] border border-[var(--lw-outline)] bg-[var(--lw-surface)] p-3.5">
       <div class="flex items-center justify-between">
         <span class="text-[12px] font-semibold">Bit-Perfect Status</span>
         <span

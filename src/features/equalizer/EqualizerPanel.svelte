@@ -307,23 +307,16 @@
     {:else}
       <!-- Tab 1: Studio Master Clarity -->
       <div
-        class="rounded-[10px] border p-3.5 transition-colors {featuresStore.studioClarity
-          ? 'border-[#8A6D3B]/80 bg-[#1F1B14]'
-          : 'border-[var(--lw-outline-soft)] bg-[var(--lw-surface)]'}"
+        class="clarity-hero rounded-[10px] border p-3.5 transition-colors"
+        data-active={featuresStore.studioClarity}
       >
         <div class="flex items-center gap-3">
-          <div
-            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] {featuresStore.studioClarity
-              ? 'bg-[#F5A623]/20 text-[#F5A623]'
-              : 'bg-[var(--lw-wash)] text-[var(--lw-text-secondary)]'}"
-          >
+          <div class="clarity-icon-box flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px]">
             <WaveIcon name="sparkles" size={17} />
           </div>
           <div class="min-w-0 flex-1">
-            <div class="text-[13.5px] font-bold {featuresStore.studioClarity ? 'text-white' : 'text-[var(--lw-text-primary)]'}">
-              Studio Master Clarity
-            </div>
-            <div class="text-[11px] {featuresStore.studioClarity ? 'text-white/75' : 'text-[var(--lw-text-secondary)]'}">
+            <div class="text-[13.5px] font-bold">Studio Master Clarity</div>
+            <div class="clarity-sub text-[11px]">
               Psychoacoustic high-frequency restoration &amp; air staging
             </div>
           </div>
@@ -345,9 +338,8 @@
             <button
               type="button"
               onclick={() => featuresStore.setClarityPreset(target.key)}
-              class="flex w-full cursor-pointer items-center gap-3 rounded-[10px] border p-3 text-left transition-all {selected
-                ? 'border-[#F5A623] bg-[#2B2418] text-white'
-                : 'border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] text-[var(--lw-text-primary)] hover:bg-[var(--lw-wash-hover)]'}"
+              data-selected={selected}
+              class="clarity-option flex w-full cursor-pointer items-center gap-3 rounded-[10px] border p-3 text-left transition-all"
             >
               <span
                 class="h-4 w-4 shrink-0 rounded-full border-2 {selected
@@ -357,8 +349,8 @@
                   : 'border-[var(--lw-text-tertiary)]'}"
               ></span>
               <div class="min-w-0 flex-1">
-                <div class="text-[12.5px] font-semibold">{target.displayName}</div>
-                <div class="mt-0.5 text-[11px] {selected ? 'text-white/75' : 'text-[var(--lw-text-secondary)]'}">
+                <div class="clarity-opt-title text-[12.5px] font-semibold">{target.displayName}</div>
+                <div class="clarity-opt-desc mt-0.5 text-[11px]">
                   {target.description}
                 </div>
               </div>
@@ -389,3 +381,66 @@
     {/if}
   </div>
 </WaveHaze>
+
+<style>
+  .clarity-hero {
+    border-color: var(--lw-outline-soft);
+    background: var(--lw-surface);
+    color: var(--lw-text-primary);
+  }
+  .clarity-hero .clarity-sub {
+    color: var(--lw-text-secondary);
+  }
+  .clarity-hero .clarity-icon-box {
+    background: var(--lw-wash);
+    color: var(--lw-text-secondary);
+  }
+  .clarity-hero[data-active='true'] {
+    border-color: rgba(138, 109, 59, 0.8);
+    background: #1f1b14;
+    color: #ffffff;
+  }
+  .clarity-hero[data-active='true'] .clarity-sub {
+    color: rgba(255, 255, 255, 0.75);
+  }
+  .clarity-hero[data-active='true'] .clarity-icon-box {
+    background: rgba(245, 166, 35, 0.2);
+    color: #f5a623;
+  }
+  :global(:root[data-theme='light']) .clarity-hero[data-active='true'] {
+    border-color: #e5b760;
+    background: #fff9ed;
+    color: #1b1a19;
+  }
+  :global(:root[data-theme='light']) .clarity-hero[data-active='true'] .clarity-sub {
+    color: #605e5c;
+  }
+
+  .clarity-option {
+    border-color: var(--lw-outline-soft);
+    background: var(--lw-surface);
+    color: var(--lw-text-primary);
+  }
+  .clarity-option:hover {
+    background: var(--lw-wash-hover);
+  }
+  .clarity-option .clarity-opt-desc {
+    color: var(--lw-text-secondary);
+  }
+  .clarity-option[data-selected='true'] {
+    border-color: #f5a623;
+    background: #2b2418;
+    color: #ffffff;
+  }
+  .clarity-option[data-selected='true'] .clarity-opt-desc {
+    color: rgba(255, 255, 255, 0.75);
+  }
+  :global(:root[data-theme='light']) .clarity-option[data-selected='true'] {
+    border-color: #e5b760;
+    background: #fff3d6;
+    color: #5a3e00;
+  }
+  :global(:root[data-theme='light']) .clarity-option[data-selected='true'] .clarity-opt-desc {
+    color: #605e5c;
+  }
+</style>

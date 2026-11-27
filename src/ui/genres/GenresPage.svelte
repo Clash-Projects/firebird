@@ -11,7 +11,7 @@
       <button
         type="button"
         onclick={() => goGenre(genre.id)}
-        class="flex h-32 cursor-pointer flex-col justify-end rounded-[14px] border border-[var(--lw-outline)] p-5 text-left transition-transform hover:-translate-y-0.5"
+        class="lw-press flex h-32 cursor-pointer flex-col justify-end rounded-[12px] border border-[var(--lw-outline)] p-5 text-left transition-[border-color,transform] duration-[120ms] ease-[var(--ease-wave)] hover:border-[var(--lw-text-tertiary)]"
         style:background="linear-gradient(135deg, {genre.color}, #111111)"
       >
         <div class="text-[18px] font-bold text-white">{genre.name}</div>

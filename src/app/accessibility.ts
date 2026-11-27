@@ -44,3 +44,47 @@ export function dismissFlyout(node: HTMLElement, options: { open: boolean; close
     },
   };
 }
+
+/**
+ * Closes a modal `<dialog>` only when a primary click starts and ends outside its box,
+ * preventing accidental dismissal when dragging text selections near dialog edges.
+ */
+export function dismissDialogOnBackdrop(node: HTMLDialogElement, onClose: () => void) {
+  let pressedBackdrop = false;
+
+  const isOutside = (e: MouseEvent) => {
+    if (e.target !== node) return false;
+    const rect = node.getBoundingClientRect();
+    return (
+      e.clientX < rect.left ||
+      e.clientX >= rect.right ||
+      e.clientY < rect.top ||
+      e.clientY >= rect.bottom
+    );
+  };
+
+  const onPointerDown = (e: PointerEvent) => {
+    pressedBackdrop = e.button === 0 && isOutside(e);
+  };
+  const onPointerCancel = () => {
+    pressedBackdrop = false;
+  };
+  const onClick = (e: MouseEvent) => {
+    if (pressedBackdrop && isOutside(e)) onClose();
+    pressedBackdrop = false;
+  };
+
+  node.addEventListener('pointerdown', onPointerDown);
+  node.addEventListener('pointercancel', onPointerCancel);
+  node.addEventListener('click', onClick);
+  return {
+    update(next: () => void) {
+      onClose = next;
+    },
+    destroy() {
+      node.removeEventListener('pointerdown', onPointerDown);
+      node.removeEventListener('pointercancel', onPointerCancel);
+      node.removeEventListener('click', onClick);
+    },
+  };
+}

@@ -6,6 +6,7 @@
   import States from '$src/ui/components/States.svelte';
   import DownloadsPage from '$src/ui/collections/DownloadsPage.svelte';
   import { goAlbum, goArtist, goPlaylist } from '$src/ui/navigation/waveNav';
+  import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
   import LibraryFolders from './LibraryFolders.svelte';
 
   type LibraryTab = 'songs' | 'albums' | 'artists' | 'playlists' | 'downloads' | 'folders';
@@ -43,7 +44,7 @@
     </div>
   </div>
 
-  <div class="lw-scroll flex-1 px-6 py-4 pb-10 md:px-8">
+  <div use:waveSmoothScroll class="lw-scroll flex-1 px-6 py-4 pb-10 md:px-8">
     {#if tab === 'songs'}
       {#if libraryStore.tracks.length}
         <DesktopTable tracks={libraryStore.tracks} />

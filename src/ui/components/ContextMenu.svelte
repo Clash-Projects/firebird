@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
+  import { dismissDialogOnBackdrop } from '$src/app/accessibility';
   import {
     downloadTrack,
     enqueueTrack,
@@ -12,7 +13,10 @@
   import { libraryStore } from '$src/state/library.svelte';
   import { formatDuration } from '$src/state/player.svelte';
   import type { Track } from '$src/state/types';
+  import Buttons from '$src/ui/components/Buttons.svelte';
+  import Input from '$src/ui/components/Input.svelte';
   import { goAlbum, goArtist } from '$src/ui/navigation/waveNav';
+  import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
   import WaveHaze from '$src/ui/theme/WaveHaze.svelte';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import Artwork from './Artwork.svelte';
@@ -287,8 +291,9 @@
             >
               <WaveHaze
                 level="l3"
-                class="lw-scroll max-h-[260px] rounded-[10px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] p-1 shadow-[var(--lw-shadow-flyout)]"
+                class="rounded-[10px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] p-1 shadow-[var(--lw-shadow-flyout)]"
               >
+                <div use:waveSmoothScroll class="lw-scroll max-h-[260px]">
                 <button
                   type="button"
                   role="menuitem"
@@ -322,6 +327,7 @@
                     </button>
                   {/each}
                 {/if}
+                </div>
               </WaveHaze>
             </div>
           {/if}
@@ -388,9 +394,10 @@
 <dialog
   bind:this={propsDialog}
   closedby="any"
+  use:dismissDialogOnBackdrop={() => contextMenu.closeProperties()}
   onclose={() => contextMenu.closeProperties()}
   aria-label="Track properties"
-  class="lw-dialog w-[min(440px,calc(100vw-32px))] p-5 text-[var(--lw-text-primary)]"
+  class="w-[min(440px,calc(100vw-32px))] p-5 text-[var(--lw-text-primary)]"
 >
   {#if contextMenu.propertiesTrack}
     {@const pt = contextMenu.propertiesTrack}
@@ -442,35 +449,23 @@
 <dialog
   bind:this={newPlDialog}
   closedby="any"
+  use:dismissDialogOnBackdrop={() => newPlDialog?.close()}
   aria-label="New playlist"
-  class="lw-dialog w-[min(380px,calc(100vw-32px))] p-5 text-[var(--lw-text-primary)]"
+  class="w-[min(380px,calc(100vw-32px))] p-5 text-[var(--lw-text-primary)]"
 >
   <form onsubmit={submitNewPlaylist}>
     <h2 class="text-[15px] font-semibold">New playlist</h2>
     <p class="mt-1 text-[12px] text-[var(--lw-text-secondary)]">
       Create a playlist and add {pendingTrackForPlaylist?.title ?? 'this track'}.
     </p>
-    <input
-      type="text"
-      bind:value={newPlName}
-      placeholder="Playlist name"
-      class="mt-3 w-full rounded-[8px] border border-[var(--lw-outline)] bg-[var(--lw-surface)] px-3 py-2 text-[13px] text-[var(--lw-text-primary)] placeholder:text-[var(--lw-text-tertiary)] focus:border-[var(--lw-accent)] focus:outline-none"
-    />
+    <div class="mt-3">
+      <Input bind:value={newPlName} autofocus placeholder="Playlist name" />
+    </div>
     <div class="mt-4 flex justify-end gap-2">
-      <button
-        type="button"
-        onclick={() => newPlDialog?.close()}
-        class="cursor-pointer rounded-[8px] px-3 py-1.5 text-[12.5px] font-medium text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)]"
-      >
-        Cancel
-      </button>
-      <button
-        type="submit"
-        disabled={!newPlName.trim()}
-        class="lw-press cursor-pointer rounded-[8px] bg-[var(--lw-accent)] px-3.5 py-1.5 text-[12.5px] font-semibold text-[var(--lw-accent-fg)] disabled:opacity-40"
-      >
+      <Buttons variant="ghost" size="sm" onclick={() => newPlDialog?.close()}>Cancel</Buttons>
+      <Buttons type="submit" variant="primary" size="sm" disabled={!newPlName.trim()}>
         Create &amp; add
-      </button>
+      </Buttons>
     </div>
   </form>
 </dialog>

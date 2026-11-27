@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { dismissFlyout } from '$src/app/accessibility';
+  import { dismissDialogOnBackdrop, dismissFlyout } from '$src/app/accessibility';
   import { router } from '$src/app/router.svelte';
   import { downloadTrack, toggleTrackLike } from '$src/app/trackActions';
   import { windowState } from '$src/app/window.svelte';
@@ -637,6 +637,7 @@
 
 <dialog
   bind:this={sleepDialogEl}
+  use:dismissDialogOnBackdrop={() => (sleepDialogOpen = false)}
   onclose={() => (sleepDialogOpen = false)}
   closedby="any"
   aria-labelledby="sleep-dialog-title"

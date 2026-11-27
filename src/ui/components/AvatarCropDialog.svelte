@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dismissDialogOnBackdrop } from '$src/app/accessibility';
   import Buttons from './Buttons.svelte';
   import WaveSlider from './WaveSlider.svelte';
 
@@ -20,11 +21,18 @@
   });
 </script>
 
-<dialog bind:this={dialogEl} onclose={onClose} aria-labelledby="crop-title" class="w-full max-w-[400px]">
+<dialog
+  bind:this={dialogEl}
+  closedby="any"
+  use:dismissDialogOnBackdrop={onClose}
+  onclose={onClose}
+  aria-labelledby="crop-title"
+  class="w-full max-w-[400px]"
+>
   <div class="p-6">
     <h1 id="crop-title" class="text-[17px] font-bold">Adjust Cover Crop</h1>
     <div class="mt-4 flex justify-center">
-      <div class="h-48 w-48 overflow-hidden rounded-[16px] border border-[var(--lw-outline)] bg-[var(--lw-surface)]">
+      <div class="h-48 w-48 overflow-hidden rounded-[12px] border border-[var(--lw-outline)] bg-[var(--lw-surface)]">
         <img
           src={imageUrl}
           alt="Crop preview"

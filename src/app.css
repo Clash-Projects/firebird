@@ -366,12 +366,15 @@ h2 {
 
 dialog {
   --lw-dialog-entry-transform: translateY(calc(6px * var(--lw-motion-factor))) scale(calc(1 - 0.02 * var(--lw-motion-factor)));
+  position: fixed;
+  inset: 0;
+  margin: auto;
   overscroll-behavior: contain;
   background: var(--lw-surface-raised);
   color: var(--lw-text-primary);
   border: 1px solid var(--lw-outline);
-  border-radius: 16px;
-  box-shadow: var(--lw-shadow-flyout);
+  border-radius: 14px;
+  box-shadow: var(--lw-shadow-modal);
   padding: 0;
   max-width: min(560px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
@@ -560,7 +563,7 @@ input.lw-text-field:focus {
   --lw-scroll-behavior: auto;
 }
 
-:root[data-reduced-motion] :is(.lw-enter, .lw-route-enter, .lw-eq-bars span),
+:root[data-reduced-motion] :is(.lw-enter, .lw-route-enter, .lw-eq-bars span, .animate-spin),
 :root[data-reduced-motion] .lw-skeleton::after {
   animation: none;
 }
@@ -574,7 +577,7 @@ input.lw-text-field:focus {
     --lw-scroll-behavior: auto;
   }
 
-  :is(.lw-enter, .lw-route-enter, .lw-eq-bars span), .lw-skeleton::after {
+  :is(.lw-enter, .lw-route-enter, .lw-eq-bars span, .animate-spin), .lw-skeleton::after {
     animation: none;
   }
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dismissDialogOnBackdrop } from '$src/app/accessibility';
   import { windowState } from '$src/app/window.svelte';
   import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
   import Buttons from '$src/ui/components/Buttons.svelte';
@@ -38,7 +39,14 @@
   }
 </script>
 
-<dialog bind:this={dialogEl} onclose={close} aria-labelledby="update-title" class="w-full max-w-[420px]">
+<dialog
+  bind:this={dialogEl}
+  closedby="any"
+  use:dismissDialogOnBackdrop={close}
+  onclose={close}
+  aria-labelledby="update-title"
+  class="w-full max-w-[420px]"
+>
   <div class="p-6">
     {#if checking}
       <h1 id="update-title" class="text-[18px] font-bold">Checking for updates...</h1>
@@ -60,7 +68,7 @@
           href={update.htmlUrl}
           target="_blank"
           rel="noreferrer"
-          class="inline-flex items-center rounded-[10px] bg-[var(--lw-accent)] px-4 py-2 text-[12.5px] font-semibold text-[var(--lw-on-accent)]"
+          class="inline-flex items-center rounded-[8px] bg-[var(--lw-accent)] px-4 py-2 text-[12.5px] font-semibold text-[var(--lw-on-accent)]"
         >
           View Release
         </a>

@@ -16,7 +16,7 @@
 
   <div class="mt-4 space-y-2">
     {#each settingsStore.homeShelves as shelf, i (shelf.id)}
-      <div class="flex items-center gap-3 rounded-[14px] border border-[var(--lw-outline)] bg-[var(--lw-surface)] px-4 py-3">
+      <div class="flex items-center gap-3 rounded-[10px] border border-[var(--lw-outline)] bg-[var(--lw-surface)] px-4 py-3">
         <label class="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-3">
           <span class="text-[13.5px] font-semibold">{shelf.label}</span>
           <Switch

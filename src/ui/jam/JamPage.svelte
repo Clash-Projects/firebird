@@ -10,6 +10,7 @@
   import Input from '$src/ui/components/Input.svelte';
   import Switch from '$src/ui/components/Switch.svelte';
   import { waveTooltip } from '$src/ui/components/tooltip';
+  import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
 
   type JamPhase = 'disconnected' | 'connecting' | 'active' | 'error';
@@ -346,7 +347,7 @@
 
   {#if !active}
     <!-- Entry Screen (1:1 single 460px column of Wave cards) -->
-    <div class="lw-scroll mt-5 flex-1 overflow-y-auto pr-1 pb-8">
+    <div use:waveSmoothScroll class="lw-scroll mt-5 flex-1 overflow-y-auto pr-1 pb-8">
       <div class="flex max-w-[460px] flex-col gap-3.5">
         {#if snap.phase === 'error'}
           <div class="flex items-start gap-2.5 rounded-[10px] border border-[color-mix(in_srgb,var(--lw-warning)_40%,transparent)] bg-[color-mix(in_srgb,var(--lw-warning)_12%,transparent)] px-3.5 py-2.5 text-[12.5px] text-[var(--lw-text-primary)]">
@@ -486,7 +487,7 @@
 
     <div class="mt-5 flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
       <!-- Left 340px column -->
-      <div class="lw-scroll flex w-full shrink-0 flex-col gap-3.5 overflow-y-auto pr-1 pb-6 lg:w-[340px]">
+      <div use:waveSmoothScroll class="lw-scroll flex w-full shrink-0 flex-col gap-3.5 overflow-y-auto pr-1 pb-6 lg:w-[340px]">
         <!-- Room code card -->
         <div class="jam-card">
           <div class="jam-label">
@@ -683,7 +684,7 @@
         </div>
         <div class="h-px bg-[var(--lw-outline)]"></div>
 
-        <div bind:this={chatScrollEl} class="lw-scroll flex-1 overflow-y-auto p-4">
+        <div bind:this={chatScrollEl} use:waveSmoothScroll class="lw-scroll flex-1 overflow-y-auto p-4">
           {#if snap.chat.length === 0}
             <div class="flex h-full items-center justify-center text-[12px] text-[var(--lw-text-tertiary)]">
               No messages yet. Say hi.

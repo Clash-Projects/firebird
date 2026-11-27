@@ -7,6 +7,7 @@
   import { libraryStore } from '$src/state/library.svelte';
   import { playerStore } from '$src/state/player.svelte';
   import Artwork from '$src/ui/components/Artwork.svelte';
+  import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
   import WaveIcon, { type WaveIconName } from '$src/ui/theme/WaveIcon.svelte';
 
   interface CommandEntry {
@@ -241,7 +242,7 @@
     </button>
   </div>
 
-  <div bind:this={listEl} class="lw-scroll min-h-0 max-h-[340px] p-1.5">
+  <div bind:this={listEl} use:waveSmoothScroll class="lw-scroll min-h-0 max-h-[340px] p-1.5">
     {#if flatEntries.length === 0}
       <div class="px-3 py-6 text-center text-[12.5px] text-[var(--lw-text-tertiary)]">
         No matching commands or tracks.

@@ -10,6 +10,7 @@
   import CommandBar from '$src/ui/components/CommandBar.svelte';
   import Input from '$src/ui/components/Input.svelte';
   import States from '$src/ui/components/States.svelte';
+  import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
 
   interface BackendEpisode {
@@ -213,7 +214,7 @@
       </div>
       <div class="space-y-2">
         {#each searchResults as ep (ep.id)}
-          <div class="flex items-center justify-between gap-4 rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-3.5">
+          <div class="flex items-center justify-between gap-4 rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-3.5">
             <div class="flex min-w-0 flex-1 items-center gap-3">
               <Artwork src={ep.artworkUrl} size={52} radius={10} />
               <div class="min-w-0 flex-1">
@@ -246,7 +247,7 @@
         <WaveIcon name="chevronLeft" size={15} /> Back to Podcasts
       </button>
 
-      <div class="flex items-center gap-4 rounded-[16px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+      <div class="flex items-center gap-4 rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
         <Artwork src={selectedShow.artworkUrl} size={84} radius={12} />
         <div class="min-w-0 flex-1">
           <div class="text-[19px] font-bold">{selectedShow.title}</div>
@@ -264,7 +265,7 @@
       {:else}
         <div class="space-y-2">
           {#each activeEpisodes as ep (ep.id)}
-            <div class="flex items-center justify-between gap-4 rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div class="flex items-center justify-between gap-4 rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
               <div class="min-w-0 flex-1">
                 <div class="text-[14px] font-semibold">{ep.title}</div>
                 {#if ep.description}
@@ -291,7 +292,7 @@
       {/if}
     </div>
   {:else if featuresStore.podcastsLoading && featuresStore.podcastShelves.length === 0}
-    <div class="rounded-[18px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] px-6 py-10 text-center text-[13px] text-[var(--lw-text-secondary)]">
+    <div class="rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] px-6 py-10 text-center text-[13px] text-[var(--lw-text-secondary)]">
       Loading YouTube Music podcasts...
     </div>
   {:else if featuresStore.podcastShelves.length === 0}
@@ -312,7 +313,7 @@
           <h2 class="text-[16px] font-bold tracking-[-0.2px]">{shelf.title}</h2>
 
           {#if shelf.shows.length > 0}
-            <div class="lw-scroll-x flex gap-3.5 py-1">
+            <div use:waveSmoothScroll={{ axis: 'x', drag: true }} class="lw-scroll-x flex gap-3.5 py-1">
               {#each shelf.shows as show (show.id)}
                 <button
                   type="button"
@@ -332,7 +333,7 @@
           {/if}
 
           {#if shelf.episodes.length > 0}
-            <div class="lw-scroll-x flex gap-3.5 py-1">
+            <div use:waveSmoothScroll={{ axis: 'x', drag: true }} class="lw-scroll-x flex gap-3.5 py-1">
               {#each shelf.episodes as ep (`${shelf.title}-${ep.id}`)}
                 <button
                   type="button"

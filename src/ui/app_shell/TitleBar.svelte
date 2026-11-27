@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { dismissFlyout } from '$src/app/accessibility';
+  import { dismissDialogOnBackdrop, dismissFlyout } from '$src/app/accessibility';
   import { router } from '$src/app/router.svelte';
   import { playTrackNow } from '$src/app/trackActions';
   import { windowState } from '$src/app/window.svelte';
@@ -469,7 +469,7 @@
           use:waveTooltip={displayName || (settingsStore.ytConnected ? 'YouTube Music connected' : 'YouTube & profile')}
           aria-label={displayName ? `Profile, ${displayName}` : 'YouTube & profile'}
           aria-expanded={profileMenuOpen}
-          class="flex h-[32px] w-[32px] cursor-pointer items-center justify-center rounded-full p-[2px] transition-transform hover:scale-105 hover:bg-[var(--lw-wash-hover)] active:scale-95"
+          class="lw-press flex h-[32px] w-[32px] cursor-pointer items-center justify-center rounded-full p-[2px] hover:bg-[var(--lw-wash-hover)]"
         >
           <span class="flex h-[26px] w-[26px] items-center justify-center overflow-hidden rounded-full border border-[var(--lw-divider)] bg-[var(--lw-surface-raised)] text-[11px] font-semibold text-[var(--lw-text-primary)]">
             {#if avatarSrc}
@@ -648,6 +648,7 @@
 
 <dialog
   bind:this={nameDialogEl}
+  use:dismissDialogOnBackdrop={() => (nameModalOpen = false)}
   onclose={() => (nameModalOpen = false)}
   closedby="any"
   aria-labelledby="lw-name-dialog-title"

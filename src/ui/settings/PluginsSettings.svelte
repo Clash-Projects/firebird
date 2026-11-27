@@ -98,10 +98,7 @@
   }
 
   function typeBadgeClass(t: PluginType): string {
-    if (t === 'palette') return 'bg-violet-500/20 text-violet-200 border-violet-400/25';
-    if (t === 'theme') return 'bg-sky-500/20 text-sky-200 border-sky-400/25';
-    if (t === 'snippet') return 'bg-amber-500/20 text-amber-200 border-amber-400/25';
-    return 'bg-emerald-500/20 text-emerald-200 border-emerald-400/25';
+    return `plugin-type-badge badge-${t}`;
   }
 
   function fromMarket(entry: MarketplacePluginEntry): StoreCardModel {
@@ -249,7 +246,7 @@
     }}
     tabindex="0"
     role="button"
-    class="group flex cursor-pointer flex-col overflow-hidden rounded-[14px] border border-[rgba(255,255,255,0.06)] border-t-[rgba(255,255,255,0.1)] border-b-[rgba(0,0,0,0.35)] bg-[var(--lw-bg-elevated,var(--lw-surface-raised))] text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_6px_18px_rgba(0,0,0,0.28)] transition-all duration-[160ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-[2px] hover:border-t-[rgba(255,255,255,0.16)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_12px_26px_rgba(0,0,0,0.42)]"
+    class="group flex cursor-pointer flex-col overflow-hidden rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] text-left transition-colors duration-[140ms] ease-[var(--ease-native)] hover:border-[var(--lw-outline)] hover:bg-[var(--lw-surface-raised)]"
   >
     <div class="relative aspect-[16/10] w-full overflow-hidden bg-[var(--lw-bg-deep)]">
       {#if imgSrc && !coverFailed[card.id]}
@@ -259,7 +256,7 @@
           loading="lazy"
           draggable="false"
           onerror={() => handleCoverError(card)}
-          class="h-full w-full select-none object-cover transition-transform duration-[220ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.02]"
+          class="h-full w-full select-none object-cover transition-transform duration-[220ms] ease-[var(--ease-native)] group-hover:scale-[1.02]"
         />
       {:else if card.swatch}
         <div class="flex h-full w-full">
@@ -268,7 +265,7 @@
           {/each}
         </div>
       {:else}
-        <div class="flex h-full w-full items-center justify-center bg-gradient-to-br from-white/5 to-transparent text-[var(--lw-text-tertiary)]">
+        <div class="flex h-full w-full items-center justify-center bg-gradient-to-br from-[var(--lw-wash)] to-transparent text-[var(--lw-text-tertiary)]">
           <WaveIcon name={typeIcon(card.type)} size={32} />
         </div>
       {/if}
@@ -382,7 +379,7 @@
         <div class="flex flex-wrap items-center justify-between gap-2 text-[12px] text-[var(--lw-text-primary)]">
           <span>
             <strong>{conflict.pluginNames[0]}</strong> &amp; <strong>{conflict.pluginNames[1]}</strong> both override
-            <code class="rounded bg-black/25 px-1.5 py-0.5 text-[11px]">{conflict.detail}</code>
+            <code class="rounded bg-[var(--lw-wash)] px-1.5 py-0.5 text-[11px]">{conflict.detail}</code>
           </span>
           <div class="flex items-center gap-1.5">
             <Buttons variant="secondary" size="sm" onclick={() => void pluginManager.togglePlugin(conflict.pluginIds[1])}>
@@ -394,7 +391,7 @@
     </div>
   {/if}
 
-  <div class="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-[rgba(255,255,255,0.06)] border-t-[rgba(255,255,255,0.1)] border-b-[rgba(0,0,0,0.35)] bg-[var(--lw-bg-elevated,var(--lw-surface-raised))] px-4 py-3">
+  <div class="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] px-4 py-3">
     <div>
       <div class="text-[13.5px] font-semibold">
         Plugin Storefront ({activeCount} active)
@@ -440,7 +437,7 @@
 
   <div
     data-lw="plugin-store-header"
-    class="space-y-3 rounded-[14px] border border-[rgba(255,255,255,0.06)] border-t-[rgba(255,255,255,0.1)] border-b-[rgba(0,0,0,0.35)] bg-[var(--lw-bg-elevated,var(--lw-surface-raised))] p-3.5"
+    class="space-y-3 rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-3.5"
   >
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div class="flex flex-wrap items-center gap-1.5">
@@ -511,11 +508,11 @@
   {/if}
 
   {#if pluginManager.marketplaceLoading && visibleCards.length === 0}
-    <div class="rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] py-12 text-center text-[13px] text-[var(--lw-text-secondary)]">
+    <div class="rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] py-12 text-center text-[13px] text-[var(--lw-text-secondary)]">
       Loading Clash-Projects/lastwave-plugins...
     </div>
   {:else if visibleCards.length === 0}
-    <div class="rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] py-12 text-center text-[13px] text-[var(--lw-text-secondary)]">
+    <div class="rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] py-12 text-center text-[13px] text-[var(--lw-text-secondary)]">
       {#if activeTab !== 'installed' && pluginManager.marketplace.length === 0 && !search.trim()}
         No plugins published in the registry yet. Install one from local disk or via GitHub URL above.
       {:else if activeTab === 'installed' && pluginManager.plugins.length === 0 && !search.trim()}
@@ -553,3 +550,41 @@
     if (activeTab === 'installed') activeTab = 'discover';
   }}
 />
+
+<style>
+  .plugin-type-badge {
+    border-radius: 999px;
+    border: 1px solid var(--lw-outline-soft);
+    background: color-mix(in srgb, var(--lw-surface-raised) 85%, transparent);
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--lw-text-secondary);
+  }
+
+  .badge-palette {
+    border-color: color-mix(in srgb, #ec4899 36%, transparent);
+    background: color-mix(in srgb, #ec4899 14%, var(--lw-surface-raised));
+    color: color-mix(in srgb, #ec4899 72%, var(--lw-text-primary));
+  }
+
+  .badge-theme {
+    border-color: color-mix(in srgb, #8b5cf6 36%, transparent);
+    background: color-mix(in srgb, #8b5cf6 14%, var(--lw-surface-raised));
+    color: color-mix(in srgb, #8b5cf6 72%, var(--lw-text-primary));
+  }
+
+  .badge-snippet {
+    border-color: color-mix(in srgb, #06b6d4 36%, transparent);
+    background: color-mix(in srgb, #06b6d4 14%, var(--lw-surface-raised));
+    color: color-mix(in srgb, #06b6d4 72%, var(--lw-text-primary));
+  }
+
+  .badge-widget {
+    border-color: color-mix(in srgb, #f59e0b 36%, transparent);
+    background: color-mix(in srgb, #f59e0b 14%, var(--lw-surface-raised));
+    color: color-mix(in srgb, #f59e0b 72%, var(--lw-text-primary));
+  }
+</style>

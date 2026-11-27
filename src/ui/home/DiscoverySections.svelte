@@ -29,7 +29,7 @@
         <button
           type="button"
           onclick={() => goGenre(genre.id)}
-          class="relative h-24 cursor-pointer overflow-hidden rounded-[12px] border border-[var(--lw-outline)] p-3.5 text-left transition-transform hover:-translate-y-0.5"
+          class="lw-press relative h-24 cursor-pointer overflow-hidden rounded-[12px] border border-[var(--lw-outline)] p-3.5 text-left transition-[border-color,transform] duration-[120ms] ease-[var(--ease-wave)] hover:border-[var(--lw-text-tertiary)]"
           style:background="linear-gradient(135deg, {genre.color}, #121212)"
         >
           <div class="text-[14px] font-bold text-white">{genre.name}</div>

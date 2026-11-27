@@ -211,22 +211,22 @@
 
   {#if tab === 'overview'}
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <div class="rounded-[18px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-5">
+      <div class="rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-5">
         <div class="text-[11px] font-semibold text-[var(--lw-text-tertiary)] uppercase">Plays · {period.toUpperCase()}</div>
         <div class="mt-2 text-[28px] font-bold tracking-[-0.6px] lw-tabular">{totalPlays}</div>
         <div class="mt-0.5 text-[11.5px] text-[var(--lw-text-tertiary)]">{uniqueTracks} unique tracks</div>
       </div>
-      <div class="rounded-[18px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-5">
+      <div class="rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-5">
         <div class="text-[11px] font-semibold text-[var(--lw-text-tertiary)] uppercase">Listening Time</div>
         <div class="mt-2 text-[28px] font-bold tracking-[-0.6px] lw-tabular">{Math.floor(totalMinutes / 60)}h {totalMinutes % 60}m</div>
         <div class="mt-0.5 text-[11.5px] text-[var(--lw-text-tertiary)]">{uniqueArtists} unique artists</div>
       </div>
-      <div class="rounded-[18px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-5">
+      <div class="rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-5">
         <div class="text-[11px] font-semibold text-[var(--lw-text-tertiary)] uppercase">Listening Streak</div>
         <div class="mt-2 text-[28px] font-bold tracking-[-0.6px] lw-tabular">{streakDays}d</div>
         <div class="mt-0.5 text-[11.5px] text-[var(--lw-text-tertiary)]">Active local streak</div>
       </div>
-      <div class="rounded-[18px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-5">
+      <div class="rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-5">
         <div class="text-[11px] font-semibold text-[var(--lw-text-tertiary)] uppercase">Peak Hour</div>
         <div class="mt-2 text-[28px] font-bold tracking-[-0.6px] lw-tabular">{peakLabel}</div>
         <div class="mt-0.5 text-[11.5px] text-[var(--lw-text-tertiary)]">Most active window</div>

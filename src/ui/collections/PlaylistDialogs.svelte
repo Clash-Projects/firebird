@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dismissDialogOnBackdrop } from '$src/app/accessibility';
   import { libraryStore } from '$src/state/library.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import Input from '$src/ui/components/Input.svelte';
@@ -33,7 +34,14 @@
   }
 </script>
 
-<dialog bind:this={dialogEl} onclose={onClose} aria-labelledby="new-pl-title" class="w-full max-w-[420px]">
+<dialog
+  bind:this={dialogEl}
+  closedby="any"
+  use:dismissDialogOnBackdrop={onClose}
+  onclose={onClose}
+  aria-labelledby="new-pl-title"
+  class="w-full max-w-[420px]"
+>
   <form onsubmit={submit} class="p-6">
     <h1 id="new-pl-title" class="text-[18px] font-bold">New Playlist</h1>
     <div class="mt-4 space-y-3">

@@ -12,7 +12,7 @@
   ];
 </script>
 
-<div class="space-y-3 rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+<div class="space-y-3 rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
   <div class="flex items-center justify-between gap-3">
     <div>
       <div class="text-[13.5px] font-semibold">Download Folder Structure</div>
