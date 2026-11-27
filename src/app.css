@@ -474,6 +474,22 @@ button.lw-press:enabled:active { scale: calc(1 - 0.035 * var(--lw-motion-factor)
   outline-offset: 2px;
 }
 
+.lw-text-field {
+  transition: background-color var(--lw-motion-fast) var(--ease-wave);
+}
+
+input.lw-text-field:focus {
+  background-color: color-mix(in srgb, var(--lw-surface) 88%, var(--lw-text-primary));
+  outline: none;
+}
+
+@media (forced-colors: active) {
+  input.lw-text-field:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}
+
 .lw-tabular {
   font-variant-numeric: tabular-nums;
 }

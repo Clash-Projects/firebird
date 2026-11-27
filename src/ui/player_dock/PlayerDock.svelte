@@ -531,18 +531,7 @@
 
     <button
       type="button"
-      class="dock-glyph dock-expand-btn dock-press"
-      onclick={() => router.navigate('/now-playing')}
-      use:waveTooltip={'Now Playing'}
-      aria-label="Now Playing"
-      aria-pressed={router.matches('/now-playing')}
-    >
-      <WaveIcon name="maximize" size={15} />
-    </button>
-
-    <button
-      type="button"
-      class="dock-glyph dock-mini-btn dock-press"
+      class="dock-glyph dock-press"
       onclick={() => windowState.toggleMiniPlayer()}
       use:waveTooltip={'Mini player'}
       aria-label="Mini player"
@@ -998,8 +987,7 @@
       width: 200px;
     }
     .dock-track-menu,
-    .dock-quality-wrap,
-    .dock-mini-btn {
+    .dock-quality-wrap {
       display: none;
     }
   }
@@ -1008,8 +996,7 @@
     .dock-right {
       min-width: 150px;
     }
-    .dock-volume-inline,
-    .dock-expand-btn {
+    .dock-volume-inline {
       display: none;
     }
     .dock-volume-compact {

@@ -1,4 +1,35 @@
+import type { AmLyrics } from '@uimaxbai/am-lyrics';
 import type { LyricLine, LyricsDocument } from '$src/state/types';
+
+interface LyricsScrollRenderer {
+  lyrics?: Array<{
+    isWordSynced?: boolean;
+    text: Array<{ endtime: number }>;
+  }>;
+  findActiveLineIndices(time: number): number[];
+  getPrimaryScrollLineIndex(activeIndices: number[], time: number): number | null;
+}
+
+export function keepScrollOnSungWord(element: AmLyrics) {
+  // am-lyrics 1.9.2 has no public setting for its scroll look-ahead.
+  // Adjust only the target on this instance and keep the renderer's scroll and seek behavior.
+  const renderer = element as unknown as Partial<LyricsScrollRenderer>;
+  const selectTarget = renderer.getPrimaryScrollLineIndex;
+  const findActive = renderer.findActiveLineIndices;
+  if (typeof selectTarget !== 'function' || typeof findActive !== 'function') return;
+
+  renderer.getPrimaryScrollLineIndex = (indices, time) => {
+    const target = selectTarget.call(renderer, indices, time);
+    if (target === null || !renderer.lyrics) return target;
+
+    const now = element.currentTime;
+    return findActive.call(renderer, now).find((index) => {
+      const line = renderer.lyrics?.[index];
+      return index < target && line?.isWordSynced &&
+        line.text.some((word) => now < word.endtime);
+    }) ?? target;
+  };
+}
 
 export function activeLineIndex(lines: LyricLine[], positionMs: number): number {
   for (let i = lines.length - 1; i >= 0; i--) {

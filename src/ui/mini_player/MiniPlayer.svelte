@@ -1,6 +1,7 @@
 <script lang="ts">
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { windowState } from '$src/app/window.svelte';
+  import { activeLineIndex } from '$src/features/lyrics/lyricAdapter';
   import { isTauriRuntime } from '$src/lib/ipc';
   import { featuresStore } from '$src/state/features.svelte';
   import { formatDuration, playerStore } from '$src/state/player.svelte';
@@ -8,28 +9,34 @@
   import Artwork from '$src/ui/components/Artwork.svelte';
   import WaveSlider from '$src/ui/components/WaveSlider.svelte';
   import { waveTooltip } from '$src/ui/components/tooltip';
+  import { waveSlide } from '$src/ui/theme/motion';
+  import { WaveMotion } from '$src/ui/theme/tokens';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
 
   const appWindow = isTauriRuntime() ? getCurrentWindow() : null;
 
   let hover = $state(false);
+  let seekPreview = $state<number | null>(null);
   let track = $derived(playerStore.currentTrack);
   let style = $derived(settingsStore.miniPlayerStyle);
-  let progressPct = $derived(Math.max(0, Math.min(100, playerStore.progress * 100)));
+  let duration = $derived(playerStore.durationSec);
+  let seekPosition = $derived(seekPreview ?? playerStore.positionSec);
 
   let lyricsDoc = $derived(track ? featuresStore.getLyrics(track.id) : null);
   let hasSyncedLyrics = $derived(Boolean(lyricsDoc && lyricsDoc.synced && lyricsDoc.lines.length > 0));
+  let showLyrics = $derived(style === 'lyrics' && hasSyncedLyrics);
 
   let activeLyricText = $derived.by(() => {
     if (!lyricsDoc || !hasSyncedLyrics) return '';
     const offsetMs = track ? featuresStore.getLyricsOffset(track.id) : 0;
     const tMs = Math.max(0, playerStore.positionSec * 1000 + offsetMs);
-    let active = lyricsDoc.lines[0]?.text ?? '';
-    for (const line of lyricsDoc.lines) {
-      if (line.startMs <= tMs) active = line.text;
-      else break;
-    }
-    return active;
+    return lyricsDoc.lines[activeLineIndex(lyricsDoc.lines, tMs)]?.text ?? '';
+  });
+
+  $effect(() => {
+    track?.id;
+    style;
+    seekPreview = null;
   });
 
   $effect(() => {
@@ -54,7 +61,49 @@
     if ((e.target as HTMLElement)?.closest('button, input')) return;
     expand();
   }
+
+  function commitSeek(position: number) {
+    playerStore.seek(position);
+    seekPreview = null;
+  }
 </script>
+
+{#snippet playButton(size: number, iconSize: number, onDark = false)}
+  <button
+    type="button"
+    onclick={() => playerStore.togglePlay()}
+    use:waveTooltip={playerStore.isPlaying ? 'Pause' : 'Play'}
+    aria-label={playerStore.isPlaying ? 'Pause' : 'Play'}
+    class="mini-play lw-press"
+    class:on-dark={onDark}
+    style:--mini-play-size={`${size}px`}
+    data-playing={playerStore.isPlaying}
+  >
+    <span class="mini-play-icons" aria-hidden="true">
+      <span><WaveIcon name="play" size={iconSize} filled /></span>
+      <span><WaveIcon name="pause" size={iconSize} filled /></span>
+    </span>
+  </button>
+{/snippet}
+
+{#snippet seekSlider()}
+  <div class="mini-seek flex min-w-0 flex-1 items-center gap-1.5 text-[10px] text-white/75 lw-tabular">
+    <span>{formatDuration(seekPosition)}</span>
+    <div role="group" class="min-w-0 flex-1" onpointercancel={() => (seekPreview = null)} onfocusout={() => (seekPreview = null)}>
+      <WaveSlider
+        label="Seek track position"
+        valuetext={formatDuration(seekPosition)}
+        max={duration || 1}
+        step={0.1}
+        value={seekPosition}
+        disabled={!duration}
+        oninput={(position) => (seekPreview = position)}
+        onchange={commitSeek}
+      />
+    </div>
+    <span>{formatDuration(duration)}</span>
+  </div>
+{/snippet}
 
 <div
   data-lw="mini-player"
@@ -92,13 +141,15 @@
     </div>
   {:else if style === 'card'}
     <div class="relative h-full w-full" data-tauri-drag-region>
-      <img src={track.artworkUrl} alt={track.title} class="h-full w-full object-cover" draggable="false" />
+      {#key track.artworkUrl}
+        <img src={track.artworkUrl} alt={track.title} class="absolute inset-0 h-full w-full object-cover" draggable="false" in:waveSlide={{}} />
+      {/key}
       <div
-        class="pointer-events-none absolute inset-0 transition-opacity duration-150"
-        style:background="linear-gradient(to bottom, rgba(0,0,0,{hover ? 0.55 : 0}) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0) 42%, rgba(0,0,0,0.88) 100%)"
+        class="mini-card-shade pointer-events-none absolute inset-0"
       ></div>
+      <div class="mini-card-top-shade pointer-events-none absolute inset-0" class:visible={hover}></div>
 
-      <div class="absolute top-1.5 right-1.5 flex items-center gap-0.5 transition-opacity duration-150 {hover ? 'opacity-100' : 'pointer-events-none opacity-0'}">
+      <div class="mini-window-controls card-controls absolute top-1.5 right-1.5 flex items-center gap-0.5" class:visible={hover}>
         <button type="button" onclick={() => appWindow?.minimize()} use:waveTooltip={'Minimize'} aria-label="Minimize" class="mini-glyph on-dark">
           <span class="h-[1px] w-2 bg-current"></span>
         </button>
@@ -116,34 +167,13 @@
           <div class="truncate text-[11.5px] text-white/75">{track.artist}</div>
         </button>
 
-        <div class="mini-on-dark flex items-center gap-2 text-[10px] text-white/75 lw-tabular">
-          <span>{formatDuration(playerStore.positionSec)}</span>
-          <div class="min-w-0 flex-1">
-            <WaveSlider
-              min={0}
-              max={playerStore.durationSec || 1}
-              step={1}
-              label="Seek"
-              value={playerStore.positionSec}
-              oninput={(v) => playerStore.seek(v)}
-            />
-          </div>
-          <span>{formatDuration(playerStore.durationSec)}</span>
-        </div>
+        {@render seekSlider()}
 
         <div class="flex items-center justify-center gap-2">
           <button type="button" onclick={() => playerStore.previous()} use:waveTooltip={'Previous'} aria-label="Previous" class="mini-glyph on-dark">
             <WaveIcon name="prev" size={14} />
           </button>
-          <button
-            type="button"
-            onclick={() => playerStore.togglePlay()}
-            use:waveTooltip={playerStore.isPlaying ? 'Pause' : 'Play'}
-            aria-label={playerStore.isPlaying ? 'Pause' : 'Play'}
-            class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-white text-black transition-transform hover:scale-105 active:scale-95"
-          >
-            <WaveIcon name={playerStore.isPlaying ? 'pause' : 'play'} size={16} filled />
-          </button>
+          {@render playButton(36, 16, true)}
           <button type="button" onclick={() => playerStore.next()} use:waveTooltip={'Next'} aria-label="Next" class="mini-glyph on-dark">
             <WaveIcon name="next" size={14} />
           </button>
@@ -153,18 +183,21 @@
   {:else if style === 'ambient' || style === 'lyrics'}
     <div class="relative flex h-full w-full flex-col overflow-hidden" data-tauri-drag-region>
       {#if track.artworkUrl}
-        <img
-          src={track.artworkUrl}
-          alt=""
-          aria-hidden="true"
-          class="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover blur-2xl"
-        />
+        {#key track.artworkUrl}
+          <div class="pointer-events-none absolute inset-0" aria-hidden="true" in:waveSlide={{}}>
+            <img src={track.artworkUrl} alt="" class="h-full w-full scale-125 object-cover blur-2xl" draggable="false" />
+          </div>
+        {/key}
       {/if}
-      <div class="pointer-events-none absolute inset-0 bg-black/45"></div>
+      <div class="mini-ambient-shade pointer-events-none absolute inset-0"></div>
 
       <div class="relative z-10 flex flex-1 items-center gap-3 px-3 py-2.5" data-tauri-drag-region>
-        <button type="button" onclick={expand} class="shrink-0 cursor-pointer">
-          <Artwork src={track.artworkUrl} label={track.title} artist={track.artist} kind="track" alt={track.title} size={hasSyncedLyrics ? 96 : 86} radius={10} shadow="lift" />
+        <button type="button" onclick={expand} use:waveTooltip={'Expand to window'} aria-label="Expand to window" class="shrink-0 cursor-pointer rounded-[10px] lw-press">
+          {#key track.artworkUrl}
+            <div in:waveSlide={{}}>
+              <Artwork src={track.artworkUrl} label={track.title} artist={track.artist} kind="track" alt={track.title} size={showLyrics ? 96 : 86} radius={10} shadow="lift" />
+            </div>
+          {/key}
         </button>
 
         <div class="flex min-w-0 flex-1 flex-col justify-between self-stretch">
@@ -173,7 +206,7 @@
               <div class="truncate text-[13.5px] font-bold text-white">{track.title}</div>
               <div class="truncate text-[11.5px] text-white/75">{track.artist}</div>
             </button>
-            <div class="flex shrink-0 items-center transition-opacity duration-150 {hover ? 'opacity-100' : 'opacity-60'}">
+            <div class="mini-window-controls flex shrink-0 items-center" class:visible={hover}>
               <button type="button" onclick={() => appWindow?.minimize()} use:waveTooltip={'Minimize'} aria-label="Minimize" class="mini-glyph on-dark">
                 <span class="h-[1px] w-2 bg-current"></span>
               </button>
@@ -190,38 +223,27 @@
             <button type="button" onclick={() => playerStore.previous()} use:waveTooltip={'Previous'} aria-label="Previous" class="mini-glyph on-dark">
               <WaveIcon name="prev" size={13} />
             </button>
-            <button
-              type="button"
-              onclick={() => playerStore.togglePlay()}
-              use:waveTooltip={playerStore.isPlaying ? 'Pause' : 'Play'}
-              aria-label={playerStore.isPlaying ? 'Pause' : 'Play'}
-              class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-black transition-transform hover:scale-105 active:scale-95"
-            >
-              <WaveIcon name={playerStore.isPlaying ? 'pause' : 'play'} size={15} filled />
-            </button>
+            {@render playButton(32, 15, true)}
             <button type="button" onclick={() => playerStore.next()} use:waveTooltip={'Next'} aria-label="Next" class="mini-glyph on-dark">
               <WaveIcon name="next" size={13} />
             </button>
 
-            <div class="mini-on-dark ml-1 flex min-w-0 flex-1 items-center gap-1.5 text-[10px] text-white/75 lw-tabular">
-              <span>{formatDuration(playerStore.positionSec)}</span>
-              <div class="min-w-0 flex-1">
-                <WaveSlider
-                  min={0}
-                  max={playerStore.durationSec || 1}
-                  step={1}
-                  label="Seek"
-                  value={playerStore.positionSec}
-                  oninput={(v) => playerStore.seek(v)}
-                />
-              </div>
-              <span>{formatDuration(playerStore.durationSec)}</span>
-            </div>
+            {@render seekSlider()}
           </div>
 
-          {#if style === 'lyrics' && hasSyncedLyrics}
-            <div class="truncate rounded-[6px] bg-white/10 px-2 py-1 text-[11.5px] font-medium text-white/95">
-              {activeLyricText || '♪'}
+          {#if showLyrics}
+            {@const lyric = activeLyricText || '♪'}
+            {@const duration = playerStore.isPlaying && !playerStore.isBuffering ? WaveMotion.fastMs : 0}
+            <div class="mini-lyrics-line overflow-hidden rounded-[6px] bg-white/10 px-2 py-1 text-[11.5px] font-medium leading-4 text-white/95">
+              <span class="sr-only">{lyric}</span>
+              {#key lyric}
+                <span
+                  aria-hidden="true"
+                  class="truncate"
+                  in:waveSlide={{ y: 3, duration }}
+                  out:waveSlide={{ y: -3, duration }}
+                >{lyric}</span>
+              {/key}
             </div>
           {/if}
         </div>
@@ -237,21 +259,13 @@
         <div class="truncate text-[11px] text-[var(--lw-text-secondary)]">{track.artist}</div>
       </button>
       <div class="flex shrink-0 items-center gap-0.5">
-        <button
-          type="button"
-          onclick={() => playerStore.togglePlay()}
-          use:waveTooltip={playerStore.isPlaying ? 'Pause' : 'Play'}
-          aria-label={playerStore.isPlaying ? 'Pause' : 'Play'}
-          class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-[var(--lw-accent)] text-[var(--lw-on-accent)]"
-        >
-          <WaveIcon name={playerStore.isPlaying ? 'pause' : 'play'} size={13} filled />
-        </button>
+        {@render playButton(28, 13)}
         <button type="button" onclick={() => playerStore.next()} use:waveTooltip={'Next'} aria-label="Next" class="mini-glyph">
           <WaveIcon name="next" size={13} />
         </button>
       </div>
-      <div class="flex shrink-0 items-center transition-opacity duration-150 {hover ? 'opacity-100' : 'opacity-45'}">
-        <button type="button" onclick={expand} use:waveTooltip={'Expand to window'} aria-label="Expand" class="mini-glyph">
+      <div class="mini-window-controls compact-controls flex shrink-0 items-center" class:visible={hover}>
+        <button type="button" onclick={expand} use:waveTooltip={'Expand to window'} aria-label="Expand to window" class="mini-glyph">
           <WaveIcon name="maximize" size={12} />
         </button>
         <button type="button" onclick={closeMini} use:waveTooltip={'Close mini player'} aria-label="Close" class="mini-glyph danger">
@@ -259,8 +273,8 @@
         </button>
       </div>
     </div>
-    <div class="h-[2px] w-full bg-[var(--lw-wash-hover)]">
-      <div class="h-full bg-[var(--lw-accent)] transition-[width] duration-150" style:width="{progressPct}%"></div>
+    <div class="h-[2px] w-full bg-[var(--lw-wash-hover)]" aria-hidden="true">
+      <div class="mini-progress-fill" style:transform={`scaleX(${playerStore.progress})`}></div>
     </div>
   {:else}
     <!-- classic (380x78) -->
@@ -279,15 +293,7 @@
         <button type="button" onclick={() => playerStore.previous()} use:waveTooltip={'Previous'} aria-label="Previous" class="mini-glyph">
           <WaveIcon name="prev" size={13} />
         </button>
-        <button
-          type="button"
-          onclick={() => playerStore.togglePlay()}
-          use:waveTooltip={playerStore.isPlaying ? 'Pause' : 'Play'}
-          aria-label={playerStore.isPlaying ? 'Pause' : 'Play'}
-          class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-[var(--lw-accent)] text-[var(--lw-on-accent)] transition-transform hover:scale-105 active:scale-95"
-        >
-          <WaveIcon name={playerStore.isPlaying ? 'pause' : 'play'} size={14} filled />
-        </button>
+        {@render playButton(32, 14)}
         <button type="button" onclick={() => playerStore.next()} use:waveTooltip={'Next'} aria-label="Next" class="mini-glyph">
           <WaveIcon name="next" size={13} />
         </button>
@@ -305,17 +311,76 @@
         </button>
       </div>
     </div>
-    <div class="h-[3px] w-full bg-[var(--lw-wash-hover)]">
-      <div class="h-full bg-[var(--lw-accent)] transition-[width] duration-150" style:width="{progressPct}%"></div>
+    <div class="h-[3px] w-full bg-[var(--lw-wash-hover)]" aria-hidden="true">
+      <div class="mini-progress-fill" style:transform={`scaleX(${playerStore.progress})`}></div>
     </div>
   {/if}
 </div>
 
 <style>
-  .mini-on-dark {
-    --lw-accent: #ffffff;
-    --lw-outline-strong: rgba(255, 255, 255, 0.3);
+  .mini-ambient-shade {
+    background: linear-gradient(110deg, rgb(0 0 0 / 48%), rgb(0 0 0 / 26%)),
+      linear-gradient(to top, rgb(0 0 0 / 30%), transparent 75%);
   }
+
+  .mini-card-shade {
+    background: linear-gradient(to top, rgb(0 0 0 / 88%), transparent 58%);
+  }
+
+  .mini-card-top-shade {
+    background: linear-gradient(to bottom, rgb(0 0 0 / 55%), transparent 30%);
+    opacity: 0;
+    transition: opacity var(--lw-motion-normal) var(--ease-wave);
+  }
+
+  .mini-window-controls {
+    opacity: 0.65;
+    transition: opacity var(--lw-motion-normal) var(--ease-wave);
+  }
+
+  .compact-controls { opacity: 0.55; }
+  .card-controls { opacity: 0; pointer-events: none; }
+  .mini-card-top-shade.visible,
+  .mini-window-controls:is(.visible, :focus-within) { opacity: 1; }
+  .card-controls:is(.visible, :focus-within) { pointer-events: auto; }
+
+  .mini-play {
+    display: grid;
+    width: var(--mini-play-size);
+    height: var(--mini-play-size);
+    flex: none;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--lw-accent);
+    color: var(--lw-on-accent);
+    cursor: pointer;
+  }
+
+  .mini-play.on-dark { background: white; color: black; }
+  .mini-play-icons { display: grid; place-items: center; }
+  .mini-play-icons > span {
+    grid-area: 1 / 1;
+    transition: opacity var(--lw-motion-fast) var(--ease-wave);
+  }
+
+  .mini-play[data-playing="false"] .mini-play-icons > span:last-child,
+  .mini-play[data-playing="true"] .mini-play-icons > span:first-child { opacity: 0; }
+
+  .mini-progress-fill {
+    display: block;
+    height: 100%;
+    background: var(--lw-accent);
+    transform-origin: left center;
+    transition: transform var(--lw-motion-fast) linear;
+  }
+
+  .mini-seek {
+    --lw-text-primary: #fff;
+    --lw-outline: rgb(255 255 255 / 28%);
+  }
+
+  .mini-lyrics-line { display: grid; }
+  .mini-lyrics-line > .truncate { min-width: 0; grid-area: 1 / 1; }
 
   .mini-glyph {
     display: flex;
@@ -326,25 +391,33 @@
     border-radius: 6px;
     color: var(--lw-text-secondary);
     cursor: pointer;
-    transition: background-color 110ms ease, color 110ms ease;
+    transition: background-color var(--lw-motion-fast), color var(--lw-motion-fast),
+      scale var(--lw-motion-fast) var(--ease-wave);
   }
 
   .mini-glyph.on-dark {
     color: rgba(255, 255, 255, 0.85);
   }
 
-  .mini-glyph:hover {
-    background: var(--lw-wash-hover);
-    color: var(--lw-text-primary);
-  }
+  .mini-glyph:active { scale: calc(1 - 0.035 * var(--lw-motion-factor)); }
 
-  .mini-glyph.on-dark:hover {
-    background: rgba(255, 255, 255, 0.14);
-    color: #fff;
-  }
+  @media (hover: hover) and (pointer: fine) {
+    .mini-play:hover { background: color-mix(in srgb, var(--lw-accent) 88%, var(--lw-text-primary)); }
+    .mini-play.on-dark:hover { background: rgb(255 255 255 / 90%); }
 
-  .mini-glyph.danger:hover {
-    background: var(--lw-danger);
-    color: #fff;
+    .mini-glyph:hover {
+      background: var(--lw-wash-hover);
+      color: var(--lw-text-primary);
+    }
+
+    .mini-glyph.on-dark:hover {
+      background: rgb(255 255 255 / 14%);
+      color: white;
+    }
+
+    .mini-glyph.danger:hover {
+      background: var(--lw-danger);
+      color: white;
+    }
   }
 </style>

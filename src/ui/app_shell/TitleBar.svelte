@@ -357,8 +357,7 @@
           onkeydown={onSearchKeyDown}
           aria-label="Search songs, albums and artists"
           placeholder="Search"
-          class="title-search-input"
-          class:focused={searchFocused}
+          class="title-search-input lw-text-field"
         />
         {#if searchQuery}
           <button
@@ -726,18 +725,10 @@
     background: var(--lw-surface);
     color: var(--lw-text-primary);
     font-size: 13px;
-    outline: none;
-    transition: border-color 120ms ease, background-color 120ms ease;
   }
 
   .title-search-input::placeholder {
     color: var(--lw-text-tertiary);
-  }
-
-  .title-search-input.focused,
-  .title-search-input:focus {
-    border-bottom: 1.5px solid var(--lw-accent);
-    background: var(--lw-surface-raised);
   }
 
   .win-btn {

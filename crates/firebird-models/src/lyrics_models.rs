@@ -813,8 +813,8 @@ pub fn strip_lyric_credit_lines(result: &LyricsResult, title: &str, artist: &str
     }
 }
 
-/// Fill missing syllable/line durations and clip overlaps so karaoke
-/// wipe lasts until the next word instead of flashing then jumping.
+/// Fill missing karaoke durations and preserve a timed syllable that carries
+/// into the next line.
 pub fn normalize_karaoke_timings(
     result: &LyricsResult,
     title: &str,
@@ -859,6 +859,20 @@ pub fn normalize_karaoke_timings(
             }
         } else if duration <= 0 {
             duration = 4000;
+        }
+        if res.is_word_synced {
+            if let Some(last) = line
+                .syllables
+                .iter()
+                .max_by_key(|s| (s.time_ms, s.duration_ms))
+                .filter(|s| s.time_ms >= line.time_ms && s.duration_ms > 0)
+            {
+                let timed_duration = last
+                    .time_ms
+                    .saturating_sub(line.time_ms)
+                    .saturating_add(last.duration_ms);
+                duration = duration.max(timed_duration);
+            }
         }
         duration = duration.clamp(80, 30000);
         let syllables = if line.has_syllables() {
@@ -1845,6 +1859,48 @@ pub fn is_joined_script(text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn normalize_karaoke_keeps_a_held_word_past_the_next_line_start() {
+        let result = LyricsResult {
+            is_synced: true,
+            is_word_synced: true,
+            lines: vec![
+                LyricLine {
+                    time_ms: 1000,
+                    duration_ms: 1000,
+                    text: "Hold on".into(),
+                    syllables: vec![
+                        LyricSyllable {
+                            time_ms: 1000,
+                            duration_ms: 600,
+                            text: "Hold ".into(),
+                            ..Default::default()
+                        },
+                        LyricSyllable {
+                            time_ms: 1600,
+                            duration_ms: 900,
+                            text: "on".into(),
+                            ..Default::default()
+                        },
+                    ],
+                    ..Default::default()
+                },
+                LyricLine {
+                    time_ms: 2000,
+                    duration_ms: 800,
+                    text: "Here we go".into(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        let normalized = normalize_karaoke_timings(&result, "Song", "Artist");
+        assert_eq!(normalized.lines[0].duration_ms, 1500);
+        assert_eq!(normalized.lines[0].syllables, result.lines[0].syllables);
+        assert_eq!(normalized.lines[1].time_ms, 2000);
+    }
 
     #[test]
     fn parse_lrc_handles_offset_multi_tag_and_enhanced_stamps() {

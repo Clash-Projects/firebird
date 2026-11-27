@@ -4,7 +4,7 @@
   import { playerStore } from '$src/state/player.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
   import { waveTooltip } from '$src/ui/components/tooltip';
-  import { activeLineIndex, toTimedText, wordProgress } from './lyricAdapter';
+  import { activeLineIndex, keepScrollOnSungWord, toTimedText, wordProgress } from './lyricAdapter';
 
   interface Props {
     compact?: boolean;
@@ -61,6 +61,7 @@
   });
 
   function configureRenderer(element: AmLyrics) {
+    keepScrollOnSungWord(element);
     const seek = (event: Event) => {
       const { timestamp } = (event as CustomEvent<{ timestamp: number }>).detail;
       if (Number.isFinite(timestamp)) seekLine(timestamp);
@@ -81,9 +82,22 @@
         overflow: hidden;
         visibility: hidden;
       }
+      /* Keep the intro spacing in the padding, where the dot animation cannot collapse it. */
+      :host .lyrics-container:has(> #gap-0) {
+        --lw-lyrics-intro-space: calc(var(--am-lyrics-instrumental-height) + var(--am-lyrics-instrumental-spacing));
+        padding-block-start: calc(var(--lw-lyrics-top-padding) + var(--lw-lyrics-intro-space));
+      }
+      :host #gap-0.lyrics-gap {
+        height: 0;
+        pointer-events: none;
+      }
+      :host #gap-0.lyrics-gap .main-vocal-container {
+        inset-block: auto 0;
+      }
       :host(.sidebar-renderer) .lyrics-container {
+        --lw-lyrics-top-padding: 22px;
         /* Reserve space so opening a translation keeps the final line visible. */
-        padding-block: 22px calc(var(--lw-lyrics-translation-max) + var(--lw-lyrics-edge-fade));
+        padding-block: var(--lw-lyrics-top-padding) calc(var(--lw-lyrics-translation-max) + var(--lw-lyrics-edge-fade));
         scrollbar-width: none;
       }
       :host(.sidebar-renderer) .lyrics-container::-webkit-scrollbar,
@@ -93,6 +107,7 @@
         height: 0;
       }
       :host .lyrics-container {
+        --lw-lyrics-top-padding: 60px;
         scrollbar-width: none;
       }
       @keyframes lw-bounce {
@@ -119,7 +134,6 @@
         transform-origin: left center;
         transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), text-shadow 260ms ease, filter 260ms ease;
       }
-      :host([data-animation="apple_fluid"]) .lyrics-line.active { transform: scale(1.025); }
       :host([data-animation="karaoke_bounce"]) .lyrics-line.active { animation: lw-bounce 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
       :host([data-animation="kinetic_pop"]) .lyrics-line.active { animation: lw-pop 340ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
       :host([data-animation="neon_cyber"]) .lyrics-line.active { transform: scale(1.025); text-shadow: 0 0 22px color-mix(in srgb, var(--lw-accent) 85%, transparent); }
@@ -174,7 +188,7 @@
         paused={!playerStore.isPlaying || playerStore.isBuffering}
         interpolate={playerStore.speed === 1}
         noAutoAlternates={true}
-        noBlur={compact || settingsStore.reduceMotion}
+        noBlur={settingsStore.reduceMotion}
         reducedMotion={settingsStore.reduceMotion}
         fontFamily="var(--lw-font-family)"
         style:--lw-lyrics-scale={featuresStore.lyricsFontScale}
@@ -286,9 +300,17 @@
   am-lyrics {
     min-height: 0;
     flex: 1 1 0;
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black var(--lw-lyrics-top-fade, min(42px, 12%)),
+      black calc(100% - var(--lw-lyrics-edge-fade, min(28px, 10%))),
+      transparent
+    );
     --am-lyrics-highlight-color: var(--lw-text-primary);
     --am-lyrics-highlight-surface: transparent;
     --am-lyrics-highlight-radius: 10px;
+    --am-lyrics-inactive-scale: 1;
     --am-lyrics-inline-padding: 4px;
     --am-lyrics-compact-font-size: calc(23px * var(--lw-lyrics-scale));
     --am-lyrics-wide-font-size: calc(32px * var(--lw-lyrics-scale));
@@ -299,10 +321,10 @@
     --lw-sidebar-lyric-size: 24px;
     --lw-sidebar-lyric-spacing: 22px;
     --lw-lyrics-translation-max: min(96px, 14dvh);
+    --lw-lyrics-top-fade: 10px;
     --lw-lyrics-edge-fade: 22px;
   }
   .compact am-lyrics {
-    mask-image: linear-gradient(to bottom, transparent, black 10px, black calc(100% - var(--lw-lyrics-edge-fade)), transparent);
     --am-lyrics-compact-font-size: calc(var(--lw-sidebar-lyric-size) * var(--lw-lyrics-scale));
     --am-lyrics-wide-font-size: var(--am-lyrics-compact-font-size);
     --am-lyrics-compact-line-spacing: var(--lw-sidebar-lyric-spacing);
@@ -377,7 +399,6 @@
     transform-origin: left center;
     transition: transform var(--lw-motion-normal) var(--ease-wave), color var(--lw-motion-normal);
   }
-  [data-animation="apple_fluid"] .lyric-line[data-active="true"] { transform: scale(1.025); }
   [data-animation="karaoke_bounce"] .lyric-line[data-active="true"] { animation: fb-bounce 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
   [data-animation="kinetic_pop"] .lyric-line[data-active="true"] { animation: fb-pop 340ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
   [data-animation="neon_cyber"] .lyric-line[data-active="true"] { transform: scale(1.025); text-shadow: 0 0 22px color-mix(in srgb, var(--lw-accent) 85%, transparent); }
@@ -392,6 +413,6 @@
     .lyric-line[data-active="false"]:hover { background: var(--lw-wash-hover); color: var(--lw-text-primary); }
   }
   @media (forced-colors: active) {
-    .compact am-lyrics { mask-image: none; }
+    am-lyrics { mask-image: none; }
   }
 </style>

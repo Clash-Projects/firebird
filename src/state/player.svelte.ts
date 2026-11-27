@@ -305,19 +305,12 @@ class PlayerStore {
     this.volume = clamped;
     this.muted = clamped === 0;
     if (clamped > 0) this.preMuteVolume = clamped;
-    void ipcInvoke('player_set_volume', { volume: clamped });
+    void ipcInvoke('player_set_volume', { volume: clamped, software: true });
   }
 
   toggleMute() {
-    if (this.muted) {
-      this.muted = false;
-      this.volume = this.preMuteVolume || 0.7;
-    } else {
-      this.preMuteVolume = this.volume;
-      this.muted = true;
-      this.volume = 0;
-    }
-    void ipcInvoke('player_set_volume', { volume: this.volume });
+    if (!this.muted) this.preMuteVolume = this.volume;
+    this.setVolume(this.muted ? this.preMuteVolume || 0.7 : 0);
   }
 
   toggleShuffle() {
