@@ -78,7 +78,7 @@ class SettingsStore {
     if (!isTauriRuntime()) return;
     const [all, lastfm] = await Promise.all([
       ipcInvoke<Record<string, unknown>>('prefs_get_all_settings'),
-      ipcInvoke<{ username?: string; authenticated?: boolean }>('lastfm_auth_state'),
+      ipcInvoke<{ status?: string; username?: string }>('lastfm_auth_state'),
     ]);
     if (all) {
       if (typeof all.themeMode === 'string') {
@@ -89,18 +89,40 @@ class SettingsStore {
       }
       if (typeof all.amoled === 'boolean') this.amoled = all.amoled;
       if (typeof all.languageTag === 'string' && all.languageTag) this.language = all.languageTag;
-      if (typeof all.discordRpc === 'boolean') this.discordRpcEnabled = all.discordRpc;
       if (typeof all.performanceMode === 'boolean') this.performanceMode = all.performanceMode;
       if (typeof all.uiScale === 'number' && all.uiScale > 0) this.uiScale = all.uiScale;
+      if (typeof all.loudnessMode === 'string') {
+        const lm = all.loudnessMode as 'off' | 'track' | 'album' | 'lufs';
+        if (lm === 'off' || lm === 'track' || lm === 'album' || lm === 'lufs') {
+          this.loudnessMode = lm;
+        }
+      }
+      if (typeof all.downloadLyrics === 'boolean') this.embedLyrics = all.downloadLyrics;
+      if (typeof all.downloadStructure === 'string' && all.downloadStructure) {
+        this.downloadFolderTemplate = all.downloadStructure;
+      }
+      if (typeof all.losslessQuality === 'number') {
+        const q = all.losslessQuality;
+        this.qualityTier =
+          q >= 28 ? 'atmos' : q >= 27 ? 'hiRes192' : q >= 7 ? 'hiRes96' : q >= 6 ? 'cdFlac' : 'high';
+      }
     }
     if (lastfm) {
-      this.lastfmConnected = Boolean(lastfm.authenticated || lastfm.username);
+      this.lastfmConnected = Boolean(lastfm.username) && lastfm.status === 'authenticated';
       this.lastfmUser = lastfm.username || '';
     }
   }
 
   saveBoolPref(key: string, value: boolean) {
     void ipcInvoke('prefs_set_bool', { key, value });
+  }
+
+  saveIntPref(key: string, value: number) {
+    void ipcInvoke('prefs_set_int', { key, value: Math.round(value) });
+  }
+
+  saveDoublePref(key: string, value: number) {
+    void ipcInvoke('prefs_set_double', { key, value });
   }
 
   saveStringPref(key: string, value: string) {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { windowState } from '$src/app/window.svelte';
   import { getPlatformAudioCopy } from '$src/features/audio_output/platformAudio';
   import { APP_FONTS } from '$src/features/settings/appFonts.svelte';
   import { setCustomBase, setThemeMode, syncThemeDocument } from '$src/features/settings/themeController.svelte';
@@ -33,27 +34,41 @@
 
   const sections: ReadonlyArray<{ id: string; label: string; icon: WaveIconName }> = [
     { id: 'general', label: 'General', icon: 'settings' },
-    { id: 'integrations', label: 'Integrations', icon: 'globe' },
-    { id: 'playback', label: 'Playback', icon: 'play' },
-    { id: 'audio', label: 'Audio', icon: 'speaker' },
-    { id: 'downloads', label: 'Downloads', icon: 'download' },
-    { id: 'library', label: 'Library', icon: 'library' },
-    { id: 'lyrics', label: 'Lyrics', icon: 'lyrics' },
     { id: 'appearance', label: 'Appearance', icon: 'palette' },
+    { id: 'audio', label: 'Audio & Playback', icon: 'speaker' },
+    { id: 'lyrics', label: 'Lyrics', icon: 'lyrics' },
+    { id: 'integrations', label: 'Accounts & Scrobblers', icon: 'globe' },
+    { id: 'library', label: 'Library & Downloads', icon: 'library' },
     { id: 'plugins', label: 'Plugins & Themes', icon: 'plugin' },
-    { id: 'lastfm', label: 'Scrobbler', icon: 'heart' },
-    { id: 'sources', label: 'Sources', icon: 'radio' },
-    { id: 'experimental', label: 'Experimental', icon: 'wand' },
     { id: 'about', label: 'About', icon: 'info' },
   ];
+
+  const QUALITY_MAP: Record<string, number> = {
+    atmos: 28,
+    hiRes192: 27,
+    hiRes96: 7,
+    cdFlac: 6,
+    high: -1,
+    auto: -1,
+  };
 
   let activeSection = $state('general');
   let query = $state('');
   let keyGuideOpen = $state(false);
 
   $effect(() => {
-    if (initialSection && sections.some((s) => s.id === initialSection)) {
-      activeSection = initialSection;
+    const alias =
+      initialSection === 'playback'
+        ? 'audio'
+        : initialSection === 'lastfm'
+          ? 'integrations'
+          : initialSection === 'downloads'
+            ? 'library'
+            : initialSection === 'experimental'
+              ? 'appearance'
+              : initialSection;
+    if (alias && sections.some((s) => s.id === alias)) {
+      activeSection = alias;
     }
   });
 
@@ -65,6 +80,39 @@
     settingsStore.exclusiveMode = enabled;
     void ipcInvoke('audio_output_set_bit_perfect', { enabled });
     void ipcInvoke('audio_output_set_exclusive', { enabled });
+  }
+
+  function updateQualityTier(tier: string) {
+    settingsStore.qualityTier = tier as typeof settingsStore.qualityTier;
+    const code = QUALITY_MAP[tier] ?? -1;
+    settingsStore.saveIntPref('lw_lossless_quality', code);
+    settingsStore.saveBoolPref('lw_prefer_lossless_streaming', code >= 6);
+    void ipcInvoke('player_apply_audio_prefs');
+  }
+
+  function updateLoudness(mode: string) {
+    settingsStore.loudnessMode = mode as typeof settingsStore.loudnessMode;
+    settingsStore.saveStringPref('lw_loudness_mode', mode);
+    void ipcInvoke('player_apply_audio_prefs');
+  }
+
+  function updateAutoMix(enabled: boolean) {
+    playerStore.automixEnabled = enabled;
+    settingsStore.saveBoolPref('lw_automix_enabled', enabled);
+    void ipcInvoke('player_refresh_overlap_prefs');
+  }
+
+  function updateCrossfade(sec: number) {
+    playerStore.crossfadeSec = sec;
+    settingsStore.saveBoolPref('lw_crossfade_enabled', sec > 0);
+    if (sec > 0) settingsStore.saveIntPref('lw_crossfade_seconds', sec);
+    void ipcInvoke('player_refresh_overlap_prefs');
+  }
+
+  function toggleDiscordRpc(enabled: boolean) {
+    settingsStore.discordRpcEnabled = enabled;
+    settingsStore.saveBoolPref('lw_discord_rich_presence', enabled);
+    if (!enabled) void ipcInvoke('discord_presence_shutdown');
   }
 </script>
 
@@ -102,7 +150,7 @@
           <button
             type="button"
             onclick={() => (activeSection = sec.id)}
-            class="flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-3 text-[13px] transition-colors {active
+            class="flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-3 text-[13px] transition-all duration-[160ms] ease-[var(--ease-native)] {active
               ? 'bg-[var(--lw-wash-pressed)] font-semibold text-[var(--lw-text-primary)]'
               : 'text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]'}"
           >
@@ -118,286 +166,390 @@
         {sections.find((s) => s.id === activeSection)?.label ?? 'Settings'}
       </h2>
 
-    {#if activeSection === 'general'}
-      <div class="space-y-3">
-        <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div>
-            <div class="text-[13.5px] font-semibold">Language</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">Interface display language</div>
-          </div>
-          <Select
-            bind:value={settingsStore.language}
-            options={[
-              { value: 'en', label: 'English' },
-              { value: 'es', label: 'Español' },
-              { value: 'ja', label: '日本語' },
-            ]}
-          />
-        </div>
-
-        <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div>
-            <div class="text-[13.5px] font-semibold">UI Scale</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">Adjust desktop interface density</div>
-          </div>
-          <Select
-            value={String(settingsStore.uiScale)}
-            options={UI_SCALE_OPTIONS.map((v) => ({ value: String(v), label: `${Math.round(v * 100)}%` }))}
-            onchange={(v) => setUiScale(Number(v))}
-          />
-        </div>
-
-        <PerformanceModeCard />
-      </div>
-    {:else if activeSection === 'integrations'}
-      <div class="space-y-3">
-        <YtProfileChooser />
-        <SpotifyConnect />
-        <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div>
-            <div class="text-[13.5px] font-semibold">Discord Rich Presence</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">Show active track on your Discord profile</div>
-          </div>
-          <input type="checkbox" bind:checked={settingsStore.discordRpcEnabled} class="h-4 w-4 accent-[var(--lw-accent)]" />
-        </label>
-        <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div>
-            <div class="text-[13.5px] font-semibold">{audioCopy.mediaControlsTitle}</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">Expose transport controls and timeline to the OS</div>
-          </div>
-          <input type="checkbox" bind:checked={settingsStore.smtcEnabled} class="h-4 w-4 accent-[var(--lw-accent)]" />
-        </label>
-      </div>
-    {:else if activeSection === 'playback'}
-      <div class="space-y-3">
-        <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div>
-            <div class="text-[13.5px] font-semibold">Gapless Playback</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">Pre-warm standby deck for seamless transitions</div>
-          </div>
-          <input type="checkbox" bind:checked={settingsStore.gaplessPlayback} class="h-4 w-4 accent-[var(--lw-accent)]" />
-        </label>
-        <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div>
-            <div class="text-[13.5px] font-semibold">Beat-Aware AutoMix</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">Phase-lock beat grids during transitions</div>
-          </div>
-          <input type="checkbox" bind:checked={playerStore.automixEnabled} class="h-4 w-4 accent-[var(--lw-accent)]" />
-        </label>
-        <div class="rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div class="flex justify-between text-[13px]">
-            <span class="font-semibold">Perceptual Crossfade</span>
-            <span class="lw-tabular">{playerStore.crossfadeSec}s</span>
-          </div>
-          <input type="range" min="0" max="12" step="1" bind:value={playerStore.crossfadeSec} class="mt-2 h-1.5 w-full cursor-pointer accent-[var(--lw-accent)]" />
-        </div>
-      </div>
-    {:else if activeSection === 'audio'}
-      <div class="space-y-3">
-        <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div>
-            <div class="text-[13.5px] font-semibold">Preferred Quality Waterfall</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">Stepping down cleanly when unavailable</div>
-          </div>
-          <Select
-            bind:value={settingsStore.qualityTier}
-            options={[
-              { value: 'atmos', label: 'Dolby Atmos (Tier 28)' },
-              { value: 'hiRes192', label: 'Hi-Res FLAC 24-bit / 192 kHz' },
-              { value: 'hiRes96', label: 'Hi-Res FLAC 24-bit / 96 kHz' },
-              { value: 'cdFlac', label: 'CD Lossless FLAC 16-bit' },
-              { value: 'high', label: 'Opus High (~256 kbps)' },
-              { value: 'auto', label: 'Automatic' },
-            ]}
-          />
-        </div>
-        <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div>
-            <div class="text-[13.5px] font-semibold">Loudness Normalization</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">ReplayGain / EBU R128 LUFS target</div>
-          </div>
-          <Select
-            bind:value={settingsStore.loudnessMode}
-            options={[
-              { value: 'off', label: 'Off (Bit-Perfect)' },
-              { value: 'track', label: 'Track Gain' },
-              { value: 'album', label: 'Album Gain' },
-              { value: 'lufs', label: 'LUFS (-14 dB)' },
-            ]}
-          />
-        </div>
-        <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div>
-            <div class="text-[13.5px] font-semibold">{audioCopy.exclusiveTitle}</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">{audioCopy.exclusiveDescription}</div>
-          </div>
-          <input
-            type="checkbox"
-            checked={settingsStore.bitPerfectEnabled && settingsStore.exclusiveMode}
-            onchange={(e) => toggleBitPerfect(e.currentTarget.checked)}
-            class="h-4 w-4 accent-[var(--lw-accent)]"
-          />
-        </label>
-      </div>
-    {:else if activeSection === 'downloads'}
-      <DownloadLayoutSettings />
-    {:else if activeSection === 'library'}
-      <div class="space-y-4">
-        <LibrarySettings />
-        <BackupSettings />
-        <CacheSettings />
-      </div>
-    {:else if activeSection === 'lyrics'}
-      <div class="space-y-3">
-        <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div>
-            <div class="text-[13.5px] font-semibold">Lyrics Provider</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">Auto races all 16 providers and prioritizes word-synced karaoke</div>
-          </div>
-          <Select
-            bind:value={featuresStore.lyricsProviderId}
-            options={LYRICS_PROVIDERS.map((p) => ({ value: p.id, label: p.label }))}
-            onchange={(v) => {
-              settingsStore.saveStringPref('lw_lyrics_provider', v);
-              if (playerStore.currentTrack) {
-                void featuresStore.fetchLyricsForTrack(playerStore.currentTrack, { forceRefresh: true, providerId: v });
-              }
-            }}
-          />
-        </div>
-        <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div>
-            <div class="text-[13.5px] font-semibold">Word-by-Word Karaoke Sync</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">Progressive left-to-right syllable sweep animation</div>
-          </div>
-          <input
-            type="checkbox"
-            bind:checked={featuresStore.wordByWord}
-            onchange={() => settingsStore.saveBoolPref('lw_word_by_word', featuresStore.wordByWord)}
-            class="h-4 w-4 accent-[var(--lw-accent)]"
-          />
-        </label>
-        <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div>
-            <div class="text-[13.5px] font-semibold">Show Romanization / Transliteration</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">Display phonetic reading under non-Latin lyrics</div>
-          </div>
-          <input type="checkbox" bind:checked={featuresStore.showRomanized} class="h-4 w-4 accent-[var(--lw-accent)]" />
-        </label>
-        <div class="rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div class="flex justify-between text-[13px]">
-            <span class="font-semibold">Lyrics Font Scale</span>
-            <span class="lw-tabular">{Math.round(featuresStore.lyricsFontScale * 100)}%</span>
-          </div>
-          <input type="range" min="0.8" max="1.6" step="0.05" bind:value={featuresStore.lyricsFontScale} class="mt-2 h-1.5 w-full cursor-pointer accent-[var(--lw-accent)]" />
-        </div>
-      </div>
-    {:else if activeSection === 'appearance'}
-      <div class="space-y-4">
-        <div class="space-y-2.5 rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div class="text-[13.5px] font-semibold">Theme Mode</div>
-          <div class="flex flex-wrap gap-2">
-            {#each (['dark', 'amoled', 'light', 'custom', 'artwork'] as const) as mode (mode)}
-              <Buttons variant="chip" size="sm" active={settingsStore.themeMode === mode} onclick={() => setThemeMode(mode)}>
-                {mode === 'dark' ? 'Midnight' : mode === 'amoled' ? 'AMOLED' : mode === 'light' ? 'Pearl' : mode === 'custom' ? 'Custom' : 'Artwork'}
-              </Buttons>
-            {/each}
+      {#if activeSection === 'general'}
+        <div class="space-y-3">
+          <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div>
+              <div class="text-[13.5px] font-semibold">Language</div>
+              <div class="text-[12px] text-[var(--lw-text-secondary)]">Interface display language</div>
+            </div>
+            <Select
+              value={settingsStore.language}
+              options={[
+                { value: 'en', label: 'English' },
+                { value: 'es', label: 'Español' },
+                { value: 'ja', label: '日本語' },
+              ]}
+              onchange={(v) => {
+                settingsStore.language = v;
+                void ipcInvoke('language_set', { tag: v });
+              }}
+            />
           </div>
 
-          <div class="pt-2 text-[12px] text-[var(--lw-text-secondary)]">Custom Base Presets (WCAG AA)</div>
-          <div class="flex flex-wrap gap-2">
-            {#each CUSTOM_THEME_PRESETS as preset (preset.name)}
-              <button
-                type="button"
-                onclick={() => setCustomBase(preset.color)}
-                title={preset.name}
-                class="h-7 w-7 cursor-pointer rounded-full border border-white/20 transition-transform hover:scale-110"
-                style:background={preset.color}
-              ></button>
-            {/each}
+          <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div>
+              <div class="text-[13.5px] font-semibold">UI Scale</div>
+              <div class="text-[12px] text-[var(--lw-text-secondary)]">Adjust desktop interface density</div>
+            </div>
+            <Select
+              value={String(settingsStore.uiScale)}
+              options={UI_SCALE_OPTIONS.map((v) => ({ value: String(v), label: `${Math.round(v * 100)}%` }))}
+              onchange={(v) => {
+                const n = Number(v);
+                setUiScale(n);
+                settingsStore.saveDoublePref('lw_ui_scale', n);
+              }}
+            />
           </div>
-        </div>
 
-        <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div>
-            <div class="text-[13.5px] font-semibold">Accent Source</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">Monochrome off-white, system, artwork, or custom</div>
-          </div>
-          <Select
-            bind:value={settingsStore.accentSource}
-            options={[
-              { value: 'lastwave', label: 'LastWave Neutral' },
-              { value: 'artwork', label: 'Artwork Tint' },
-              { value: 'system', label: 'System Accent' },
-              { value: 'custom', label: 'Custom Colour' },
-            ]}
-            onchange={() => syncThemeDocument()}
-          />
+          <PerformanceModeCard />
         </div>
+      {:else if activeSection === 'appearance'}
+        <div class="space-y-4">
+          <div class="space-y-2.5 rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div class="text-[13.5px] font-semibold">Theme Mode</div>
+            <div class="flex flex-wrap gap-2">
+              {#each (['dark', 'amoled', 'light', 'custom', 'artwork'] as const) as mode (mode)}
+                <Buttons
+                  variant="chip"
+                  size="sm"
+                  active={settingsStore.themeMode === mode}
+                  onclick={() => {
+                    setThemeMode(mode);
+                    settingsStore.saveStringPref('lw_theme_mode', mode);
+                    settingsStore.saveBoolPref('lw_amoled', mode === 'amoled');
+                  }}
+                >
+                  {mode === 'dark' ? 'Midnight' : mode === 'amoled' ? 'AMOLED' : mode === 'light' ? 'Pearl' : mode === 'custom' ? 'Custom' : 'Artwork'}
+                </Buttons>
+              {/each}
+            </div>
 
-        <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div>
-            <div class="text-[13.5px] font-semibold">Glassmorphism</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">Translucent surfaces over an app-wide artwork aura</div>
+            <div class="pt-2 text-[12px] text-[var(--lw-text-secondary)]">Custom Base Presets (WCAG AA)</div>
+            <div class="flex flex-wrap gap-2">
+              {#each CUSTOM_THEME_PRESETS as preset (preset.name)}
+                <button
+                  type="button"
+                  onclick={() => setCustomBase(preset.color)}
+                  title={preset.name}
+                  class="h-7 w-7 cursor-pointer rounded-full border border-white/20 transition-transform hover:scale-110"
+                  style:background={preset.color}
+                ></button>
+              {/each}
+            </div>
           </div>
-          <input
-            type="checkbox"
-            bind:checked={settingsStore.glassmorphism}
-            onchange={() => syncThemeDocument()}
-            class="h-4 w-4 accent-[var(--lw-accent)]"
-          />
-        </label>
 
-        <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div>
-            <div class="text-[13.5px] font-semibold">App Font</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">System default or typography preset</div>
+          <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div>
+              <div class="text-[13.5px] font-semibold">Accent Source</div>
+              <div class="text-[12px] text-[var(--lw-text-secondary)]">Monochrome off-white, system, artwork, or custom</div>
+            </div>
+            <Select
+              value={settingsStore.accentSource}
+              options={[
+                { value: 'lastwave', label: 'LastWave Neutral' },
+                { value: 'artwork', label: 'Artwork Tint' },
+                { value: 'system', label: 'System Accent' },
+                { value: 'custom', label: 'Custom Colour' },
+              ]}
+              onchange={(v) => {
+                settingsStore.accentSource = v as typeof settingsStore.accentSource;
+                settingsStore.saveStringPref('lw_accent_mode', v);
+                syncThemeDocument();
+              }}
+            />
           </div>
-          <Select
-            bind:value={settingsStore.appFont}
-            options={APP_FONTS.map((f) => ({ value: f.id, label: f.label }))}
-            onchange={() => syncThemeDocument()}
-          />
-        </div>
 
-        <div class="space-y-2">
-          <div class="text-[13.5px] font-semibold">Now Playing Style</div>
-          <NowPlayingStylePicker />
-        </div>
-      </div>
-    {:else if activeSection === 'plugins'}
-      <PluginsSettings />
-    {:else if activeSection === 'lastfm'}
-      <ScrobblerSettings onOpenGuide={() => (keyGuideOpen = true)} />
-    {:else if activeSection === 'sources'}
-      <div class="rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4 text-[13px] text-[var(--lw-text-secondary)]">
-        Stream waterfall: Lossless FLAC 24-bit / Dolby Atmos Addons → YouTube Music (VISIONOS / Opus) → Local Library.
-      </div>
-    {:else if activeSection === 'experimental'}
-      <div class="space-y-3">
-        <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div>
-            <div class="text-[13.5px] font-semibold">Liquid Glass (Extra Translucency)</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">Thinner surface fill with wider blur sigma</div>
+          <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div>
+              <div class="text-[13.5px] font-semibold">Glassmorphism</div>
+              <div class="text-[12px] text-[var(--lw-text-secondary)]">Translucent surfaces over an app-wide artwork aura</div>
+            </div>
+            <input
+              type="checkbox"
+              checked={settingsStore.glassmorphism}
+              onchange={(e) => {
+                settingsStore.glassmorphism = e.currentTarget.checked;
+                settingsStore.saveBoolPref('lw_glassmorphism', settingsStore.glassmorphism);
+                syncThemeDocument();
+              }}
+              class="h-4 w-4 accent-[var(--lw-accent)]"
+            />
+          </label>
+
+          <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div>
+              <div class="text-[13.5px] font-semibold">Liquid Glass</div>
+              <div class="text-[12px] text-[var(--lw-text-secondary)]">Thinner surface fill with wider blur sigma</div>
+            </div>
+            <input
+              type="checkbox"
+              checked={settingsStore.liquidGlass}
+              onchange={(e) => {
+                settingsStore.liquidGlass = e.currentTarget.checked;
+                settingsStore.saveBoolPref('lw_liquid_glass', settingsStore.liquidGlass);
+                syncThemeDocument();
+              }}
+              class="h-4 w-4 accent-[var(--lw-accent)]"
+            />
+          </label>
+
+          <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div>
+              <div class="text-[13.5px] font-semibold">Wavy Seekbar</div>
+              <div class="text-[12px] text-[var(--lw-text-secondary)]">Draw dock playback timeline as a styled progress bar</div>
+            </div>
+            <input
+              type="checkbox"
+              checked={settingsStore.wavySeekbar}
+              onchange={(e) => {
+                settingsStore.wavySeekbar = e.currentTarget.checked;
+                settingsStore.saveBoolPref('lw_wavy_seekbar', settingsStore.wavySeekbar);
+              }}
+              class="h-4 w-4 accent-[var(--lw-accent)]"
+            />
+          </label>
+
+          <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div>
+              <div class="text-[13.5px] font-semibold">App Font</div>
+              <div class="text-[12px] text-[var(--lw-text-secondary)]">System default or typography preset</div>
+            </div>
+            <Select
+              value={settingsStore.appFont}
+              options={APP_FONTS.map((f) => ({ value: f.id, label: f.label }))}
+              onchange={(v) => {
+                settingsStore.appFont = v;
+                settingsStore.saveStringPref('lw_app_font', v);
+                syncThemeDocument();
+              }}
+            />
           </div>
-          <input type="checkbox" bind:checked={settingsStore.liquidGlass} class="h-4 w-4 accent-[var(--lw-accent)]" />
-        </label>
-        <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div>
-            <div class="text-[13.5px] font-semibold">Wavy Seekbar</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">Draw dock playback timeline as a styled progress bar</div>
+
+          <div class="space-y-2">
+            <div class="text-[13.5px] font-semibold">Now Playing Style</div>
+            <NowPlayingStylePicker />
           </div>
-          <input type="checkbox" bind:checked={settingsStore.wavySeekbar} class="h-4 w-4 accent-[var(--lw-accent)]" />
-        </label>
-      </div>
-    {:else if activeSection === 'about'}
-      <div class="space-y-4">
-        <div class="rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div class="text-[15px] font-bold">LastWave Desktop · Firebird UI</div>
-          <div class="mt-1 text-[12.5px] text-[var(--lw-text-secondary)]">Version 2.6.0 · Svelte 5 + Tailwind CSS v4</div>
         </div>
-      </div>
-    {/if}
+      {:else if activeSection === 'audio'}
+        <div class="space-y-3">
+          <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div>
+              <div class="text-[13.5px] font-semibold">Preferred Quality Waterfall</div>
+              <div class="text-[12px] text-[var(--lw-text-secondary)]">Stepping down cleanly when unavailable</div>
+            </div>
+            <Select
+              value={settingsStore.qualityTier}
+              options={[
+                { value: 'atmos', label: 'Dolby Atmos (Tier 28)' },
+                { value: 'hiRes192', label: 'Hi-Res FLAC 24-bit / 192 kHz' },
+                { value: 'hiRes96', label: 'Hi-Res FLAC 24-bit / 96 kHz' },
+                { value: 'cdFlac', label: 'CD Lossless FLAC 16-bit' },
+                { value: 'high', label: 'Opus High (~256 kbps)' },
+                { value: 'auto', label: 'Automatic' },
+              ]}
+              onchange={updateQualityTier}
+            />
+          </div>
+
+          <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div>
+              <div class="text-[13.5px] font-semibold">Loudness Normalization</div>
+              <div class="text-[12px] text-[var(--lw-text-secondary)]">ReplayGain / EBU R128 LUFS target</div>
+            </div>
+            <Select
+              value={settingsStore.loudnessMode}
+              options={[
+                { value: 'off', label: 'Off (Bit-Perfect)' },
+                { value: 'track', label: 'Track Gain' },
+                { value: 'album', label: 'Album Gain' },
+                { value: 'lufs', label: 'LUFS (-14 dB)' },
+              ]}
+              onchange={updateLoudness}
+            />
+          </div>
+
+          <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div>
+              <div class="text-[13.5px] font-semibold">{audioCopy.exclusiveTitle}</div>
+              <div class="text-[12px] text-[var(--lw-text-secondary)]">{audioCopy.exclusiveDescription}</div>
+            </div>
+            <input
+              type="checkbox"
+              checked={settingsStore.bitPerfectEnabled && settingsStore.exclusiveMode}
+              onchange={(e) => toggleBitPerfect(e.currentTarget.checked)}
+              class="h-4 w-4 accent-[var(--lw-accent)]"
+            />
+          </label>
+
+          <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div>
+              <div class="text-[13.5px] font-semibold">Beat-Aware AutoMix</div>
+              <div class="text-[12px] text-[var(--lw-text-secondary)]">Phase-lock beat grids during transitions</div>
+            </div>
+            <input
+              type="checkbox"
+              checked={playerStore.automixEnabled}
+              onchange={(e) => updateAutoMix(e.currentTarget.checked)}
+              class="h-4 w-4 accent-[var(--lw-accent)]"
+            />
+          </label>
+
+          <div class="rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div class="flex justify-between text-[13px]">
+              <span class="font-semibold">Perceptual Crossfade</span>
+              <span class="lw-tabular">{playerStore.crossfadeSec}s</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="12"
+              step="1"
+              value={playerStore.crossfadeSec}
+              onchange={(e) => updateCrossfade(Number(e.currentTarget.value))}
+              class="mt-2 h-1.5 w-full cursor-pointer accent-[var(--lw-accent)]"
+            />
+          </div>
+        </div>
+      {:else if activeSection === 'lyrics'}
+        <div class="space-y-3">
+          <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div>
+              <div class="text-[13.5px] font-semibold">Lyrics Provider</div>
+              <div class="text-[12px] text-[var(--lw-text-secondary)]">Auto races all 16 providers and prioritizes word-synced karaoke</div>
+            </div>
+            <Select
+              value={featuresStore.lyricsProviderId}
+              options={LYRICS_PROVIDERS.map((p) => ({ value: p.id, label: p.label }))}
+              onchange={(v) => {
+                featuresStore.lyricsProviderId = v;
+                settingsStore.saveStringPref('lw_lyrics_provider', v);
+                if (playerStore.currentTrack) {
+                  void featuresStore.fetchLyricsForTrack(playerStore.currentTrack, { forceRefresh: true, providerId: v });
+                }
+              }}
+            />
+          </div>
+
+          <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div>
+              <div class="text-[13.5px] font-semibold">Word-by-Word Karaoke Sync</div>
+              <div class="text-[12px] text-[var(--lw-text-secondary)]">Progressive left-to-right syllable sweep animation</div>
+            </div>
+            <input
+              type="checkbox"
+              checked={featuresStore.wordByWord}
+              onchange={(e) => {
+                featuresStore.wordByWord = e.currentTarget.checked;
+                settingsStore.saveBoolPref('lw_word_by_word', featuresStore.wordByWord);
+              }}
+              class="h-4 w-4 accent-[var(--lw-accent)]"
+            />
+          </label>
+
+          <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div>
+              <div class="text-[13.5px] font-semibold">Show Romanization / Transliteration</div>
+              <div class="text-[12px] text-[var(--lw-text-secondary)]">Display phonetic reading under non-Latin lyrics</div>
+            </div>
+            <input
+              type="checkbox"
+              checked={featuresStore.showRomanized}
+              onchange={(e) => {
+                featuresStore.showRomanized = e.currentTarget.checked;
+                settingsStore.saveBoolPref('lw_lyrics_transliteration', featuresStore.showRomanized);
+              }}
+              class="h-4 w-4 accent-[var(--lw-accent)]"
+            />
+          </label>
+
+          <div class="rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div class="flex justify-between text-[13px]">
+              <span class="font-semibold">Lyrics Font Scale</span>
+              <span class="lw-tabular">{Math.round(featuresStore.lyricsFontScale * 100)}%</span>
+            </div>
+            <input
+              type="range"
+              min="0.85"
+              max="1.6"
+              step="0.05"
+              value={featuresStore.lyricsFontScale}
+              onchange={(e) => {
+                const v = Number(e.currentTarget.value);
+                featuresStore.lyricsFontScale = v;
+                settingsStore.saveDoublePref('lw_lyrics_text_scale', v);
+              }}
+              class="mt-2 h-1.5 w-full cursor-pointer accent-[var(--lw-accent)]"
+            />
+          </div>
+        </div>
+      {:else if activeSection === 'integrations'}
+        <div class="space-y-4">
+          <div class="space-y-3">
+            <div class="text-[11px] font-bold tracking-[0.8px] text-[var(--lw-text-tertiary)] uppercase">Music Accounts</div>
+            <YtProfileChooser />
+            <SpotifyConnect />
+          </div>
+
+          <div class="space-y-3">
+            <div class="text-[11px] font-bold tracking-[0.8px] text-[var(--lw-text-tertiary)] uppercase">Scrobblers</div>
+            <ScrobblerSettings onOpenGuide={() => (keyGuideOpen = true)} />
+          </div>
+
+          <div class="space-y-3">
+            <div class="text-[11px] font-bold tracking-[0.8px] text-[var(--lw-text-tertiary)] uppercase">Desktop Presence</div>
+            <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+              <div>
+                <div class="text-[13.5px] font-semibold">Discord Rich Presence</div>
+                <div class="text-[12px] text-[var(--lw-text-secondary)]">Show active track on your Discord profile</div>
+              </div>
+              <input
+                type="checkbox"
+                checked={settingsStore.discordRpcEnabled}
+                onchange={(e) => toggleDiscordRpc(e.currentTarget.checked)}
+                class="h-4 w-4 accent-[var(--lw-accent)]"
+              />
+            </label>
+            <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+              <div>
+                <div class="text-[13.5px] font-semibold">{audioCopy.mediaControlsTitle}</div>
+                <div class="text-[12px] text-[var(--lw-text-secondary)]">Expose transport controls and timeline to the OS</div>
+              </div>
+              <input
+                type="checkbox"
+                checked={settingsStore.smtcEnabled}
+                onchange={(e) => {
+                  settingsStore.smtcEnabled = e.currentTarget.checked;
+                  settingsStore.saveBoolPref('lw_macos_now_playing', settingsStore.smtcEnabled);
+                }}
+                class="h-4 w-4 accent-[var(--lw-accent)]"
+              />
+            </label>
+          </div>
+        </div>
+      {:else if activeSection === 'library'}
+        <div class="space-y-4">
+          <LibrarySettings />
+          <DownloadLayoutSettings />
+          <BackupSettings />
+          <CacheSettings />
+        </div>
+      {:else if activeSection === 'plugins'}
+        <PluginsSettings />
+      {:else if activeSection === 'about'}
+        <div class="space-y-4">
+          <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div>
+              <div class="text-[15px] font-bold">LastWave Desktop</div>
+              <div class="mt-1 text-[12.5px] text-[var(--lw-text-secondary)]">Version 2.6.0</div>
+            </div>
+            <Buttons variant="secondary" size="sm" onclick={() => (windowState.updateDialogOpen = true)}>
+              Check for Updates
+            </Buttons>
+          </div>
+        </div>
+      {/if}
     </div>
   </div>
 </div>

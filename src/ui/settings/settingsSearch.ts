@@ -10,23 +10,19 @@ export function getSettingsSearchIndex(platform: HostPlatform = 'windows'): Sett
   const audioCopy = getPlatformAudioCopy(platform);
   const platformKeywords =
     platform === 'macos'
-      ? ['coreaudio', 'hog', 'exclusive', 'bit-perfect', 'dac', 'replaygain', 'lufs', 'quality']
+      ? ['coreaudio', 'hog', 'exclusive', 'bit-perfect', 'dac', 'replaygain', 'lufs', 'quality', 'crossfade', 'automix']
       : platform === 'linux'
-        ? ['alsa', 'pipewire', 'exclusive', 'bit-perfect', 'dac', 'replaygain', 'lufs', 'quality']
-        : ['wasapi', 'exclusive', 'bit-perfect', 'dac', 'replaygain', 'lufs', 'quality'];
+        ? ['alsa', 'pipewire', 'exclusive', 'bit-perfect', 'dac', 'replaygain', 'lufs', 'quality', 'crossfade', 'automix']
+        : ['wasapi', 'exclusive', 'bit-perfect', 'dac', 'replaygain', 'lufs', 'quality', 'crossfade', 'automix'];
 
   return [
-    { section: 'general', label: 'Language & UI Scale', keywords: ['language', 'scale', 'zoom', 'performance'] },
-    { section: 'integrations', label: 'YouTube Music, Spotify & Discord RPC', keywords: ['youtube', 'spotify', 'discord', 'rpc'] },
-    { section: 'playback', label: 'Crossfade, AutoMix & Gapless', keywords: ['crossfade', 'automix', 'gapless', 'speed', 'silence'] },
-    { section: 'audio', label: `Bit-Perfect, ${audioCopy.exclusiveTitle} & Loudness`, keywords: platformKeywords },
-    { section: 'downloads', label: 'Offline Folder Layout & Metadata', keywords: ['download', 'folder', 'lrc', 'tags'] },
-    { section: 'library', label: 'Local Music Folders & Backup', keywords: ['folder', 'scan', 'backup', 'cache'] },
-    { section: 'lyrics', label: 'Synced Lyrics & Translation', keywords: ['lyrics', 'karaoke', 'translation', 'romanized'] },
-    { section: 'appearance', label: 'Theme, Accent, Haze, Glass & Fonts', keywords: ['theme', 'dark', 'amoled', 'light', 'glass', 'haze', 'font', 'accent'] },
-    { section: 'plugins', label: 'Community Themes, Extensions & Custom Apps', keywords: ['plugin', 'theme.css', 'extension', 'custom app', 'marketplace'] },
-    { section: 'lastfm', label: 'Last.fm, ListenBrainz & Libre.fm', keywords: ['scrobble', 'lastfm', 'listenbrainz', 'librefm'] },
-    { section: 'experimental', label: 'Liquid Glass & Wavy Seekbar', keywords: ['liquid', 'wavy', 'seekbar', 'experimental'] },
+    { section: 'general', label: 'Language, UI Scale & Performance Mode', keywords: ['language', 'scale', 'zoom', 'performance', 'update'] },
+    { section: 'appearance', label: 'Theme, Accent, Glass & Fonts', keywords: ['theme', 'dark', 'amoled', 'light', 'glass', 'liquid', 'seekbar', 'font', 'accent'] },
+    { section: 'audio', label: `Quality, ${audioCopy.exclusiveTitle}, Loudness & AutoMix`, keywords: platformKeywords },
+    { section: 'lyrics', label: 'Lyrics Provider, Karaoke Sync & Romanization', keywords: ['lyrics', 'karaoke', 'provider', 'romanized', 'font'] },
+    { section: 'integrations', label: 'YouTube Music, Spotify, Scrobblers & Discord RPC', keywords: ['youtube', 'spotify', 'lastfm', 'listenbrainz', 'librefm', 'scrobble', 'discord', 'rpc'] },
+    { section: 'library', label: 'Local Folders, Downloads, Backup & Cache', keywords: ['folder', 'scan', 'download', 'backup', 'cache'] },
+    { section: 'plugins', label: 'UI Plugins, Palettes & Themes', keywords: ['plugin', 'theme', 'palette', 'snippet', 'widget', 'store'] },
     { section: 'about', label: 'Version & Updates', keywords: ['version', 'about', 'update'] },
   ];
 }
