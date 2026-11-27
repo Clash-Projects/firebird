@@ -28,9 +28,8 @@ pub fn spectrum_subscribe(
     state: State<'_, AppState>,
     channel: Channel<SpectrumFrame>,
 ) -> u64 {
-    state
-        .spectrum
-        .set_playing(state.playback.snapshot().is_playing);
+    let snap = state.playback.snapshot();
+    state.spectrum.update_playback(&snap);
     state.spectrum.subscribe(channel)
 }
 

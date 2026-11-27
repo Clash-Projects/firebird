@@ -63,6 +63,11 @@ export interface ScopedPluginStorage {
   remove(key: string): void;
 }
 
+export interface SpectrumFrame {
+  readonly bins: readonly number[];
+  readonly rms: number;
+}
+
 export interface LastWaveAPI {
   readonly version: string;
   readonly player: {
@@ -77,6 +82,7 @@ export interface LastWaveAPI {
     readonly isPlaying: () => boolean;
     readonly getQueue: () => Track[];
     readonly getPosition: () => number;
+    readonly onSpectrum: (fn: (frame: SpectrumFrame) => void) => () => void;
   };
   readonly events: {
     readonly on: (event: PlayerEventType, fn: (payload: unknown) => void) => () => void;

@@ -24,7 +24,7 @@ pub fn run() {
             let emit_handle = handle.clone();
             let spectrum = Arc::clone(&state.spectrum);
             state.playback.add_snapshot_listener(Arc::new(move |snap| {
-                spectrum.set_playing(snap.is_playing);
+                spectrum.update_playback(snap);
                 let _ = emit_handle.emit("player:snapshot", snap);
             }));
 

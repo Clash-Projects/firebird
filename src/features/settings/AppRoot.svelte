@@ -2,12 +2,28 @@
   import { onMount } from 'svelte';
   import AuthGate from '$src/app/AuthGate.svelte';
   import { attachWindowLifecycle } from '$src/app/windowLifecycle';
+  import { ipcInvoke, ipcListen, isTauriRuntime } from '$src/lib/ipc';
   import { pluginManager } from '$src/lib/plugins/pluginManager.svelte';
+  import { featuresStore } from '$src/state/features.svelte';
+  import { libraryStore } from '$src/state/library.svelte';
   import { playerStore } from '$src/state/player.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
   import AppShell from '$src/ui/app_shell/AppShell.svelte';
   import { attachWaveHotkeys } from '$src/ui/app_shell/waveHotkeys';
   import { syncThemeDocument } from './themeController.svelte';
+
+  interface BackendYtConnection {
+    connected?: boolean;
+    accountName?: string;
+    profileEmail?: string;
+  }
+
+  function applyYtConnection(conn: BackendYtConnection | null) {
+    if (!conn) return;
+    settingsStore.ytConnected = Boolean(conn.connected);
+    settingsStore.ytAccountName = conn.accountName || '';
+    settingsStore.ytAccountEmail = conn.profileEmail || '';
+  }
 
   $effect(() => {
     void settingsStore.themeMode;
@@ -22,16 +38,41 @@
     syncThemeDocument();
   });
 
+  $effect(() => {
+    const current = playerStore.currentTrack;
+    if (current) {
+      void featuresStore.fetchLyricsForTrack(current);
+    }
+  });
+
   onMount(() => {
     pluginManager.init();
     let disconnectPlayer: (() => void) | undefined;
+    let unlistenYt: (() => void) | undefined;
+
     playerStore.connectBackend().then((fn) => {
       disconnectPlayer = fn;
     });
+
+    if (isTauriRuntime()) {
+      void ipcInvoke<BackendYtConnection>('yt_get_connection').then((conn) => {
+        applyYtConnection(conn);
+        void libraryStore.connectBackend();
+      });
+      void featuresStore.connectBackend();
+      void ipcListen<BackendYtConnection>('yt-connection-changed', (conn) => {
+        applyYtConnection(conn);
+        void libraryStore.loadHomeFeed(Boolean(conn?.connected));
+      }).then((fn) => {
+        unlistenYt = fn ?? undefined;
+      });
+    }
+
     const detachKeys = attachWaveHotkeys();
     const detachLife = attachWindowLifecycle();
     return () => {
       disconnectPlayer?.();
+      unlistenYt?.();
       detachKeys();
       detachLife();
     };

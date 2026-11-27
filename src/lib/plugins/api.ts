@@ -1,3 +1,5 @@
+import { Channel } from '@tauri-apps/api/core';
+import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
 import { featuresStore } from '$src/state/features.svelte';
 import { playerStore, type PlayerEventType } from '$src/state/player.svelte';
 import { createPluginStorage } from './storage';
@@ -6,11 +8,52 @@ import type {
   LastWaveAPI,
   PlayerBarControlSlot,
   SidebarSlotItem,
+  SpectrumFrame,
   TrackContextMenuItemSlot,
 } from './types';
 import { uiSlots } from './uiSlots.svelte';
 
 let cachedApi: LastWaveAPI | null = null;
+const spectrumListeners = new Set<(frame: SpectrumFrame) => void>();
+let spectrumSubId: number | null = null;
+let spectrumSubscribing = false;
+
+function subscribeSpectrum(fn: (frame: SpectrumFrame) => void): () => void {
+  spectrumListeners.add(fn);
+
+  if (isTauriRuntime() && spectrumSubId === null && !spectrumSubscribing) {
+    spectrumSubscribing = true;
+    const channel = new Channel<SpectrumFrame>();
+    channel.onmessage = (frame) => {
+      for (const listener of spectrumListeners) {
+        try {
+          listener(frame);
+        } catch {
+          // Isolate plugin visualizer errors.
+        }
+      }
+    };
+    void ipcInvoke<number>('spectrum_subscribe', { channel }).then((id) => {
+      spectrumSubscribing = false;
+      if (spectrumListeners.size === 0) {
+        if (typeof id === 'number') {
+          void ipcInvoke('spectrum_unsubscribe', { subscriptionId: id });
+        }
+        return;
+      }
+      spectrumSubId = typeof id === 'number' ? id : null;
+    });
+  }
+
+  return () => {
+    spectrumListeners.delete(fn);
+    if (spectrumListeners.size === 0 && spectrumSubId !== null) {
+      const id = spectrumSubId;
+      spectrumSubId = null;
+      void ipcInvoke('spectrum_unsubscribe', { subscriptionId: id });
+    }
+  };
+}
 
 export function installLastWaveApi(): LastWaveAPI {
   if (cachedApi) return cachedApi;
@@ -29,6 +72,7 @@ export function installLastWaveApi(): LastWaveAPI {
       isPlaying: () => playerStore.isPlaying,
       getQueue: () => [...playerStore.queue],
       getPosition: () => playerStore.positionSec,
+      onSpectrum: (fn: (frame: SpectrumFrame) => void) => subscribeSpectrum(fn),
     }),
     events: Object.freeze({
       on: (event: PlayerEventType, fn: (payload: unknown) => void) => playerStore.on(event, fn),

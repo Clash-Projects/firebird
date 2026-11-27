@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { libraryStore } from '$src/state/library.svelte';
+  import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
+  import { libraryStore, mapYtAlbum, mapYtArtist, mapYtTrack } from '$src/state/library.svelte';
+  import type { Album, Artist, Track } from '$src/state/types';
   import Artwork from '$src/ui/components/Artwork.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import DesktopTable from '$src/ui/components/DesktopTable.svelte';
@@ -29,27 +31,80 @@
 
   let query = $state('');
   let filter = $state<'all' | 'tracks' | 'albums' | 'artists'>('all');
+  let searching = $state(false);
+  let remoteTracks = $state<Track[]>([]);
+  let remoteAlbums = $state<Album[]>([]);
+  let remoteArtists = $state<Artist[]>([]);
+  let searchSeq = 0;
 
   let q = $derived(query.trim().toLowerCase());
+
+  $effect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      remoteTracks = [];
+      remoteAlbums = [];
+      remoteArtists = [];
+      searching = false;
+      return;
+    }
+    if (!isTauriRuntime()) return;
+
+    const seq = ++searchSeq;
+    const timer = setTimeout(async () => {
+      searching = true;
+      try {
+        const [songsRes, albumsRes, artistsRes] = await Promise.all([
+          ipcInvoke<any[]>('yt_search_songs', { query: trimmed, limit: 25 }),
+          ipcInvoke<any[]>('yt_search_albums', { query: trimmed, limit: 12 }),
+          ipcInvoke<any[]>('yt_search_artists', { query: trimmed, limit: 12 }),
+        ]);
+        if (seq !== searchSeq) return;
+        const mappedSongs = Array.isArray(songsRes) ? songsRes.map(mapYtTrack) : [];
+        const mappedAlbums = Array.isArray(albumsRes) ? albumsRes.map(mapYtAlbum) : [];
+        const mappedArtists = Array.isArray(artistsRes) ? artistsRes.map(mapYtArtist) : [];
+
+        remoteTracks = mappedSongs;
+        remoteAlbums = mappedAlbums;
+        remoteArtists = mappedArtists;
+        libraryStore.upsertTracks(mappedSongs);
+        libraryStore.upsertAlbums(mappedAlbums);
+        libraryStore.upsertArtists(mappedArtists);
+      } finally {
+        if (seq === searchSeq) searching = false;
+      }
+    }, 280);
+
+    return () => clearTimeout(timer);
+  });
+
   let tracks = $derived(
-    q
-      ? libraryStore.tracks.filter(
-          (t) =>
-            t.title.toLowerCase().includes(q) ||
-            t.artist.toLowerCase().includes(q) ||
-            t.album.toLowerCase().includes(q)
-        )
-      : []
+    remoteTracks.length > 0
+      ? remoteTracks
+      : q
+        ? libraryStore.tracks.filter(
+            (t) =>
+              t.title.toLowerCase().includes(q) ||
+              t.artist.toLowerCase().includes(q) ||
+              t.album.toLowerCase().includes(q)
+          )
+        : []
   );
   let albums = $derived(
-    q
-      ? libraryStore.albums.filter(
-          (a) => a.title.toLowerCase().includes(q) || a.artist.toLowerCase().includes(q)
-        )
-      : []
+    remoteAlbums.length > 0
+      ? remoteAlbums
+      : q
+        ? libraryStore.albums.filter(
+            (a) => a.title.toLowerCase().includes(q) || a.artist.toLowerCase().includes(q)
+          )
+        : []
   );
   let artists = $derived(
-    q ? libraryStore.artists.filter((a) => a.name.toLowerCase().includes(q)) : []
+    remoteArtists.length > 0
+      ? remoteArtists
+      : q
+        ? libraryStore.artists.filter((a) => a.name.toLowerCase().includes(q))
+        : []
   );
 
   function submitSearch(e: SubmitEvent) {
@@ -110,6 +165,10 @@
         {/each}
       </div>
     </Shelf>
+  {:else if searching && tracks.length === 0 && albums.length === 0 && artists.length === 0}
+    <div class="rounded-[18px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] px-6 py-10 text-center text-[13px] text-[var(--lw-text-secondary)]">
+      Searching YouTube Music for "{query}"...
+    </div>
   {:else if tracks.length === 0 && albums.length === 0 && artists.length === 0}
     <States icon="search" title="No matches found" description={`No results for "${query}". Try another track or artist name.`} />
   {:else}

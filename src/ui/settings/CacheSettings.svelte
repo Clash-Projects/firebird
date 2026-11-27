@@ -1,10 +1,24 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
   import { featuresStore } from '$src/state/features.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
 
   let cacheSizeMb = $state(0);
 
-  function clearCache() {
+  onMount(async () => {
+    if (!isTauriRuntime()) return;
+    const stats = await ipcInvoke<{ totalBytes?: number }>('library_artwork_cache_stats');
+    if (stats && typeof stats.totalBytes === 'number') {
+      cacheSizeMb = stats.totalBytes / (1024 * 1024);
+    }
+  });
+
+  async function clearCache() {
+    await Promise.all([
+      ipcInvoke('library_artwork_cache_clear'),
+      ipcInvoke('library_snapshot_cache_clear', { group: null }),
+    ]);
     cacheSizeMb = 0;
     featuresStore.showToast({ title: 'Artwork & stream cache cleared', severity: 'success' });
   }
@@ -17,5 +31,5 @@
       Currently using {cacheSizeMb.toFixed(1)} MB for artwork thumbnails and metadata snapshots.
     </p>
   </div>
-  <Buttons variant="secondary" size="sm" onclick={clearCache}>Clear Cache</Buttons>
+  <Buttons variant="secondary" size="sm" onclick={() => void clearCache()}>Clear Cache</Buttons>
 </div>

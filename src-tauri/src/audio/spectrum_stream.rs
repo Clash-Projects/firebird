@@ -8,6 +8,7 @@ use serde::Serialize;
 use tauri::ipc::Channel;
 
 use crate::audio::audio_analysis::fft;
+use crate::models::player_state::PlayerSnapshot;
 
 pub const SPECTRUM_BANDS: usize = 48;
 pub const SPECTRUM_FFT_SIZE: usize = 512;
@@ -32,6 +33,33 @@ impl SpectrumFrame {
             bins: vec![0.0; SPECTRUM_BANDS],
             rms: 0.0,
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct PlaybackClock {
+    stream_url: String,
+    position_ms: u64,
+    speed: f64,
+    updated_at: Instant,
+}
+
+impl Default for PlaybackClock {
+    fn default() -> Self {
+        Self {
+            stream_url: String::new(),
+            position_ms: 0,
+            speed: 1.0,
+            updated_at: Instant::now(),
+        }
+    }
+}
+
+impl PlaybackClock {
+    fn estimated_position_sec(&self) -> f64 {
+        let base = self.position_ms as f64 / 1000.0;
+        let dt = self.updated_at.elapsed().as_secs_f64();
+        (base + dt * self.speed.max(0.25)).max(0.0)
     }
 }
 
@@ -69,7 +97,7 @@ pub fn compute_spectrum_frame(
     let hi_hz = MAX_FREQ_HZ.min(nyquist);
     let bin_hz = sr / SPECTRUM_FFT_SIZE as f64;
     let half = SPECTRUM_FFT_SIZE / 2;
-    let norm = half as f64 * 0.5; // Hann coherent gain compensation
+    let norm = half as f64 * 0.5;
 
     let log_min = MIN_FREQ_HZ.ln();
     let log_span = (hi_hz / MIN_FREQ_HZ).ln().max(1e-6);
@@ -111,13 +139,15 @@ pub fn compute_spectrum_frame(
 }
 
 /// Manages on-demand FFT spectrum capture and throttled Tauri Channel delivery.
-/// Zero capture or FFT work occurs when no subscribers are active or playback is paused.
+/// Uses OS loopback when available, falling back seamlessly to a silent headless
+/// `libmpv` PCM shadow tap on macOS or when Exclusive Mode locks the OS mixer.
 pub struct SpectrumStreamController {
     next_id: AtomicU64,
     subscribers: Mutex<HashMap<u64, Channel<SpectrumFrame>>>,
     is_playing: AtomicBool,
     running: AtomicBool,
     stop_flag: Mutex<Option<Arc<AtomicBool>>>,
+    clock: Mutex<PlaybackClock>,
 }
 
 impl Default for SpectrumStreamController {
@@ -134,6 +164,7 @@ impl SpectrumStreamController {
             is_playing: AtomicBool::new(false),
             running: AtomicBool::new(false),
             stop_flag: Mutex::new(None),
+            clock: Mutex::new(PlaybackClock::default()),
         }
     }
 
@@ -158,6 +189,23 @@ impl SpectrumStreamController {
             }
         }
         self.reconcile_worker();
+    }
+
+    pub fn update_playback(self: &Arc<Self>, snap: &PlayerSnapshot) {
+        let stream_url = snap
+            .stream
+            .as_ref()
+            .map(|s| s.url.clone())
+            .or_else(|| snap.current.as_ref().map(|t| t.playback_url.clone()))
+            .unwrap_or_default();
+
+        if let Ok(mut clock) = self.clock.lock() {
+            clock.stream_url = stream_url;
+            clock.position_ms = snap.position_ms;
+            clock.speed = if snap.speed > 0.0 { snap.speed } else { 1.0 };
+            clock.updated_at = Instant::now();
+        }
+        self.set_playing(snap.is_playing);
     }
 
     pub fn set_playing(self: &Arc<Self>, playing: bool) {
@@ -243,6 +291,11 @@ impl SpectrumStreamController {
 
     fn run_capture_loop(&self, stop: &AtomicBool) {
         let mut tap = platform::PcmLoopbackTap::open();
+        let mut shadow = if tap.is_active() {
+            None
+        } else {
+            Some(shadow_mpv::ShadowMpvTap::new())
+        };
         let mut ring = vec![0.0_f32; SPECTRUM_FFT_SIZE];
         let mut scratch = Vec::with_capacity(2048);
         let mut prev_bins = [0.0_f32; SPECTRUM_BANDS];
@@ -250,7 +303,17 @@ impl SpectrumStreamController {
         while !stop.load(Ordering::SeqCst) && self.is_playing.load(Ordering::SeqCst) {
             let tick_start = Instant::now();
             scratch.clear();
-            let sr = tap.read_mono(&mut scratch);
+
+            let sr = if let Some(ref mut shadow_tap) = shadow {
+                let clock = self
+                    .clock
+                    .lock()
+                    .map(|c| c.clone())
+                    .unwrap_or_default();
+                shadow_tap.read_window(&clock.stream_url, clock.estimated_position_sec(), &mut scratch)
+            } else {
+                tap.read_mono(&mut scratch)
+            };
 
             if !scratch.is_empty() {
                 if scratch.len() >= SPECTRUM_FFT_SIZE {
@@ -274,6 +337,193 @@ impl SpectrumStreamController {
             if elapsed < SPECTRUM_INTERVAL {
                 std::thread::sleep(SPECTRUM_INTERVAL - elapsed);
             }
+        }
+    }
+}
+
+/// Cross-platform silent headless `libmpv` PCM shadow tap used on macOS and whenever
+/// OS loopback is unavailable (e.g. WASAPI Exclusive Mode or direct ALSA hardware output).
+mod shadow_mpv {
+    use std::ffi::{c_char, c_int, c_void, CString};
+    use std::fs::{self, File};
+    use std::io::{Read, Seek, SeekFrom};
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    use super::SPECTRUM_FFT_SIZE;
+
+    const SHADOW_SAMPLE_RATE: u32 = 22_050;
+    const SEEK_RESYNC_THRESHOLD_SEC: f64 = 1.5;
+
+    static NEXT_FILE_ID: AtomicU64 = AtomicU64::new(1);
+
+    type FnMpvCreate = unsafe extern "C" fn() -> *mut c_void;
+    type FnMpvInitialize = unsafe extern "C" fn(*mut c_void) -> c_int;
+    type FnMpvTerminateDestroy = unsafe extern "C" fn(*mut c_void);
+    type FnMpvSetPropertyString =
+        unsafe extern "C" fn(*mut c_void, *const c_char, *const c_char) -> c_int;
+    type FnMpvCommand = unsafe extern "C" fn(*mut c_void, *const *const c_char) -> c_int;
+
+    struct ActiveShadow {
+        _lib: libloading::Library,
+        ctx: *mut c_void,
+        mpv_terminate_destroy: FnMpvTerminateDestroy,
+        pcm_path: PathBuf,
+        url: String,
+        start_sec: f64,
+        last_read_sec: f64,
+    }
+
+    impl Drop for ActiveShadow {
+        fn drop(&mut self) {
+            if !self.ctx.is_null() {
+                unsafe {
+                    (self.mpv_terminate_destroy)(self.ctx);
+                }
+                self.ctx = std::ptr::null_mut();
+            }
+            let _ = fs::remove_file(&self.pcm_path);
+        }
+    }
+
+    pub struct ShadowMpvTap {
+        active: Option<ActiveShadow>,
+    }
+
+    impl ShadowMpvTap {
+        pub fn new() -> Self {
+            Self { active: None }
+        }
+
+        pub fn read_window(&mut self, url: &str, pos_sec: f64, out: &mut Vec<f32>) -> u32 {
+            if url.trim().is_empty() {
+                self.active = None;
+                return SHADOW_SAMPLE_RATE;
+            }
+
+            let needs_reopen = match &self.active {
+                None => true,
+                Some(a) => {
+                    a.url != url
+                        || pos_sec < a.start_sec
+                        || (pos_sec - a.last_read_sec).abs() > SEEK_RESYNC_THRESHOLD_SEC
+                }
+            };
+
+            if needs_reopen {
+                self.active = None;
+                self.active = open_shadow_deck(url, pos_sec);
+            }
+
+            let Some(ref mut active) = self.active else {
+                return SHADOW_SAMPLE_RATE;
+            };
+            active.last_read_sec = pos_sec;
+
+            let rel_sec = (pos_sec - active.start_sec).max(0.0);
+            let sample_offset = (rel_sec * f64::from(SHADOW_SAMPLE_RATE)) as u64;
+            let byte_offset = sample_offset.saturating_mul(4);
+
+            let Ok(mut file) = File::open(&active.pcm_path) else {
+                return SHADOW_SAMPLE_RATE;
+            };
+            if file.seek(SeekFrom::Start(byte_offset)).is_err() {
+                return SHADOW_SAMPLE_RATE;
+            }
+
+            let mut buf = [0u8; SPECTRUM_FFT_SIZE * 4];
+            if file.read_exact(&mut buf).is_ok() {
+                for chunk in buf.chunks_exact(4) {
+                    out.push(f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
+                }
+            }
+            SHADOW_SAMPLE_RATE
+        }
+    }
+
+    fn load_libmpv() -> Option<libloading::Library> {
+        #[cfg(target_os = "windows")]
+        let candidates = ["libmpv-2.dll", "mpv-2.dll", "libmpv.dll"];
+        #[cfg(target_os = "macos")]
+        let candidates = ["libmpv.2.dylib", "libmpv.dylib"];
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        let candidates = ["libmpv.so.2", "libmpv.so"];
+
+        for name in candidates {
+            if let Ok(lib) = unsafe { libloading::Library::new(name) } {
+                return Some(lib);
+            }
+        }
+        None
+    }
+
+    fn open_shadow_deck(url: &str, start_sec: f64) -> Option<ActiveShadow> {
+        let lib = load_libmpv()?;
+        let id = NEXT_FILE_ID.fetch_add(1, Ordering::Relaxed);
+        let pcm_path = std::env::temp_dir().join(format!(
+            "lw_spectrum_{}_{}.pcm",
+            std::process::id(),
+            id
+        ));
+        let pcm_path_str = pcm_path.to_str()?;
+
+        unsafe {
+            let mpv_create: FnMpvCreate = *lib.get(b"mpv_create\0").ok()?;
+            let mpv_initialize: FnMpvInitialize = *lib.get(b"mpv_initialize\0").ok()?;
+            let mpv_set_prop: FnMpvSetPropertyString =
+                *lib.get(b"mpv_set_property_string\0").ok()?;
+            let mpv_command: FnMpvCommand = *lib.get(b"mpv_command\0").ok()?;
+            let mpv_terminate_destroy: FnMpvTerminateDestroy =
+                *lib.get(b"mpv_terminate_destroy\0").ok()?;
+
+            let ctx = mpv_create();
+            if ctx.is_null() {
+                return None;
+            }
+
+            let set = |k: &str, v: &str| {
+                if let (Ok(ck), Ok(cv)) = (CString::new(k), CString::new(v)) {
+                    mpv_set_prop(ctx, ck.as_ptr(), cv.as_ptr());
+                }
+            };
+
+            set("vid", "no");
+            set("terminal", "no");
+            set("audio-display", "no");
+            set("ao", "pcm");
+            set("ao-pcm-waveheader", "no");
+            set("ao-pcm-file", pcm_path_str);
+            set("audio-channels", "mono");
+            set("audio-samplerate", &SHADOW_SAMPLE_RATE.to_string());
+            set("audio-format", "float");
+            if start_sec > 0.1 {
+                set("start", &format!("{start_sec:.3}"));
+            }
+
+            if mpv_initialize(ctx) < 0 {
+                mpv_terminate_destroy(ctx);
+                let _ = fs::remove_file(&pcm_path);
+                return None;
+            }
+
+            let cmd_load = CString::new("loadfile").ok()?;
+            let cmd_url = CString::new(url).ok()?;
+            let args = [cmd_load.as_ptr(), cmd_url.as_ptr(), std::ptr::null()];
+            if mpv_command(ctx, args.as_ptr()) < 0 {
+                mpv_terminate_destroy(ctx);
+                let _ = fs::remove_file(&pcm_path);
+                return None;
+            }
+
+            Some(ActiveShadow {
+                _lib: lib,
+                ctx,
+                mpv_terminate_destroy,
+                pcm_path,
+                url: url.to_string(),
+                start_sec,
+                last_read_sec: start_sec,
+            })
         }
     }
 }
@@ -326,6 +576,10 @@ mod platform {
             }
         }
 
+        pub fn is_active(&self) -> bool {
+            self.capture_client.is_some()
+        }
+
         fn inactive(com_uninit: bool) -> Self {
             Self {
                 com_uninit,
@@ -354,7 +608,7 @@ mod platform {
             let channels = (wfex.nChannels as usize).max(1);
             let format = detect_format(mix_ptr, &wfex);
 
-            let buffer_duration_100ns = 1_000_000; // 100ms shared loopback ring
+            let buffer_duration_100ns = 1_000_000;
             let init_res = client.Initialize(
                 AUDCLNT_SHAREMODE_SHARED,
                 AUDCLNT_STREAMFLAGS_LOOPBACK,
@@ -511,6 +765,10 @@ mod platform {
             Self { child }
         }
 
+        pub fn is_active(&self) -> bool {
+            self.child.is_some()
+        }
+
         pub fn read_mono(&mut self, out: &mut Vec<f32>) -> u32 {
             let Some(ref mut child) = self.child else {
                 return LINUX_SAMPLE_RATE;
@@ -547,6 +805,10 @@ mod platform {
             Self
         }
 
+        pub fn is_active(&self) -> bool {
+            false
+        }
+
         pub fn read_mono(&mut self, _out: &mut Vec<f32>) -> u32 {
             48_000
         }
@@ -575,10 +837,18 @@ mod tests {
     #[test]
     fn sine_tones_peak_in_expected_log_bands() {
         let mut prev_low = [0.0_f32; SPECTRUM_BANDS];
-        let low = compute_spectrum_frame(&sine_wave(180.0, 48_000, SPECTRUM_FFT_SIZE), 48_000, &mut prev_low);
+        let low = compute_spectrum_frame(
+            &sine_wave(180.0, 48_000, SPECTRUM_FFT_SIZE),
+            48_000,
+            &mut prev_low,
+        );
 
         let mut prev_high = [0.0_f32; SPECTRUM_BANDS];
-        let high = compute_spectrum_frame(&sine_wave(6_000.0, 48_000, SPECTRUM_FFT_SIZE), 48_000, &mut prev_high);
+        let high = compute_spectrum_frame(
+            &sine_wave(6_000.0, 48_000, SPECTRUM_FFT_SIZE),
+            48_000,
+            &mut prev_high,
+        );
 
         assert_eq!(low.bins.len(), SPECTRUM_BANDS);
         assert_eq!(high.bins.len(), SPECTRUM_BANDS);
@@ -600,6 +870,9 @@ mod tests {
             .max_by(|a, b| a.1.total_cmp(b.1))
             .map(|(i, _)| i)
             .unwrap();
-        assert!(low_peak < high_peak, "expected low peak ({low_peak}) < high peak ({high_peak})");
+        assert!(
+            low_peak < high_peak,
+            "expected low peak ({low_peak}) < high peak ({high_peak})"
+        );
     }
 }

@@ -85,7 +85,7 @@
           {@const selected = dev.id === featuresStore.selectedDeviceId}
           <button
             type="button"
-            onclick={() => (featuresStore.selectedDeviceId = dev.id)}
+            onclick={() => featuresStore.selectDevice(dev.id)}
             class="flex w-full cursor-pointer items-center justify-between rounded-[12px] border px-3 py-2.5 text-left transition-colors {selected
               ? 'border-[var(--lw-accent)] bg-[var(--lw-wash-pressed)]'
               : 'border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] hover:bg-[var(--lw-wash-hover)]'}"

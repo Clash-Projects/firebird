@@ -57,12 +57,25 @@
     </header>
   </WaveEntrance>
 
-  {#if !featured && libraryStore.albums.length === 0 && libraryStore.artists.length === 0}
-    <States
-      icon="music"
-      title="Your library is empty"
-      description="Sign in to YouTube Music or add local music folders in Settings to start listening."
-    />
+  {#if libraryStore.loadingHome && !featured}
+    <div class="rounded-[18px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] px-6 py-12 text-center text-[13px] text-[var(--lw-text-secondary)]">
+      Loading YouTube Music feed...
+    </div>
+  {:else if !featured && libraryStore.albums.length === 0 && libraryStore.artists.length === 0}
+    <div class="space-y-3 text-center">
+      <States
+        icon="music"
+        title="Your library is empty"
+        description={libraryStore.homeError ?? 'Sign in to YouTube Music or add local music folders in Settings to start listening.'}
+      />
+      <button
+        type="button"
+        onclick={() => void libraryStore.loadHomeFeed()}
+        class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--lw-outline)] bg-[var(--lw-surface)] px-4 py-2 text-[12.5px] font-semibold text-[var(--lw-text-primary)] hover:bg-[var(--lw-wash-hover)]"
+      >
+        Refresh Feed
+      </button>
+    </div>
   {/if}
 
   {#if featured}
