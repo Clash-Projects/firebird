@@ -119,6 +119,39 @@ function normalizeMarketplaceEntry(raw: Partial<MarketplacePluginEntry> & Record
   };
 }
 
+export interface PluginConflict {
+  id: string;
+  kind: 'snippet' | 'theme-snippet';
+  pluginIds: [string, string];
+  pluginNames: [string, string];
+  detail: string;
+}
+
+function extractCssRuleProps(css: string): Map<string, string> {
+  const map = new Map<string, string>();
+  const clean = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const blockRe = /([^{}]+)\{([^{}]+)\}/g;
+  let m: RegExpExecArray | null;
+  while ((m = blockRe.exec(clean)) !== null) {
+    const selectors = m[1]
+      .split(',')
+      .map((s) => s.trim().replace(/\s+/g, ' '))
+      .filter(Boolean);
+    const decls = m[2].split(';');
+    for (const d of decls) {
+      const idx = d.indexOf(':');
+      if (idx <= 0) continue;
+      const prop = d.slice(0, idx).trim().toLowerCase();
+      const val = d.slice(idx + 1).trim();
+      if (!prop || !val) continue;
+      for (const sel of selectors) {
+        map.set(`${sel}::${prop}`, val);
+      }
+    }
+  }
+  return map;
+}
+
 class PluginManager {
   plugins = $state<PluginRecord[]>([]);
   marketplace = $state<MarketplacePluginEntry[]>([]);
@@ -150,6 +183,71 @@ class PluginManager {
         out.push({ record: rec, marketEntry: entry });
       }
     }
+    return out;
+  });
+
+  conflicts = $derived.by<PluginConflict[]>(() => {
+    if (this.safeMode || this.allDisabled) return [];
+    const out: PluginConflict[] = [];
+    const activeSnippets = this.plugins.filter(
+      (p) => p.manifest.type === 'snippet' && p.enabled && Boolean(p.cssCode)
+    );
+    const activeTheme = this.plugins.find(
+      (p) => p.manifest.type === 'theme' && p.enabled && Boolean(p.cssCode)
+    );
+
+    const snippetMaps = activeSnippets.map((s) => ({
+      rec: s,
+      props: extractCssRuleProps(s.cssCode || ''),
+    }));
+
+    for (let i = 0; i < snippetMaps.length; i++) {
+      for (let j = i + 1; j < snippetMaps.length; j++) {
+        const a = snippetMaps[i];
+        const b = snippetMaps[j];
+        const overlapping: string[] = [];
+        for (const [key, valA] of a.props) {
+          const valB = b.props.get(key);
+          if (valB !== undefined && valB !== valA) {
+            overlapping.push(key.replace('::', ' → '));
+            if (overlapping.length >= 2) break;
+          }
+        }
+        if (overlapping.length > 0) {
+          out.push({
+            id: `snippet:${a.rec.manifest.id}:${b.rec.manifest.id}`,
+            kind: 'snippet',
+            pluginIds: [a.rec.manifest.id, b.rec.manifest.id],
+            pluginNames: [a.rec.manifest.name, b.rec.manifest.name],
+            detail: overlapping.join(', '),
+          });
+        }
+      }
+    }
+
+    if (activeTheme && activeTheme.cssCode) {
+      const themeProps = extractCssRuleProps(activeTheme.cssCode);
+      for (const s of snippetMaps) {
+        const overlapping: string[] = [];
+        for (const [key, valS] of s.props) {
+          const valT = themeProps.get(key);
+          if (valT !== undefined && valT !== valS) {
+            overlapping.push(key.replace('::', ' → '));
+            if (overlapping.length >= 2) break;
+          }
+        }
+        if (overlapping.length > 0) {
+          out.push({
+            id: `theme-snippet:${activeTheme.manifest.id}:${s.rec.manifest.id}`,
+            kind: 'theme-snippet',
+            pluginIds: [activeTheme.manifest.id, s.rec.manifest.id],
+            pluginNames: [activeTheme.manifest.name, s.rec.manifest.name],
+            detail: overlapping.join(', '),
+          });
+        }
+      }
+    }
+
     return out;
   });
 

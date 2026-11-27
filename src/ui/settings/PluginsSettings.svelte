@@ -76,6 +76,7 @@
       : pluginManager.plugins.filter((p) => p.manifest.type === 'snippet' && p.enabled).length
   );
   let activeWidgetCount = $derived(pluginManager.activeWidgets.length);
+  let conflictedPluginIds = $derived(new Set(pluginManager.conflicts.flatMap((c) => c.pluginIds)));
 
   function installedFor(id: string): PluginRecord | undefined {
     return pluginManager.plugins.find((p) => p.manifest.id === id);
@@ -288,6 +289,11 @@
       {/if}
 
       <div class="absolute right-2.5 top-2.5 flex items-center gap-1.5">
+        {#if card.installedRecord?.enabled && conflictedPluginIds.has(card.id)}
+          <span class="rounded-[6px] border border-[var(--lw-warn)]/45 bg-[var(--lw-warn)]/25 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.4px] text-[var(--lw-warn)]">
+            Conflict
+          </span>
+        {/if}
         <span class="rounded-[6px] border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.4px] {typeBadgeClass(card.type)}">
           {typeLabel(card.type)}
         </span>
@@ -378,6 +384,27 @@
   {#if pluginManager.safeMode}
     <div class="rounded-[12px] border border-[var(--lw-warn)]/40 bg-[var(--lw-warn)]/12 px-4 py-3 text-[12.5px] text-[var(--lw-warn)]">
       Started in <strong>--safe-mode</strong>. All plugins are temporarily suspended.
+    </div>
+  {/if}
+
+  {#if pluginManager.conflicts.length > 0}
+    <div class="space-y-2 rounded-[14px] border border-[var(--lw-warn)]/45 bg-[var(--lw-warn)]/12 px-4 py-3 text-[12.5px]">
+      <div class="font-semibold text-[var(--lw-warn)]">
+        Plugin conflicts auto-detected ({pluginManager.conflicts.length})
+      </div>
+      {#each pluginManager.conflicts as conflict (conflict.id)}
+        <div class="flex flex-wrap items-center justify-between gap-2 text-[12px] text-[var(--lw-text-primary)]">
+          <span>
+            <strong>{conflict.pluginNames[0]}</strong> &amp; <strong>{conflict.pluginNames[1]}</strong> both override
+            <code class="rounded bg-black/25 px-1.5 py-0.5 text-[11px]">{conflict.detail}</code>
+          </span>
+          <div class="flex items-center gap-1.5">
+            <Buttons variant="secondary" size="sm" onclick={() => void pluginManager.togglePlugin(conflict.pluginIds[1])}>
+              Disable {conflict.pluginNames[1]}
+            </Buttons>
+          </div>
+        </div>
+      {/each}
     </div>
   {/if}
 
