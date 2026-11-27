@@ -17,6 +17,13 @@ const REGISTRY_FALLBACK_URL: &str =
 const VALID_TYPES: [&str; 4] = ["palette", "theme", "snippet", "widget"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum PluginAuthorDisk {
+    Object { name: String, github: String },
+    Text(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginManifestDisk {
     pub id: String,
@@ -27,9 +34,27 @@ pub struct PluginManifestDisk {
     pub api_version: u32,
     #[serde(default)]
     pub min_app_version: Option<String>,
-    pub author: String,
+    pub author: PluginAuthorDisk,
     pub description: String,
     pub entry: String,
+    #[serde(default)]
+    pub tags: Option<Vec<String>>,
+    #[serde(default)]
+    pub previews: Option<Vec<String>>,
+    #[serde(default)]
+    pub preview: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub repo: Option<String>,
+    #[serde(default)]
+    pub commit: Option<String>,
+    #[serde(default)]
+    pub subpath: Option<String>,
     #[serde(default)]
     pub swatch: Option<Vec<String>>,
     #[serde(default)]
@@ -269,6 +294,7 @@ pub async fn plugins_fetch_remote_text(
     let resp = state
         .http
         .get(&url)
+        .header("User-Agent", "LastWave-Desktop/2.6")
         .timeout(Duration::from_secs(12))
         .send()
         .await
@@ -291,9 +317,21 @@ mod tests {
             version: "1.0.0".to_string(),
             api_version,
             min_app_version: Some("3.0.0".to_string()),
-            author: "tester".to_string(),
+            author: PluginAuthorDisk::Object {
+                name: "Tester".to_string(),
+                github: "tester".to_string(),
+            },
             description: "Test plugin".to_string(),
             entry: "snippet.css".to_string(),
+            tags: Some(vec!["test".to_string()]),
+            previews: Some(vec!["previews/1.png".to_string()]),
+            preview: None,
+            updated_at: Some("2026-11-27".to_string()),
+            source: Some("external".to_string()),
+            path: None,
+            repo: Some("tester/mod".to_string()),
+            commit: Some("0123456789abcdef0123456789abcdef01234567".to_string()),
+            subpath: None,
             swatch: None,
             source_url: None,
         }

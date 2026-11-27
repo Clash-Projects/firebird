@@ -2,6 +2,14 @@ import type { PlayerEventType } from '$src/state/player.svelte';
 import type { Track } from '$src/state/types';
 
 export type PluginType = 'palette' | 'theme' | 'snippet' | 'widget';
+export type PluginSource = 'official' | 'external';
+
+export interface PluginAuthorObject {
+  name: string;
+  github: string;
+}
+
+export type PluginAuthor = PluginAuthorObject | string;
 
 export interface PluginManifest {
   id: string;
@@ -9,10 +17,19 @@ export interface PluginManifest {
   version: string;
   apiVersion: number;
   minAppVersion?: string;
-  author: string;
+  author: PluginAuthor;
   description: string;
   type: PluginType;
   entry: string;
+  tags?: string[];
+  previews?: string[];
+  preview?: string;
+  updatedAt?: string;
+  source?: PluginSource;
+  path?: string;
+  repo?: string;
+  commit?: string;
+  subpath?: string;
   css?: string;
   icon?: string;
   route?: string;
@@ -33,14 +50,29 @@ export interface MarketplacePluginEntry {
   id: string;
   name: string;
   type: PluginType;
+  source: PluginSource;
   version: string;
   apiVersion: number;
   minAppVersion?: string;
-  author: string;
+  author: PluginAuthorObject;
   description: string;
-  path: string;
-  entry: string;
+  tags: string[];
+  previews: string[];
+  updatedAt: string;
+  path?: string;
+  entry?: string;
+  repo?: string;
+  commit?: string;
+  subpath?: string;
   swatch?: [string, string, string];
+}
+
+export interface HydratedPluginDetails {
+  manifest?: PluginManifest;
+  readme?: string;
+  paletteTokens?: Record<string, string>;
+  loading?: boolean;
+  error?: string;
 }
 
 export interface WidgetPlaybackSnapshot {

@@ -161,7 +161,7 @@
       </nav>
     </aside>
 
-    <div class="lw-scroll max-w-[780px] flex-1 space-y-5 pb-12 pr-2">
+    <div class="lw-scroll flex-1 space-y-5 pb-12 pr-2 {activeSection === 'plugins' ? 'max-w-[1060px]' : 'max-w-[780px]'}">
       <h2 class="text-[20px] font-bold tracking-[-0.3px]">
         {sections.find((s) => s.id === activeSection)?.label ?? 'Settings'}
       </h2>

@@ -2,17 +2,26 @@ import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
 import { featuresStore } from '$src/state/features.svelte';
 import { installLastWaveApi } from './api';
 import { BUILTIN_PLUGINS } from './builtins';
+import {
+  normalizeAuthorObject,
+  normalizePreviews,
+  resolvePluginAssetUrl,
+  type AssetSourceRef,
+} from './resolver';
 import { loadSavedPluginRecords, savePluginRecords } from './storage';
 import {
   applyPaletteCss,
   applySnippetsCss,
   applyThemeCss,
   extractPaletteSwatch,
+  parsePaletteTokens,
 } from './themeLoader';
 import type {
+  HydratedPluginDetails,
   MarketplacePluginEntry,
   PluginManifest,
   PluginRecord,
+  PluginSource,
   PluginType,
 } from './types';
 import { uiSlots } from './uiSlots.svelte';
@@ -23,8 +32,6 @@ const REGISTRY_PRIMARY_URL =
   'https://raw.githubusercontent.com/Clash-Projects/lastwave-plugins/main/registry.json';
 const REGISTRY_FALLBACK_URL =
   'https://cdn.jsdelivr.net/gh/Clash-Projects/lastwave-plugins@main/registry.json';
-const RAW_REPO_BASE = 'https://raw.githubusercontent.com/Clash-Projects/lastwave-plugins/main';
-const CDN_REPO_BASE = 'https://cdn.jsdelivr.net/gh/Clash-Projects/lastwave-plugins@main';
 
 interface DiskPluginEntry {
   manifest: PluginManifest;
@@ -39,20 +46,20 @@ interface DiskPluginsState {
   plugins: DiskPluginEntry[];
 }
 
+function defaultEntryFor(type: PluginType): string {
+  if (type === 'palette') return 'colors.json';
+  if (type === 'theme') return 'theme.css';
+  if (type === 'snippet') return 'snippet.css';
+  return 'widget.js';
+}
+
 function normalizeManifest(raw: Partial<PluginManifest> & { type?: string }): PluginManifest | null {
   if (!raw || typeof raw !== 'object') return null;
   if (!raw.id || !raw.name || !raw.type || !VALID_TYPES.has(raw.type as PluginType)) {
     return null;
   }
   const type = raw.type as PluginType;
-  const defaultEntry =
-    type === 'palette'
-      ? 'colors.json'
-      : type === 'theme'
-        ? 'theme.css'
-        : type === 'snippet'
-          ? 'snippet.css'
-          : 'widget.js';
+  const previews = normalizePreviews(raw);
 
   return {
     id: String(raw.id),
@@ -60,12 +67,49 @@ function normalizeManifest(raw: Partial<PluginManifest> & { type?: string }): Pl
     version: String(raw.version || '1.0.0'),
     apiVersion: typeof raw.apiVersion === 'number' ? raw.apiVersion : 1,
     minAppVersion: raw.minAppVersion ? String(raw.minAppVersion) : undefined,
-    author: String(raw.author || 'Community'),
+    author: normalizeAuthorObject(raw.author),
     description: String(raw.description || ''),
     type,
-    entry: String(raw.entry || raw.css || defaultEntry),
+    entry: String(raw.entry || raw.css || defaultEntryFor(type)),
+    tags: Array.isArray(raw.tags) ? raw.tags.map((t) => String(t).trim()).filter(Boolean) : [],
+    previews,
+    updatedAt: raw.updatedAt ? String(raw.updatedAt) : undefined,
+    source: raw.source === 'external' ? 'external' : raw.source === 'official' ? 'official' : undefined,
+    path: raw.path ? String(raw.path) : undefined,
+    repo: raw.repo ? String(raw.repo) : undefined,
+    commit: raw.commit ? String(raw.commit) : undefined,
+    subpath: raw.subpath ? String(raw.subpath) : undefined,
     swatch: raw.swatch,
     sourceUrl: raw.sourceUrl,
+  };
+}
+
+function normalizeMarketplaceEntry(raw: Partial<MarketplacePluginEntry> & Record<string, unknown>): MarketplacePluginEntry | null {
+  if (!raw || typeof raw !== 'object') return null;
+  if (!raw.id || !raw.name || !raw.type || !VALID_TYPES.has(raw.type as PluginType)) {
+    return null;
+  }
+  const type = raw.type as PluginType;
+  const source: PluginSource = raw.source === 'external' || (raw.repo && raw.commit) ? 'external' : 'official';
+  return {
+    id: String(raw.id),
+    name: String(raw.name),
+    type,
+    source,
+    version: String(raw.version || '1.0.0'),
+    apiVersion: typeof raw.apiVersion === 'number' ? raw.apiVersion : 1,
+    minAppVersion: raw.minAppVersion ? String(raw.minAppVersion) : undefined,
+    author: normalizeAuthorObject(raw.author as PluginManifest['author']),
+    description: String(raw.description || ''),
+    tags: Array.isArray(raw.tags) ? raw.tags.map((t) => String(t).trim()).filter(Boolean) : [],
+    previews: normalizePreviews(raw),
+    updatedAt: typeof raw.updatedAt === 'string' && raw.updatedAt ? raw.updatedAt : '2026-11-27',
+    path: typeof raw.path === 'string' ? raw.path : undefined,
+    entry: typeof raw.entry === 'string' ? raw.entry : undefined,
+    repo: typeof raw.repo === 'string' ? raw.repo : undefined,
+    commit: typeof raw.commit === 'string' ? raw.commit : undefined,
+    subpath: typeof raw.subpath === 'string' ? raw.subpath : '',
+    swatch: Array.isArray(raw.swatch) && raw.swatch.length >= 3 ? (raw.swatch.slice(0, 3) as [string, string, string]) : undefined,
   };
 }
 
@@ -74,6 +118,7 @@ class PluginManager {
   marketplace = $state<MarketplacePluginEntry[]>([]);
   marketplaceLoading = $state(false);
   marketplaceError = $state<string | null>(null);
+  detailsCache = $state<Record<string, HydratedPluginDetails>>({});
   safeMode = $state(false);
   allDisabled = $state(false);
   pluginsDir = $state('');
@@ -344,35 +389,137 @@ class PluginManager {
     return await resp.text();
   }
 
+  private async fetchAssetText(ref: AssetSourceRef, relativePath: string): Promise<string> {
+    const primary = resolvePluginAssetUrl(ref, relativePath, false);
+    if (!primary) throw new Error(`Invalid asset path: ${relativePath}`);
+    try {
+      return await this.fetchRemoteText(primary);
+    } catch {
+      const fallback = resolvePluginAssetUrl(ref, relativePath, true);
+      if (!fallback || fallback === primary) throw new Error(`Failed to fetch ${primary}`);
+      return await this.fetchRemoteText(fallback);
+    }
+  }
+
   async fetchMarketplace() {
     this.marketplaceLoading = true;
     this.marketplaceError = null;
     try {
-      let data: { plugins?: MarketplacePluginEntry[] } | null = null;
+      let data: { plugins?: Array<Partial<MarketplacePluginEntry> & Record<string, unknown>> } | null = null;
       if (isTauriRuntime()) {
-        data = await ipcInvoke<{ plugins?: MarketplacePluginEntry[] }>('plugins_fetch_registry');
+        data = await ipcInvoke<{ plugins?: Array<Partial<MarketplacePluginEntry> & Record<string, unknown>> }>(
+          'plugins_fetch_registry'
+        );
       }
       if (!data) {
         for (const url of [REGISTRY_PRIMARY_URL, REGISTRY_FALLBACK_URL]) {
           try {
             const resp = await fetch(url);
             if (resp.ok) {
-              data = (await resp.json()) as { plugins?: MarketplacePluginEntry[] };
+              data = (await resp.json()) as {
+                plugins?: Array<Partial<MarketplacePluginEntry> & Record<string, unknown>>;
+              };
               break;
             }
           } catch {
-            // Try fallback CDN.
+            // Try CDN fallback.
           }
         }
       }
       if (!data || !Array.isArray(data.plugins)) {
         throw new Error('Could not load Clash-Projects/lastwave-plugins registry');
       }
-      this.marketplace = data.plugins.filter((p) => VALID_TYPES.has(p.type));
+      this.marketplace = data.plugins
+        .map((p) => normalizeMarketplaceEntry(p))
+        .filter((p): p is MarketplacePluginEntry => p !== null);
     } catch (err) {
       this.marketplaceError = err instanceof Error ? err.message : 'Failed to load marketplace';
     } finally {
       this.marketplaceLoading = false;
+    }
+  }
+
+  async hydratePluginDetails(item: MarketplacePluginEntry | PluginRecord): Promise<HydratedPluginDetails> {
+    const isMarket = !('manifest' in item);
+    const id = isMarket ? item.id : item.manifest.id;
+    const key = isMarket ? `${id}@${item.commit || item.version}` : `${id}@${item.manifest.commit || item.manifest.version}`;
+    const existing = this.detailsCache[key];
+    if (existing && !existing.loading && (existing.manifest || existing.readme || existing.paletteTokens)) {
+      return existing;
+    }
+
+    const initialTokens = !isMarket && item.cssCode ? parsePaletteTokens(item.cssCode) : undefined;
+    this.detailsCache = {
+      ...this.detailsCache,
+      [key]: { loading: true, paletteTokens: initialTokens },
+    };
+
+    const ref: AssetSourceRef = isMarket
+      ? {
+          source: item.source,
+          path: item.path,
+          repo: item.repo,
+          commit: item.commit,
+          subpath: item.subpath,
+        }
+      : {
+          source: item.manifest.source,
+          path: item.manifest.path,
+          repo: item.manifest.repo,
+          commit: item.manifest.commit,
+          subpath: item.manifest.subpath,
+        };
+
+    const canFetchRemote = Boolean(
+      (ref.source === 'official' && ref.path) || (ref.source === 'external' && ref.repo && ref.commit)
+    );
+
+    if (!canFetchRemote) {
+      const localResult: HydratedPluginDetails = {
+        manifest: isMarket ? undefined : item.manifest,
+        paletteTokens: initialTokens,
+        loading: false,
+      };
+      this.detailsCache = { ...this.detailsCache, [key]: localResult };
+      return localResult;
+    }
+
+    try {
+      const manifestPromise = this.fetchAssetText(ref, 'manifest.json')
+        .then((txt) => normalizeManifest(JSON.parse(txt) as Partial<PluginManifest>))
+        .catch(() => null);
+      const readmePromise = this.fetchAssetText(ref, 'README.md').catch(() => undefined);
+
+      const [hydratedManifest, readme] = await Promise.all([manifestPromise, readmePromise]);
+      let paletteTokens = initialTokens;
+      const pluginType = isMarket ? item.type : item.manifest.type;
+      const entryFile = hydratedManifest?.entry || (isMarket ? item.entry : item.manifest.entry) || defaultEntryFor(pluginType);
+
+      if (!paletteTokens && pluginType === 'palette') {
+        try {
+          const entryRaw = await this.fetchAssetText(ref, entryFile);
+          paletteTokens = parsePaletteTokens(entryRaw);
+        } catch {
+          // Ignore optional palette preview token fetch failures.
+        }
+      }
+
+      const details: HydratedPluginDetails = {
+        manifest: hydratedManifest ?? (isMarket ? undefined : item.manifest),
+        readme,
+        paletteTokens,
+        loading: false,
+      };
+      this.detailsCache = { ...this.detailsCache, [key]: details };
+      return details;
+    } catch (err) {
+      const failed: HydratedPluginDetails = {
+        paletteTokens: initialTokens,
+        loading: false,
+        error: err instanceof Error ? err.message : 'Failed to load plugin metadata',
+      };
+      this.detailsCache = { ...this.detailsCache, [key]: failed };
+      return failed;
     }
   }
 
@@ -385,28 +532,40 @@ class PluginManager {
       });
       return;
     }
-    const basePrimary = `${RAW_REPO_BASE}/${entry.path}`;
-    const baseFallback = `${CDN_REPO_BASE}/${entry.path}`;
-    let manifestText = '';
-    let entryText = '';
-    let usedBase = basePrimary;
 
-    try {
-      manifestText = await this.fetchRemoteText(`${basePrimary}/manifest.json`);
-    } catch {
-      usedBase = baseFallback;
-      manifestText = await this.fetchRemoteText(`${baseFallback}/manifest.json`);
-    }
+    const ref: AssetSourceRef = {
+      source: entry.source,
+      path: entry.path,
+      repo: entry.repo,
+      commit: entry.commit,
+      subpath: entry.subpath,
+    };
 
+    const manifestText = await this.fetchAssetText(ref, 'manifest.json');
     const rawManifest = JSON.parse(manifestText) as Partial<PluginManifest>;
+    const manifestUrl = resolvePluginAssetUrl(ref, 'manifest.json') ?? undefined;
+    const normalizedPreviews = normalizePreviews({
+      previews: rawManifest.previews ?? entry.previews,
+      preview: rawManifest.preview,
+    });
+
     const manifest = normalizeManifest({
       ...rawManifest,
+      author: rawManifest.author ?? entry.author,
+      tags: rawManifest.tags?.length ? rawManifest.tags : entry.tags,
+      previews: normalizedPreviews,
+      updatedAt: rawManifest.updatedAt ?? entry.updatedAt,
+      source: entry.source,
+      path: entry.path,
+      repo: entry.repo,
+      commit: entry.commit,
+      subpath: entry.subpath,
       swatch: rawManifest.swatch ?? entry.swatch,
-      sourceUrl: `${usedBase}/manifest.json`,
+      sourceUrl: manifestUrl,
     });
     if (!manifest) throw new Error('Invalid plugin manifest in registry');
 
-    entryText = await this.fetchRemoteText(`${usedBase}/${manifest.entry}`);
+    const entryText = await this.fetchAssetText(ref, manifest.entry || entry.entry || defaultEntryFor(manifest.type));
     await this.installPlugin(
       manifest,
       manifest.type === 'widget' ? { sourceCode: entryText } : { cssCode: entryText }
@@ -418,37 +577,70 @@ class PluginManager {
     });
   }
 
+  private async resolveLatestCommitSha(owner: string, repo: string): Promise<string> {
+    try {
+      const apiRaw = await this.fetchRemoteText(
+        `https://api.github.com/repos/${owner}/${repo}/commits?per_page=1`
+      );
+      const commits = JSON.parse(apiRaw) as Array<{ sha?: string }>;
+      const sha = commits?.[0]?.sha;
+      if (sha && /^[0-9a-f]{40}$/i.test(sha)) return sha.toLowerCase();
+    } catch {
+      // Fallback to default branch resolution via GitHub API repo metadata or main.
+    }
+    try {
+      const repoRaw = await this.fetchRemoteText(`https://api.github.com/repos/${owner}/${repo}`);
+      const info = JSON.parse(repoRaw) as { default_branch?: string };
+      if (info.default_branch) return info.default_branch;
+    } catch {
+      // Fallback to main.
+    }
+    return 'main';
+  }
+
   async installFromUrl(input: string) {
     const clean = input.trim();
-    if (!clean) throw new Error('Enter a GitHub owner/repo or manifest.json URL');
+    if (!clean) throw new Error('Enter owner/repo, owner/repo@commit, or a manifest.json URL');
 
     let manifestUrl: string;
+    let sourceRef: AssetSourceRef | undefined;
+
     if (clean.startsWith('https://')) {
       if (clean.endsWith('/manifest.json')) {
         manifestUrl = clean;
       } else if (clean.includes('github.com/')) {
         const parts = clean.replace(/^https:\/\/github\.com\//, '').replace(/\/+$/, '').split('/');
         if (parts.length < 2) throw new Error('Invalid GitHub repository URL');
-        const [owner, repo, maybeTree, maybeBranch, ...rest] = parts;
-        if (maybeTree === 'tree' && maybeBranch && rest.length > 0) {
-          manifestUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${maybeBranch}/${rest.join('/')}/manifest.json`;
-        } else {
-          manifestUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main/manifest.json`;
-        }
+        const [owner, repo, maybeTree, maybeRef, ...rest] = parts;
+        const commit =
+          maybeTree === 'tree' && maybeRef ? maybeRef : await this.resolveLatestCommitSha(owner, repo);
+        const subpath = maybeTree === 'tree' && rest.length > 0 ? rest.join('/') : '';
+        sourceRef = { source: 'external', repo: `${owner}/${repo}`, commit, subpath };
+        manifestUrl = resolvePluginAssetUrl(sourceRef, 'manifest.json')!;
       } else {
         manifestUrl = `${clean.replace(/\/+$/, '')}/manifest.json`;
       }
     } else {
-      const parts = clean.replace(/^\/+|\/+$/g, '').split('/');
-      if (parts.length < 2) throw new Error('Use owner/repo or a full https:// manifest URL');
+      const [repoAndSub, explicitRef] = clean.replace(/^\/+|\/+$/g, '').split('@');
+      const parts = repoAndSub.split('/').filter(Boolean);
+      if (parts.length < 2) throw new Error('Use owner/repo, owner/repo@commit, or an https:// URL');
       const [owner, repo, ...sub] = parts;
-      const suffix = sub.length > 0 ? `/${sub.join('/')}` : '';
-      manifestUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main${suffix}/manifest.json`;
+      const subpath = sub.join('/');
+      const commit = explicitRef?.trim() || (await this.resolveLatestCommitSha(owner, repo));
+      sourceRef = { source: 'external', repo: `${owner}/${repo}`, commit, subpath };
+      manifestUrl = resolvePluginAssetUrl(sourceRef, 'manifest.json')!;
     }
 
     const manifestText = await this.fetchRemoteText(manifestUrl);
     const rawManifest = JSON.parse(manifestText) as Partial<PluginManifest>;
-    const manifest = normalizeManifest({ ...rawManifest, sourceUrl: manifestUrl });
+    const manifest = normalizeManifest({
+      ...rawManifest,
+      source: sourceRef ? 'external' : rawManifest.source,
+      repo: sourceRef?.repo ?? rawManifest.repo,
+      commit: sourceRef?.commit ?? rawManifest.commit,
+      subpath: sourceRef?.subpath ?? rawManifest.subpath,
+      sourceUrl: manifestUrl,
+    });
     if (!manifest) throw new Error('Remote manifest.json is invalid or unsupported');
 
     const baseUrl = manifestUrl.slice(0, manifestUrl.lastIndexOf('/'));
@@ -457,9 +649,10 @@ class PluginManager {
       manifest,
       manifest.type === 'widget' ? { sourceCode: entryText } : { cssCode: entryText }
     );
+    const authorLabel = normalizeAuthorObject(manifest.author).name;
     featuresStore.showToast({
       title: `Installed ${manifest.name}`,
-      subtitle: `Loaded from ${manifest.author}`,
+      subtitle: `Loaded from ${authorLabel}`,
       severity: 'success',
     });
   }
