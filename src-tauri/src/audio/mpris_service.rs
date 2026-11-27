@@ -332,7 +332,7 @@ mod linux_dbus {
     use super::*;
     use std::borrow::Cow;
     use std::collections::HashMap;
-    use zbus::fdo::PropertiesSignals;
+    use zbus::fdo::properties::PropertiesSignals;
     use zbus::fdo::RequestNameFlags;
     use zbus::names::InterfaceName;
     use zbus::object_server::SignalEmitter;
