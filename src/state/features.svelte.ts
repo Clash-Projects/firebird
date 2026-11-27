@@ -2,6 +2,25 @@ import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
 import { settingsStore } from './settings.svelte';
 import type { AudioDevice, LyricsDocument, PodcastShow, ToastMessage, Track } from './types';
 
+export const LYRICS_PROVIDERS: ReadonlyArray<{ id: string; label: string }> = [
+  { id: 'auto', label: 'Auto (Word-First Racer)' },
+  { id: 'lastwave', label: 'LastWave' },
+  { id: 'lrc_red', label: 'lrc.red' },
+  { id: 'apple_music', label: 'Apple Music' },
+  { id: 'better_lyrics', label: 'BetterLyrics' },
+  { id: 'better_lyrics_portato', label: 'BetterLyrics (Portato)' },
+  { id: 'kugou', label: 'KuGou' },
+  { id: 'bini_lyrics', label: 'BiniLyrics' },
+  { id: 'musixmatch', label: 'Musixmatch' },
+  { id: 'lrclib', label: 'LRCLIB' },
+  { id: 'lyrics_plus', label: 'LyricsPlus' },
+  { id: 'unison', label: 'Unison' },
+  { id: 'youtube_captions', label: 'YouTube Captions' },
+  { id: 'youtube_music', label: 'YouTube Music' },
+  { id: 'megalobiz', label: 'Megalobiz' },
+  { id: 'genius', label: 'Genius' },
+];
+
 export const EQ_FREQUENCIES = [
   25, 40, 63, 100, 160, 250, 400, 630, 1000, 1600, 2500, 4000, 6300, 10000, 16000,
 ];
@@ -46,8 +65,10 @@ interface BackendLyricsResult {
     transliteration?: string;
     syllables?: Array<{ timeMs?: number; durationMs?: number; text?: string }>;
   }>;
+  plainLyrics?: string;
   isSynced?: boolean;
   isWordSynced?: boolean;
+  isInstrumental?: boolean;
   source?: string;
 }
 
@@ -73,6 +94,10 @@ class FeaturesStore {
   selectedDeviceId = $state('');
 
   lyricsByTrack = $state<Record<string, LyricsDocument>>({});
+  lyricsProviderId = $state('auto');
+  wordByWord = $state(true);
+  lyricsLoading = $state(false);
+  lyricsOffsetMs = $state<Record<string, number>>({});
   showTranslation = $state(false);
   showRomanized = $state(false);
   lyricsFontScale = $state(1.0);
@@ -173,54 +198,94 @@ class FeaturesStore {
     this.podcasts = Array.from(byId.values());
   }
 
-  async fetchLyricsForTrack(track: Track) {
-    if (!isTauriRuntime() || !track.id || this.lyricsByTrack[track.id] || this.lyricsInFlight.has(track.id)) {
+  getLyricsOffset(trackId: string): number {
+    return this.lyricsOffsetMs[trackId] ?? 0;
+  }
+
+  adjustLyricsOffset(trackId: string, deltaMs: number) {
+    const next = (this.lyricsOffsetMs[trackId] ?? 0) + deltaMs;
+    this.lyricsOffsetMs = { ...this.lyricsOffsetMs, [trackId]: next };
+  }
+
+  resetLyricsOffset(trackId: string) {
+    this.lyricsOffsetMs = { ...this.lyricsOffsetMs, [trackId]: 0 };
+  }
+
+  async fetchLyricsForTrack(
+    track: Track,
+    opts?: { forceRefresh?: boolean; providerId?: string }
+  ) {
+    const force = Boolean(opts?.forceRefresh);
+    const providerId = opts?.providerId ?? this.lyricsProviderId ?? 'auto';
+    if (!isTauriRuntime() || !track.id) return;
+    if (!force && (this.lyricsByTrack[track.id] || this.lyricsInFlight.has(track.id))) {
       return;
     }
     this.lyricsInFlight.add(track.id);
+    this.lyricsLoading = true;
     try {
       const res = await ipcInvoke<BackendLyricsResult>('lyrics_fetch', {
         title: track.title,
         artist: track.artist,
         album: track.album,
         durationSeconds: track.durationSec > 0 ? Math.round(track.durationSec) : null,
-        forceRefresh: false,
-        wordByWord: true,
+        forceRefresh: force,
+        wordByWord: this.wordByWord,
         videoId: track.videoId || null,
-        preferredProviderId: '',
+        preferredProviderId: providerId,
         excludeProviderIds: [],
       });
-      if (!res || !Array.isArray(res.lines) || res.lines.length === 0) return;
+      if (!res) return;
+
+      const rawLines = Array.isArray(res.lines) ? res.lines : [];
+      let mappedLines = rawLines.map((l) => {
+        const startMs = Math.max(0, Number(l.timeMs) || 0);
+        const dur = Math.max(0, Number(l.durationMs) || 0);
+        return {
+          startMs,
+          endMs: startMs + dur,
+          text: l.text || '',
+          romanized: l.transliteration || undefined,
+          words:
+            l.syllables && l.syllables.length > 0
+              ? l.syllables.map((s) => {
+                  const ws = Math.max(0, Number(s.timeMs) || startMs);
+                  const wd = Math.max(0, Number(s.durationMs) || 0);
+                  return { text: s.text || '', startMs: ws, endMs: ws + Math.max(80, wd) };
+                })
+              : undefined,
+        };
+      });
+
+      if (mappedLines.length === 0 && res.plainLyrics?.trim()) {
+        mappedLines = res.plainLyrics
+          .split(/\r?\n/)
+          .map((t) => t.trim())
+          .filter(Boolean)
+          .map((text, idx) => ({
+            startMs: idx * 1000,
+            endMs: (idx + 1) * 1000,
+            text,
+            romanized: undefined,
+            words: undefined,
+          }));
+      }
+
+      if (mappedLines.length === 0) return;
 
       this.lyricsByTrack = {
         ...this.lyricsByTrack,
         [track.id]: {
           trackId: track.id,
-          provider: res.source || 'Lyrics',
-          synced: Boolean(res.isSynced),
+          provider: res.source || providerId,
+          synced: Boolean(res.isSynced && rawLines.length > 0),
           wordSynced: Boolean(res.isWordSynced),
-          lines: res.lines.map((l) => {
-            const startMs = Math.max(0, Number(l.timeMs) || 0);
-            const dur = Math.max(0, Number(l.durationMs) || 0);
-            return {
-              startMs,
-              endMs: startMs + dur,
-              text: l.text || '',
-              romanized: l.transliteration || undefined,
-              words:
-                l.syllables && l.syllables.length > 0
-                  ? l.syllables.map((s) => {
-                      const ws = Math.max(0, Number(s.timeMs) || startMs);
-                      const wd = Math.max(0, Number(s.durationMs) || 0);
-                      return { text: s.text || '', startMs: ws, endMs: ws + wd };
-                    })
-                  : undefined,
-            };
-          }),
+          lines: mappedLines,
         },
       };
     } finally {
       this.lyricsInFlight.delete(track.id);
+      this.lyricsLoading = false;
     }
   }
 

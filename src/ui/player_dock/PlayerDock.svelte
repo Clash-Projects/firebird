@@ -194,6 +194,17 @@
 
     <button
       type="button"
+      onclick={() => windowState.toggleRightPanel('lyrics')}
+      title="Lyrics (L)"
+      class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[10px] hover:bg-[var(--lw-wash-hover)] {windowState.activeRightPanel === 'lyrics'
+        ? 'text-[var(--lw-accent)]'
+        : 'text-[var(--lw-text-secondary)]'}"
+    >
+      <WaveIcon name="lyrics" size={16} />
+    </button>
+
+    <button
+      type="button"
       onclick={() => windowState.toggleRightPanel('queue')}
       title="Queue (Q)"
       class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[10px] hover:bg-[var(--lw-wash-hover)] {windowState.activeRightPanel === 'queue'

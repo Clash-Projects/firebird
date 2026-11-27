@@ -5,6 +5,7 @@
   import { setUiScale, UI_SCALE_OPTIONS } from '$src/features/settings/uiScale.svelte';
   import NowPlayingStylePicker from '$src/features/settings/widgets/NowPlayingStylePicker.svelte';
   import { ipcInvoke } from '$src/lib/ipc';
+  import { featuresStore, LYRICS_PROVIDERS } from '$src/state/features.svelte';
   import { playerStore } from '$src/state/player.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
   import LastfmKeyGuide from '$src/ui/auth/LastfmKeyGuide.svelte';
@@ -246,11 +247,49 @@
         <CacheSettings />
       </div>
     {:else if activeSection === 'lyrics'}
-      <div class="space-y-3 rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-        <div class="text-[13.5px] font-semibold">17-Provider Word-First Lyrics Racer</div>
-        <p class="text-[12px] text-[var(--lw-text-secondary)]">
-          Prioritizes word-synced karaoke lyrics, with automatic translation and romanization support.
-        </p>
+      <div class="space-y-3">
+        <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+          <div>
+            <div class="text-[13.5px] font-semibold">Lyrics Provider</div>
+            <div class="text-[12px] text-[var(--lw-text-secondary)]">Auto races all 16 providers and prioritizes word-synced karaoke</div>
+          </div>
+          <Select
+            bind:value={featuresStore.lyricsProviderId}
+            options={LYRICS_PROVIDERS.map((p) => ({ value: p.id, label: p.label }))}
+            onchange={(v) => {
+              settingsStore.saveStringPref('lw_lyrics_provider', v);
+              if (playerStore.currentTrack) {
+                void featuresStore.fetchLyricsForTrack(playerStore.currentTrack, { forceRefresh: true, providerId: v });
+              }
+            }}
+          />
+        </div>
+        <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+          <div>
+            <div class="text-[13.5px] font-semibold">Word-by-Word Karaoke Sync</div>
+            <div class="text-[12px] text-[var(--lw-text-secondary)]">Progressive left-to-right syllable sweep animation</div>
+          </div>
+          <input
+            type="checkbox"
+            bind:checked={featuresStore.wordByWord}
+            onchange={() => settingsStore.saveBoolPref('lw_word_by_word', featuresStore.wordByWord)}
+            class="h-4 w-4 accent-[var(--lw-accent)]"
+          />
+        </label>
+        <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+          <div>
+            <div class="text-[13.5px] font-semibold">Show Romanization / Transliteration</div>
+            <div class="text-[12px] text-[var(--lw-text-secondary)]">Display phonetic reading under non-Latin lyrics</div>
+          </div>
+          <input type="checkbox" bind:checked={featuresStore.showRomanized} class="h-4 w-4 accent-[var(--lw-accent)]" />
+        </label>
+        <div class="rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+          <div class="flex justify-between text-[13px]">
+            <span class="font-semibold">Lyrics Font Scale</span>
+            <span class="lw-tabular">{Math.round(featuresStore.lyricsFontScale * 100)}%</span>
+          </div>
+          <input type="range" min="0.8" max="1.6" step="0.05" bind:value={featuresStore.lyricsFontScale} class="mt-2 h-1.5 w-full cursor-pointer accent-[var(--lw-accent)]" />
+        </div>
       </div>
     {:else if activeSection === 'appearance'}
       <div class="space-y-4">
