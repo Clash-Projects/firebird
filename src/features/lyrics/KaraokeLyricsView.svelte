@@ -126,6 +126,7 @@
     class="synced-lyrics"
     class:compact
     data-lw="lyrics-view"
+    data-animation={featuresStore.lyricsAnimation}
     style:--lw-wide-override={fontSize ? `${fontSize}px` : undefined}
   >
     {#key doc.trackId}
@@ -169,6 +170,7 @@
   bind:this={lyricsView}
   onwheel={() => (lastManualScroll = performance.now())}
   data-lw="lyrics-view"
+  data-animation={featuresStore.lyricsAnimation}
   class="lyrics-fallback mx-auto w-full max-w-[660px] py-4"
   class:compact
   class:lw-scroll={compact}
@@ -315,7 +317,20 @@
   }
   .compact .lyric-line { padding-block: calc(var(--lw-sidebar-lyric-spacing) / 2); }
   .lyric-line.past { color: var(--lw-text-tertiary); }
-  .lyric-line[data-active="true"] { background: color-mix(in srgb, var(--lw-accent) 10%, transparent); color: var(--lw-text-primary); }
+  .lyric-line[data-active="true"] {
+    background: color-mix(in srgb, var(--lw-accent) 10%, transparent);
+    color: var(--lw-text-primary);
+    transform-origin: left center;
+    transition: transform var(--lw-motion-normal) var(--ease-wave), background-color var(--lw-motion-normal), color var(--lw-motion-normal);
+  }
+  [data-animation="karaoke_bounce"] .lyric-line[data-active="true"] { transform: translateY(-2px) scale(1.03); }
+  [data-animation="kinetic_pop"] .lyric-line[data-active="true"] { transform: scale(1.05); }
+  [data-animation="neon_cyber"] .lyric-line[data-active="true"] { text-shadow: 0 0 18px color-mix(in srgb, var(--lw-accent) 75%, transparent); }
+  [data-animation="italic_wave"] .lyric-line[data-active="true"] { font-style: italic; transform: skewX(-4deg) scale(1.02); }
+  [data-animation="glitch_snap"] .lyric-line[data-active="true"] { text-shadow: -1.5px 0 rgba(255, 45, 85, 0.75), 1.5px 0 rgba(0, 229, 255, 0.75); }
+  [data-animation="elastic_tilt"] .lyric-line[data-active="true"] { transform: perspective(500px) rotateX(6deg) scale(1.03); }
+  [data-animation="hyper_warp"] .lyric-line[data-active="true"] { letter-spacing: 0.02em; transform: scale(1.04); }
+  [data-animation="chaos_vortex"] .lyric-line[data-active="true"] { transform: rotate(-0.8deg) scale(1.04); }
   .lyric-line::before {
     position: absolute;
     inset: 10px auto 10px 0;

@@ -10,7 +10,7 @@ import type {
 } from './types';
 
 export const LYRICS_PROVIDERS: ReadonlyArray<{ id: string; label: string }> = [
-  { id: 'auto', label: 'Auto (Word-First Racer)' },
+  { id: 'auto', label: 'Auto' },
   { id: 'lastwave', label: 'LastWave' },
   { id: 'lrc_red', label: 'lrc.red' },
   { id: 'apple_music', label: 'Apple Music' },
@@ -26,6 +26,38 @@ export const LYRICS_PROVIDERS: ReadonlyArray<{ id: string; label: string }> = [
   { id: 'youtube_music', label: 'YouTube Music' },
   { id: 'megalobiz', label: 'Megalobiz' },
   { id: 'genius', label: 'Genius' },
+];
+
+export const LYRICS_ANIMATION_OPTIONS: ReadonlyArray<{ id: string; label: string }> = [
+  { id: 'apple_fluid', label: 'Apple Fluid' },
+  { id: 'karaoke_bounce', label: 'Rhythm Bounce' },
+  { id: 'kinetic_pop', label: 'Kinetic Pop' },
+  { id: 'neon_cyber', label: 'Neon Cyber' },
+  { id: 'italic_wave', label: 'Silk Italic' },
+  { id: 'glitch_snap', label: 'Chromatic Glitch' },
+  { id: 'elastic_tilt', label: '3D Stage Tilt' },
+  { id: 'hyper_warp', label: 'Hyperdrive Warp' },
+  { id: 'chaos_vortex', label: 'Chaos Vortex' },
+];
+
+export const LYRICS_TEXT_SCALES: ReadonlyArray<{ scale: number; label: string }> = [
+  { scale: 0.85, label: 'Small' },
+  { scale: 1.0, label: 'Medium' },
+  { scale: 1.2, label: 'Large' },
+  { scale: 1.4, label: 'Extra large' },
+  { scale: 1.6, label: 'Huge' },
+];
+
+export const LYRICS_TRANSLATION_OPTIONS: ReadonlyArray<{ id: string; label: string }> = [
+  { id: 'off', label: 'Off' },
+  { id: 'en', label: 'English' },
+  { id: 'es', label: 'Spanish' },
+  { id: 'fr', label: 'French' },
+  { id: 'de', label: 'German' },
+  { id: 'pt', label: 'Portuguese' },
+  { id: 'hi', label: 'Hindi' },
+  { id: 'ja', label: 'Japanese' },
+  { id: 'ko', label: 'Korean' },
 ];
 
 export const EQ_FREQUENCIES = [
@@ -129,8 +161,10 @@ class FeaturesStore {
   lyricsLoading = $state(false);
   lyricsOffsetMs = $state<Record<string, number>>({});
   showTranslation = $state(false);
+  lyricsTranslationLang = $state('off');
   showRomanized = $state(false);
   lyricsFontScale = $state(1.0);
+  lyricsAnimation = $state('apple_fluid');
 
   podcasts = $state<PodcastShow[]>([]);
   podcastShelves = $state<PodcastShelfItem[]>([]);
@@ -186,8 +220,15 @@ class FeaturesStore {
     if (typeof all.lyricsTransliteration === 'boolean') {
       this.showRomanized = all.lyricsTransliteration;
     }
+    if (typeof all.lyricsTranslationLang === 'string' && all.lyricsTranslationLang) {
+      this.lyricsTranslationLang = all.lyricsTranslationLang;
+      this.showTranslation = all.lyricsTranslationLang !== 'off';
+    }
     if (typeof all.lyricsTextScale === 'number' && all.lyricsTextScale > 0) {
       this.lyricsFontScale = all.lyricsTextScale;
+    }
+    if (typeof all.lyricsAnimation === 'string' && all.lyricsAnimation) {
+      this.lyricsAnimation = all.lyricsAnimation;
     }
     if (typeof all.headphoneProfile === 'string' && all.headphoneProfile) {
       this.headphoneProfile = all.headphoneProfile;
@@ -412,6 +453,27 @@ class FeaturesStore {
 
   getLyrics(trackId: string): LyricsDocument | null {
     return this.lyricsByTrack[trackId] ?? null;
+  }
+
+  setLyricsRomanized(enabled: boolean) {
+    this.showRomanized = enabled;
+    settingsStore.saveBoolPref('lw_lyrics_transliteration', enabled);
+  }
+
+  setLyricsTranslationLang(lang: string) {
+    this.lyricsTranslationLang = lang;
+    this.showTranslation = lang !== 'off';
+    settingsStore.saveStringPref('lw_lyrics_translation', lang);
+  }
+
+  setLyricsTextScale(scale: number) {
+    this.lyricsFontScale = scale;
+    settingsStore.saveDoublePref('lw_lyrics_text_scale', scale);
+  }
+
+  setLyricsAnimation(animation: string) {
+    this.lyricsAnimation = animation;
+    settingsStore.saveStringPref('lw_lyrics_animation', animation);
   }
 
   sendJamMessage(text: string) {
