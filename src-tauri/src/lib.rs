@@ -5,29 +5,161 @@ pub mod integrations;
 pub use firebird_models as models;
 pub mod storage;
 
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager, RunEvent, WebviewWindowBuilder};
 
 use crate::commands::state::AppState;
+use crate::storage::diagnostics_log::DiagnosticsLog;
 
 static ALLOW_EXIT: AtomicBool = AtomicBool::new(false);
 static TRAY_READY: AtomicBool = AtomicBool::new(false);
 
+const INSTANCE_PORT_FILENAME: &str = "instance.port";
+
+fn install_panic_hook() {
+    let prev = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        DiagnosticsLog::info(&format!("ERROR panic: {info}"));
+        prev(info);
+    }));
+}
+
+fn instance_port_path(app_support_dir: &Path) -> PathBuf {
+    app_support_dir.join(INSTANCE_PORT_FILENAME)
+}
+
+fn signal_existing_instance(app_support_dir: &Path) -> bool {
+    let port_path = instance_port_path(app_support_dir);
+    for _ in 0..25 {
+        if let Ok(raw) = std::fs::read_to_string(&port_path) {
+            if let Ok(port) = raw.trim().parse::<u16>() {
+                if let Ok(mut stream) =
+                    TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), Duration::from_millis(400))
+                {
+                    let _ = stream.write_all(b"SHOW\n");
+                    let _ = stream.flush();
+                    return true;
+                }
+            }
+        }
+        std::thread::sleep(Duration::from_millis(80));
+    }
+    false
+}
+
+#[cfg(windows)]
+struct SingleInstanceGuard {
+    _handle: windows::Win32::Foundation::HANDLE,
+    port_path: PathBuf,
+}
+
+#[cfg(not(windows))]
+struct SingleInstanceGuard {
+    port_path: PathBuf,
+}
+
+impl Drop for SingleInstanceGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.port_path);
+        #[cfg(windows)]
+        if !self._handle.is_invalid() {
+            unsafe {
+                let _ = windows::Win32::Foundation::CloseHandle(self._handle);
+            }
+        }
+    }
+}
+
+fn acquire_single_instance(app_support_dir: &Path) -> Option<SingleInstanceGuard> {
+    let port_path = instance_port_path(app_support_dir);
+
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS};
+        use windows::Win32::System::Threading::CreateMutexW;
+
+        let name = windows_core::w!("Local\\ClashProjects.LastWave.SingleInstance");
+        if let Ok(handle) = unsafe { CreateMutexW(None, true, name) } {
+            let already = unsafe { GetLastError() == ERROR_ALREADY_EXISTS };
+            if already {
+                if signal_existing_instance(app_support_dir) {
+                    DiagnosticsLog::info("single-instance: activated existing background instance and exiting");
+                    return None;
+                }
+                DiagnosticsLog::info("single-instance: mutex present but wake socket unreachable; continuing");
+            }
+            return Some(SingleInstanceGuard {
+                _handle: handle,
+                port_path,
+            });
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        if signal_existing_instance(app_support_dir) {
+            DiagnosticsLog::info("single-instance: activated existing background instance and exiting");
+            return None;
+        }
+    }
+
+    Some(SingleInstanceGuard {
+        #[cfg(windows)]
+        _handle: windows::Win32::Foundation::HANDLE::default(),
+        port_path,
+    })
+}
+
+fn start_instance_wake_listener(app: tauri::AppHandle, port_path: PathBuf) {
+    let Ok(listener) = TcpListener::bind(("127.0.0.1", 0)) else {
+        DiagnosticsLog::info("single-instance: failed to bind wake listener");
+        return;
+    };
+    let Ok(addr) = listener.local_addr() else {
+        return;
+    };
+    let _ = std::fs::write(&port_path, addr.port().to_string());
+    DiagnosticsLog::info(&format!("single-instance: listening on 127.0.0.1:{}", addr.port()));
+
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            let mut s = stream;
+            let mut buf = [0u8; 32];
+            let n = s.read(&mut buf).unwrap_or(0);
+            if n == 0 || buf[..n].starts_with(b"SHOW") {
+                let handle = app.clone();
+                let _ = app.run_on_main_thread(move || {
+                    show_or_recreate_main_window(&handle);
+                });
+            }
+        }
+    });
+}
+
 fn show_or_recreate_main_window(app: &tauri::AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
-        let _ = win.show();
         let _ = win.unminimize();
+        let _ = win.show();
         let _ = win.set_focus();
         return;
     }
     if let Some(cfg) = app.config().app.windows.first() {
-        if let Ok(builder) = WebviewWindowBuilder::from_config(app, cfg) {
-            if let Ok(win) = builder.build() {
+        match WebviewWindowBuilder::from_config(app, cfg).and_then(|b| b.build()) {
+            Ok(win) => {
+                let _ = win.unminimize();
                 let _ = win.show();
                 let _ = win.set_focus();
+                DiagnosticsLog::info("recreated main window from tray");
+            }
+            Err(err) => {
+                DiagnosticsLog::info(&format!("failed to recreate main window: {err}"));
             }
         }
     }
@@ -35,10 +167,11 @@ fn show_or_recreate_main_window(app: &tauri::AppHandle) {
 
 fn shutdown_audio_and_resources(app: &tauri::AppHandle) {
     let state = app.state::<AppState>();
+    let _ = std::fs::remove_file(instance_port_path(&state.app_support_dir));
     state.spectrum.unsubscribe(None);
     state.playback.shutdown_sync();
     state.audio_output.dispose();
-    crate::storage::diagnostics_log::DiagnosticsLog::mark_clean_exit();
+    DiagnosticsLog::mark_clean_exit();
 }
 
 fn quit_application(app: &tauri::AppHandle) {
@@ -49,18 +182,30 @@ fn quit_application(app: &tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app_state = AppState::new(AppState::default_app_support_dir());
+    let support_dir = AppState::default_app_support_dir();
+    let app_state = AppState::new(support_dir.clone());
+    install_panic_hook();
+
+    let Some(_instance_guard) = acquire_single_instance(&support_dir) else {
+        DiagnosticsLog::mark_clean_exit();
+        return;
+    };
+
+    let wake_port_path = instance_port_path(&support_dir);
 
     let app = tauri::Builder::default()
         .manage(app_state)
-        .setup(|app| {
+        .setup(move |app| {
+            DiagnosticsLog::info("tauri setup start");
             let handle = app.handle().clone();
+            start_instance_wake_listener(handle.clone(), wake_port_path.clone());
             let state = app.state::<AppState>();
             state.set_app_handle(handle.clone());
             tauri::async_runtime::block_on(async {
                 state.tube.load_persisted_connection().await;
                 state.spotify_auth.load().await;
             });
+            DiagnosticsLog::info("persisted auth loaded");
 
             let emit_handle = handle.clone();
             let spectrum = Arc::clone(&state.spectrum);
@@ -149,6 +294,14 @@ pub fn run() {
             })();
 
             TRAY_READY.store(tray_result.is_ok(), Ordering::SeqCst);
+            if let Err(ref err) = tray_result {
+                DiagnosticsLog::info(&format!("tray setup failed: {err}"));
+            } else {
+                DiagnosticsLog::info("tray ready");
+            }
+
+            show_or_recreate_main_window(&handle);
+            DiagnosticsLog::info("tauri setup complete");
 
             Ok(())
         })
