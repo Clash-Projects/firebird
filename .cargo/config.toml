@@ -1,0 +1,6 @@
+[build]
+# Keep incremental compilation fast across workspace crates.
+incremental = true
+
+[net]
+retry = 3

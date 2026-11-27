@@ -1,0 +1,92 @@
+[package]
+name = "lastwave"
+version = "2.6.0"
+description = "LastWave Desktop (Tauri v2 backend)"
+authors = ["LastWave"]
+edition = "2021"
+
+[lib]
+name = "lastwave_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+firebird-models = { path = "../crates/firebird-models" }
+tauri = { version = "2", features = [] }
+
+# Async & HTTP
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "cookies", "stream", "rustls-tls"] }
+axum = "0.8"
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
+futures-util = "0.3"
+
+# Serialization & errors
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+
+# Storage, crypto & utilities
+rusqlite = { version = "0.32", features = ["bundled"] }
+keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service"] }
+sha1 = "0.10"
+sha2 = "0.10"
+hmac = "0.12"
+md-5 = "0.10"
+aes = "0.8"
+ctr = "0.9"
+hex = "0.4"
+base64 = "0.22"
+rand = "0.8"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+flate2 = "1"
+walkdir = "2"
+dirs = "6"
+url = "2"
+regex = "1"
+quick-xml = { version = "0.37", features = ["serialize"] }
+unicode-normalization = "0.1"
+lofty = "0.22"
+
+# QuickJS
+rquickjs = "0.14.0"
+
+# Audio (deferred runtime libmpv loading)
+libloading = "0.8"
+
+[target.'cfg(windows)'.dependencies]
+windows-core = "0.58"
+windows = { version = "0.58", features = [
+    "implement",
+    "Win32_Devices_FunctionDiscovery",
+    "Win32_Foundation",
+    "Win32_Media",
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
+    "Win32_Media_KernelStreaming",
+    "Win32_Media_Multimedia",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_System_WinRT",
+    "Win32_UI_Accessibility",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_PropertiesSystem",
+    "Win32_UI_WindowsAndMessaging",
+    "Media",
+    "Media_Control",
+    "Media_Playback",
+    "Storage_Streams",
+    "Foundation",
+] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = "5"
+libc = "0.2"

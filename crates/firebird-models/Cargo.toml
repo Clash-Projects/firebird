@@ -1,0 +1,13 @@
+[package]
+name = "firebird-models"
+version = "2.6.0"
+description = "Shared domain models for Firebird (LastWave Tauri backend)"
+authors = ["Clash-Projects"]
+edition = "2021"
+
+[dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+unicode-normalization = "0.1"
