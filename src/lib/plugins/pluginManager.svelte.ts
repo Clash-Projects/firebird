@@ -37,6 +37,7 @@ interface DiskPluginEntry {
   manifest: PluginManifest;
   enabled: boolean;
   content: string;
+  scriptContent?: string;
 }
 
 interface DiskPluginsState {
@@ -71,6 +72,7 @@ function normalizeManifest(raw: Partial<PluginManifest> & { type?: string }): Pl
     description: String(raw.description || ''),
     type,
     entry: String(raw.entry || raw.css || defaultEntryFor(type)),
+    script: raw.script ? String(raw.script) : undefined,
     tags: Array.isArray(raw.tags) ? raw.tags.map((t) => String(t).trim()).filter(Boolean) : [],
     previews,
     updatedAt: raw.updatedAt ? String(raw.updatedAt) : undefined,
@@ -128,6 +130,7 @@ class PluginManager {
   activePaletteId = $state<string | null>(null);
   activeThemeId = $state<string | null>(null);
   private initialized = false;
+  private scriptCleanups = new Map<string, () => void>();
 
   activeWidgets = $derived(
     this.safeMode || this.allDisabled
@@ -168,6 +171,7 @@ class PluginManager {
             builtin: false,
             cssCode: isCss ? item.content : undefined,
             sourceCode: isCss ? undefined : item.content,
+            scriptCode: item.scriptContent ?? undefined,
             error:
               manifest.apiVersion !== SUPPORTED_API_VERSION
                 ? `Incompatible apiVersion ${manifest.apiVersion} (requires ${SUPPORTED_API_VERSION})`
@@ -211,6 +215,54 @@ class PluginManager {
     return true;
   }
 
+  private stopPluginScript(id: string) {
+    const cleanup = this.scriptCleanups.get(id);
+    if (cleanup) {
+      try {
+        cleanup();
+      } catch {
+        // Ignore plugin teardown errors
+      }
+      this.scriptCleanups.delete(id);
+    }
+    this.stopPluginScript(id);
+    uiSlots.clearForPlugin(id);
+  }
+
+  private syncPluginScripts() {
+    if (this.safeMode || this.allDisabled) {
+      for (const id of [...this.scriptCleanups.keys()]) {
+        this.stopPluginScript(id);
+      }
+      return;
+    }
+
+    const activeIds = new Set<string>();
+    for (const p of this.plugins) {
+      if (p.enabled && p.scriptCode && this.checkCompatibility(p)) {
+        activeIds.add(p.manifest.id);
+      }
+    }
+
+    for (const id of [...this.scriptCleanups.keys()]) {
+      if (!activeIds.has(id)) {
+        this.stopPluginScript(id);
+      }
+    }
+
+    for (const p of this.plugins) {
+      const id = p.manifest.id;
+      if (!activeIds.has(id) || this.scriptCleanups.has(id) || !p.scriptCode) continue;
+      try {
+        const fn = new Function('LastWave', 'pluginId', p.scriptCode);
+        const maybeCleanup = fn(window.LastWave, id);
+        this.scriptCleanups.set(id, typeof maybeCleanup === 'function' ? maybeCleanup : () => {});
+      } catch (err) {
+        p.error = err instanceof Error ? err.message : 'Theme script execution failed';
+      }
+    }
+  }
+
   private reapplyActiveMods() {
     if (this.safeMode || this.allDisabled) {
       this.activePaletteId = null;
@@ -218,6 +270,7 @@ class PluginManager {
       applyPaletteCss(null);
       applyThemeCss(null);
       applySnippetsCss([]);
+      this.syncPluginScripts();
       return;
     }
 
@@ -234,6 +287,7 @@ class PluginManager {
     applyThemeCss(theme?.cssCode ?? null);
 
     this.syncSnippets();
+    this.syncPluginScripts();
   }
 
   private syncSnippets() {
@@ -306,6 +360,7 @@ class PluginManager {
     }
     const target = this.plugins.find((p) => p.manifest.id === id && p.manifest.type === 'theme');
     applyThemeCss(this.safeMode || this.allDisabled ? null : (target?.cssCode ?? null));
+    this.syncPluginScripts();
     savePluginRecords(this.plugins);
   }
 
@@ -336,7 +391,7 @@ class PluginManager {
     savePluginRecords(this.plugins);
   }
 
-  async installPlugin(manifestInput: PluginManifest, payload: { cssCode?: string; sourceCode?: string }) {
+  async installPlugin(manifestInput: PluginManifest, payload: { cssCode?: string; sourceCode?: string; scriptCode?: string }) {
     const manifest = normalizeManifest(manifestInput);
     if (!manifest) {
       throw new Error('Invalid plugin manifest: only palette, theme, snippet, and widget are supported.');
@@ -353,15 +408,20 @@ class PluginManager {
     }
 
     if (isTauriRuntime()) {
-      await ipcInvoke('plugins_install', { manifest, content });
+      await ipcInvoke('plugins_install', {
+        manifest,
+        content,
+        scriptContent: payload.scriptCode ?? null,
+      });
     }
 
     const record: PluginRecord = {
       manifest,
       enabled: true,
       builtin: false,
-      cssCode: manifest.type === 'widget' ? undefined : content,
+      cssCode: manifest.type !== 'widget' ? content : undefined,
       sourceCode: manifest.type === 'widget' ? content : undefined,
+      scriptCode: payload.scriptCode,
       error: null,
     };
     this.plugins = [record, ...this.plugins.filter((p) => p.manifest.id !== manifest.id)];
@@ -379,6 +439,7 @@ class PluginManager {
     if (isTauriRuntime()) {
       await ipcInvoke('plugins_uninstall', { id });
     }
+    this.stopPluginScript(id);
     uiSlots.clearForPlugin(id);
     this.plugins = this.plugins.filter((p) => p.manifest.id !== id);
     if (rec.manifest.type === 'snippet') this.syncSnippets();
@@ -572,9 +633,12 @@ class PluginManager {
     if (!manifest) throw new Error('Invalid plugin manifest in registry');
 
     const entryText = await this.fetchAssetText(ref, manifest.entry || entry.entry || defaultEntryFor(manifest.type));
+    const scriptText = manifest.script ? await this.fetchAssetText(ref, manifest.script) : undefined;
     await this.installPlugin(
       manifest,
-      manifest.type === 'widget' ? { sourceCode: entryText } : { cssCode: entryText }
+      manifest.type === 'widget'
+        ? { sourceCode: entryText, scriptCode: scriptText }
+        : { cssCode: entryText, scriptCode: scriptText }
     );
     featuresStore.showToast({
       title: `Installed ${manifest.name}`,
@@ -651,9 +715,12 @@ class PluginManager {
 
     const baseUrl = manifestUrl.slice(0, manifestUrl.lastIndexOf('/'));
     const entryText = await this.fetchRemoteText(`${baseUrl}/${manifest.entry}`);
+    const scriptText = manifest.script ? await this.fetchRemoteText(`${baseUrl}/${manifest.script}`) : undefined;
     await this.installPlugin(
       manifest,
-      manifest.type === 'widget' ? { sourceCode: entryText } : { cssCode: entryText }
+      manifest.type === 'widget'
+        ? { sourceCode: entryText, scriptCode: scriptText }
+        : { cssCode: entryText, scriptCode: scriptText }
     );
     const authorLabel = normalizeAuthorObject(manifest.author).name;
     featuresStore.showToast({

@@ -80,7 +80,11 @@
               {#if customApp}
                 <CustomAppHost app={customApp} />
               {:else if router.path === '/now-playing'}
-                <NowPlayingPage />
+                {#if uiSlots.nowPlayingOverride}
+                  <CustomAppHost app={uiSlots.nowPlayingOverride} />
+                {:else}
+                  <NowPlayingPage />
+                {/if}
               {:else if router.path === '/home/layout'}
                 <HomeLayoutPage />
               {:else if router.matches('/search')}
@@ -151,7 +155,13 @@
       </div>
 
       <WidgetSandboxHost />
-      <PlayerDock />
+      {#if uiSlots.playerBarOverride}
+        <div data-lw="player-bar" class="h-[var(--lw-dock-h,80px)] w-full flex-none">
+          <CustomAppHost app={uiSlots.playerBarOverride} />
+        </div>
+      {:else}
+        <PlayerDock />
+      {/if}
     </div>
   </WaveResizeArea>
 {/if}

@@ -38,6 +38,8 @@ pub struct PluginManifestDisk {
     pub description: String,
     pub entry: String,
     #[serde(default)]
+    pub script: Option<String>,
+    #[serde(default)]
     pub tags: Option<Vec<String>>,
     #[serde(default)]
     pub previews: Option<Vec<String>>,
@@ -67,6 +69,8 @@ pub struct InstalledPluginDisk {
     pub manifest: PluginManifestDisk,
     pub enabled: bool,
     pub content: String,
+    #[serde(default)]
+    pub script_content: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -159,11 +163,17 @@ pub fn load_plugins_from_dir(root: &Path, safe_mode: bool) -> PluginsStateRespon
             }
             let entry_path = dir.join(&manifest.entry);
             let content = fs::read_to_string(&entry_path).unwrap_or_default();
+            let script_content = manifest
+                .script
+                .as_deref()
+                .filter(|s| is_safe_segment(s))
+                .and_then(|s| fs::read_to_string(dir.join(s)).ok());
             let enabled = runtime.enabled.get(&manifest.id).copied().unwrap_or(false);
             plugins.push(InstalledPluginDisk {
                 manifest,
                 enabled,
                 content,
+                script_content,
             });
         }
     }
@@ -182,14 +192,23 @@ pub fn install_plugin_to_dir(
     root: &Path,
     manifest: PluginManifestDisk,
     content: &str,
+    script_content: Option<&str>,
 ) -> Result<InstalledPluginDisk, String> {
     validate_manifest(&manifest)?;
+    if let Some(ref s) = manifest.script {
+        if !is_safe_segment(s) {
+            return Err(format!("Invalid script filename '{s}'"));
+        }
+    }
     let plugin_dir = root.join(&manifest.id);
     fs::create_dir_all(&plugin_dir).map_err(|e| e.to_string())?;
 
     let manifest_json = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
     fs::write(plugin_dir.join("manifest.json"), manifest_json).map_err(|e| e.to_string())?;
     fs::write(plugin_dir.join(&manifest.entry), content).map_err(|e| e.to_string())?;
+    if let (Some(ref s), Some(code)) = (&manifest.script, script_content) {
+        fs::write(plugin_dir.join(s), code).map_err(|e| e.to_string())?;
+    }
 
     let mut runtime = load_runtime_state(root);
     runtime.enabled.insert(manifest.id.clone(), true);
@@ -199,6 +218,7 @@ pub fn install_plugin_to_dir(
         manifest,
         enabled: true,
         content: content.to_string(),
+        script_content: script_content.map(|s| s.to_string()),
     })
 }
 
@@ -218,9 +238,10 @@ pub fn plugins_install(
     state: State<'_, AppState>,
     manifest: PluginManifestDisk,
     content: String,
+    script_content: Option<String>,
 ) -> Result<InstalledPluginDisk, String> {
     let root = plugins_root(&state.app_support_dir);
-    install_plugin_to_dir(&root, manifest, &content)
+    install_plugin_to_dir(&root, manifest, &content, script_content.as_deref())
 }
 
 #[tauri::command]
@@ -323,6 +344,7 @@ mod tests {
             },
             description: "Test plugin".to_string(),
             entry: "snippet.css".to_string(),
+            script: None,
             tags: Some(vec!["test".to_string()]),
             previews: Some(vec!["previews/1.png".to_string()]),
             preview: None,
@@ -353,6 +375,7 @@ mod tests {
             &dir,
             sample_manifest("snippet", 1),
             "[data-lw='track-row'] { height: 42px; }",
+            None,
         )
         .expect("install should succeed");
         assert!(installed.enabled);

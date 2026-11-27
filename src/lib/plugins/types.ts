@@ -21,6 +21,7 @@ export interface PluginManifest {
   description: string;
   type: PluginType;
   entry: string;
+  script?: string;
   tags?: string[];
   previews?: string[];
   preview?: string;
@@ -43,6 +44,7 @@ export interface PluginRecord {
   builtin?: boolean;
   sourceCode?: string;
   cssCode?: string;
+  scriptCode?: string;
   error?: string | null;
 }
 
@@ -127,6 +129,12 @@ export interface CustomAppRouteSlot {
   mount: (container: HTMLElement) => void | (() => void);
 }
 
+export interface OverrideViewSlot {
+  id: string;
+  pluginId: string;
+  mount: (container: HTMLElement) => void | (() => void);
+}
+
 export interface ScopedPluginStorage {
   get<T = unknown>(key: string, fallback?: T): T | undefined;
   set(key: string, value: unknown): void;
@@ -148,11 +156,29 @@ export interface LastWaveAPI {
     readonly previous: () => void;
     readonly seek: (sec: number) => void;
     readonly setVolume: (val: number) => void;
+    readonly toggleMute: () => void;
+    readonly isMuted: () => boolean;
+    readonly getVolume: () => number;
+    readonly toggleShuffle: () => void;
+    readonly getShuffle: () => boolean;
+    readonly cycleRepeat: () => void;
+    readonly getRepeat: () => 'off' | 'all' | 'one';
     readonly getCurrentTrack: () => Track | null;
     readonly isPlaying: () => boolean;
+    readonly isBuffering: () => boolean;
     readonly getQueue: () => Track[];
     readonly getPosition: () => number;
+    readonly getDuration: () => number;
     readonly onSpectrum: (fn: (frame: SpectrumFrame) => void) => () => void;
+  };
+  readonly library: {
+    readonly isLiked: (trackId: string) => boolean;
+    readonly toggleLike: (track?: Track | null) => void;
+  };
+  readonly nav: {
+    readonly navigate: (path: string) => void;
+    readonly back: () => void;
+    readonly getPath: () => string;
   };
   readonly events: {
     readonly on: (event: PlayerEventType, fn: (payload: unknown) => void) => () => void;
@@ -163,6 +189,8 @@ export interface LastWaveAPI {
     readonly registerPlayerBarControl: (item: Omit<PlayerBarControlSlot, 'pluginId'>, pluginId: string) => () => void;
     readonly registerTrackMenuItem: (item: Omit<TrackContextMenuItemSlot, 'pluginId'>, pluginId: string) => () => void;
     readonly registerCustomApp: (item: Omit<CustomAppRouteSlot, 'pluginId'>, pluginId: string) => () => void;
+    readonly registerNowPlayingView: (item: Omit<OverrideViewSlot, 'pluginId'>, pluginId: string) => () => void;
+    readonly registerPlayerBar: (item: Omit<OverrideViewSlot, 'pluginId'>, pluginId: string) => () => void;
     readonly showToast: (title: string, subtitle?: string, severity?: 'info' | 'success' | 'warning' | 'error') => void;
   };
   readonly storage: (pluginId: string) => ScopedPluginStorage;

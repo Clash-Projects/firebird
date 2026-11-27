@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { CustomAppRouteSlot } from '$src/lib/plugins/types';
+  import type { CustomAppRouteSlot, OverrideViewSlot } from '$src/lib/plugins/types';
 
   interface Props {
-    app: CustomAppRouteSlot;
+    app: CustomAppRouteSlot | OverrideViewSlot;
   }
 
   let { app }: Props = $props();

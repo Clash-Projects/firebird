@@ -1,11 +1,15 @@
 import { Channel } from '@tauri-apps/api/core';
+import { router } from '$src/app/router.svelte';
+import { toggleTrackLike } from '$src/app/trackActions';
 import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
 import { featuresStore } from '$src/state/features.svelte';
+import { libraryStore } from '$src/state/library.svelte';
 import { playerStore, type PlayerEventType } from '$src/state/player.svelte';
 import { createPluginStorage } from './storage';
 import type {
   CustomAppRouteSlot,
   LastWaveAPI,
+  OverrideViewSlot,
   PlayerBarControlSlot,
   SidebarSlotItem,
   SpectrumFrame,
@@ -68,11 +72,31 @@ export function installLastWaveApi(): LastWaveAPI {
       previous: () => playerStore.previous(),
       seek: (sec: number) => playerStore.seek(sec),
       setVolume: (val: number) => playerStore.setVolume(val),
+      toggleMute: () => playerStore.toggleMute(),
+      isMuted: () => playerStore.muted,
+      getVolume: () => playerStore.volume,
+      toggleShuffle: () => playerStore.toggleShuffle(),
+      getShuffle: () => playerStore.shuffle,
+      cycleRepeat: () => playerStore.cycleRepeat(),
+      getRepeat: () => playerStore.repeat,
       getCurrentTrack: () => playerStore.currentTrack,
       isPlaying: () => playerStore.isPlaying,
+      isBuffering: () => playerStore.isBuffering,
       getQueue: () => [...playerStore.queue],
       getPosition: () => playerStore.positionSec,
+      getDuration: () => playerStore.durationSec,
       onSpectrum: (fn: (frame: SpectrumFrame) => void) => subscribeSpectrum(fn),
+    }),
+    library: Object.freeze({
+      isLiked: (trackId: string) => libraryStore.isLiked(trackId),
+      toggleLike: (track = playerStore.currentTrack) => {
+        if (track) toggleTrackLike(track);
+      },
+    }),
+    nav: Object.freeze({
+      navigate: (path: string) => router.navigate(path),
+      back: () => router.back(),
+      getPath: () => router.path,
     }),
     events: Object.freeze({
       on: (event: PlayerEventType, fn: (payload: unknown) => void) => playerStore.on(event, fn),
@@ -87,6 +111,10 @@ export function installLastWaveApi(): LastWaveAPI {
         uiSlots.registerTrackMenuItem({ ...item, pluginId }),
       registerCustomApp: (item: Omit<CustomAppRouteSlot, 'pluginId'>, pluginId: string) =>
         uiSlots.registerCustomApp({ ...item, pluginId }),
+      registerNowPlayingView: (item: Omit<OverrideViewSlot, 'pluginId'>, pluginId: string) =>
+        uiSlots.registerNowPlayingView({ ...item, pluginId }),
+      registerPlayerBar: (item: Omit<OverrideViewSlot, 'pluginId'>, pluginId: string) =>
+        uiSlots.registerPlayerBar({ ...item, pluginId }),
       showToast: (
         title: string,
         subtitle?: string,
