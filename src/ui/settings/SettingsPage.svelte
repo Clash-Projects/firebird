@@ -20,6 +20,7 @@
   import LibrarySettings from './LibrarySettings.svelte';
   import PerformanceModeCard from './PerformanceModeCard.svelte';
   import PluginsSettings from './PluginsSettings.svelte';
+  import ScrobblerSettings from './ScrobblerSettings.svelte';
   import { searchSettings } from './settingsSearch';
   import SpotifyConnect from './SpotifyConnect.svelte';
   import YtProfileChooser from './YtProfileChooser.svelte';
@@ -367,52 +368,7 @@
     {:else if activeSection === 'plugins'}
       <PluginsSettings />
     {:else if activeSection === 'lastfm'}
-      <div class="space-y-3">
-        <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <div>
-            <div class="text-[13.5px] font-semibold">Last.fm {settingsStore.lastfmUser ? `(${settingsStore.lastfmUser})` : ''}</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">
-              {settingsStore.lastfmConnected ? 'Serialized offline scrobble queue active' : 'Not connected'}
-            </div>
-          </div>
-          <div class="flex items-center gap-2">
-            {#if settingsStore.lastfmConnected}
-              <Buttons
-                variant="secondary"
-                size="sm"
-                onclick={() => {
-                  void ipcInvoke('lastfm_sign_out');
-                  settingsStore.lastfmConnected = false;
-                  settingsStore.lastfmUser = '';
-                }}
-              >
-                Sign Out
-              </Buttons>
-            {:else}
-              <Buttons
-                variant="primary"
-                size="sm"
-                onclick={() => {
-                  void ipcInvoke<{ authUrl?: string }>('lastfm_begin_web_auth').then((res) => {
-                    if (res?.authUrl) window.open(res.authUrl, '_blank');
-                  });
-                }}
-              >
-                Connect
-              </Buttons>
-            {/if}
-            <Buttons variant="ghost" size="sm" onclick={() => (keyGuideOpen = true)}>API Key Guide</Buttons>
-          </div>
-        </div>
-        <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <span class="text-[13px] font-semibold">ListenBrainz Scrobbling</span>
-          <input type="checkbox" bind:checked={settingsStore.listenBrainzConnected} class="h-4 w-4 accent-[var(--lw-accent)]" />
-        </label>
-        <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-          <span class="text-[13px] font-semibold">Libre.fm Scrobbling</span>
-          <input type="checkbox" bind:checked={settingsStore.libreFmConnected} class="h-4 w-4 accent-[var(--lw-accent)]" />
-        </label>
-      </div>
+      <ScrobblerSettings onOpenGuide={() => (keyGuideOpen = true)} />
     {:else if activeSection === 'sources'}
       <div class="rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4 text-[13px] text-[var(--lw-text-secondary)]">
         Stream waterfall: Lossless FLAC 24-bit / Dolby Atmos Addons → YouTube Music (VISIONOS / Opus) → Local Library.
