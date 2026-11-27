@@ -28,11 +28,29 @@
       : ''
   );
 
-  function seekAtPointer(e: MouseEvent) {
+  function calcSeekSec(e: PointerEvent): number {
     const el = e.currentTarget as HTMLElement;
     const rect = el.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    playerStore.seek(pct * playerStore.durationSec);
+    return pct * playerStore.durationSec;
+  }
+
+  function onSeekDown(e: PointerEvent) {
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    playerStore.seeking = true;
+    playerStore.positionSec = calcSeekSec(e);
+  }
+
+  function onSeekMove(e: PointerEvent) {
+    if (!playerStore.seeking) return;
+    playerStore.positionSec = calcSeekSec(e);
+  }
+
+  function onSeekUp(e: PointerEvent) {
+    if (!playerStore.seeking) return;
+    const target = calcSeekSec(e);
+    playerStore.seeking = false;
+    playerStore.seek(target);
   }
 
   function volumeAtPointer(e: MouseEvent) {
@@ -148,9 +166,12 @@
       </span>
       <button
         type="button"
-        onclick={seekAtPointer}
+        onpointerdown={onSeekDown}
+        onpointermove={onSeekMove}
+        onpointerup={onSeekUp}
+        onpointercancel={() => (playerStore.seeking = false)}
         aria-label="Seek track position"
-        class="group relative flex h-4 flex-1 cursor-pointer items-center"
+        class="group relative flex h-4 flex-1 cursor-pointer items-center touch-none"
       >
         <span class="relative h-[3px] w-full overflow-hidden rounded-full bg-white/15 transition-[height] group-hover:h-[4px]">
           <span

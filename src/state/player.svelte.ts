@@ -17,6 +17,7 @@ interface BackendPlayerSnapshot {
   queue?: BackendPlayableTrack[];
   currentIndex?: number;
   isPlaying?: boolean;
+  isBuffering?: boolean;
   positionMs?: number;
   durationMs?: number;
   volume?: number;
@@ -24,6 +25,7 @@ interface BackendPlayerSnapshot {
   repeatMode?: RepeatMode;
   speed?: number;
   sleepMinutes?: number | null;
+  error?: string | null;
 }
 
 function toPlayableTrack(track: Track): BackendPlayableTrack {
@@ -67,7 +69,11 @@ class PlayerStore {
   queue = $state<Track[]>([]);
   currentIndex = $state(0);
   isPlaying = $state(false);
+  isBuffering = $state(false);
   positionSec = $state(0);
+  backendDurationSec = $state(0);
+  seeking = $state(false);
+  lastError = $state<string | null>(null);
   volume = $state(0.82);
   muted = $state(false);
   shuffle = $state(false);
@@ -78,10 +84,14 @@ class PlayerStore {
   skipSilence = $state(false);
   sleepTimerMin = $state<number | null>(null);
   private preMuteVolume = 0.82;
+  private snapAnchorMs = 0;
+  private snapAnchorTime = 0;
   private listeners = new Map<PlayerEventType, Set<Listener>>();
 
   currentTrack = $derived<Track | null>(this.queue[this.currentIndex] ?? null);
-  durationSec = $derived(this.currentTrack?.durationSec ?? 0);
+  durationSec = $derived(
+    this.backendDurationSec > 0 ? this.backendDurationSec : (this.currentTrack?.durationSec ?? 0)
+  );
   progress = $derived(this.durationSec > 0 ? Math.min(1, this.positionSec / this.durationSec) : 0);
 
   async connectBackend(): Promise<() => void> {
@@ -89,10 +99,26 @@ class PlayerStore {
     const applySnap = (snap: BackendPlayerSnapshot | null) => {
       if (!snap) return;
       if (Array.isArray(snap.queue) && snap.queue.length > 0) {
-        this.queue = snap.queue.map(fromPlayableTrack);
+        const incoming = snap.queue.map(fromPlayableTrack);
+        const sameQueue =
+          incoming.length === this.queue.length &&
+          incoming.every((t, i) => t.id === this.queue[i]?.id);
+        if (!sameQueue) {
+          this.queue = incoming;
+        }
       }
       if (typeof snap.isPlaying === 'boolean') this.isPlaying = snap.isPlaying;
-      if (typeof snap.positionMs === 'number') this.positionSec = snap.positionMs / 1000;
+      if (typeof snap.isBuffering === 'boolean') this.isBuffering = snap.isBuffering;
+      if (typeof snap.durationMs === 'number' && snap.durationMs > 0) {
+        this.backendDurationSec = snap.durationMs / 1000;
+      }
+      if (typeof snap.positionMs === 'number') {
+        this.snapAnchorMs = snap.positionMs;
+        this.snapAnchorTime = performance.now();
+        if (!this.seeking) {
+          this.positionSec = snap.positionMs / 1000;
+        }
+      }
       if (typeof snap.volume === 'number') {
         this.volume = Math.max(0, Math.min(1, snap.volume));
         this.muted = this.volume === 0;
@@ -110,12 +136,33 @@ class PlayerStore {
       if (snap.repeatMode === 'off' || snap.repeatMode === 'all' || snap.repeatMode === 'one') {
         this.repeat = snap.repeatMode;
       }
+      if (snap.error) {
+        this.lastError = snap.error;
+      } else {
+        this.lastError = null;
+      }
     };
 
     const initial = await ipcInvoke<BackendPlayerSnapshot>('player_snapshot');
     applySnap(initial);
     const unlisten = await ipcListen<BackendPlayerSnapshot>('player:snapshot', applySnap);
+
+    // Smoothly interpolate the seekbar between 200ms backend ticks and re-sync periodically.
+    const smoothTimer = setInterval(() => {
+      if (!this.isPlaying || this.isBuffering || this.seeking || this.snapAnchorTime === 0) return;
+      const elapsedSec = ((performance.now() - this.snapAnchorTime) / 1000) * this.speed;
+      const next = this.snapAnchorMs / 1000 + elapsedSec;
+      this.positionSec = this.durationSec > 0 ? Math.min(this.durationSec, next) : next;
+    }, 100);
+
+    const pollTimer = setInterval(() => {
+      if (!this.isPlaying || this.seeking) return;
+      void ipcInvoke<BackendPlayerSnapshot>('player_snapshot').then(applySnap);
+    }, 1000);
+
     return () => {
+      clearInterval(smoothTimer);
+      clearInterval(pollTimer);
       unlisten?.();
     };
   }
@@ -168,6 +215,9 @@ class PlayerStore {
       void ipcInvoke('player_play', { track: toPlayableTrack(track) });
     }
     this.positionSec = 0;
+    this.backendDurationSec = track.durationSec || 0;
+    this.snapAnchorMs = 0;
+    this.snapAnchorTime = 0;
     this.isPlaying = true;
     this.emit('trackChange', this.currentTrack);
     this.emit('playState', { isPlaying: true });
@@ -194,8 +244,11 @@ class PlayerStore {
   }
 
   seek(sec: number) {
-    this.positionSec = Math.max(0, Math.min(this.durationSec, sec));
-    void ipcInvoke('player_seek', { positionMs: Math.round(this.positionSec * 1000) });
+    const clamped = Math.max(0, Math.min(this.durationSec, sec));
+    this.positionSec = clamped;
+    this.snapAnchorMs = Math.round(clamped * 1000);
+    this.snapAnchorTime = performance.now();
+    void ipcInvoke('player_seek', { positionMs: this.snapAnchorMs });
     this.emit('progress', { positionSec: this.positionSec, durationSec: this.durationSec });
   }
 
