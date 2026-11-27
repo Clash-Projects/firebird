@@ -2,12 +2,14 @@
 //! and DiagnosticsLog / LogBundle.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use serde_json::{Map, Value};
 use tauri::State;
 
 use crate::audio::play_diag::PlayDiag;
 use crate::commands::state::AppState;
+use crate::integrations::scrobblers::extra_scrobblers::ExtraScrobbler;
 use crate::models::app_info::APP_VERSION;
 use crate::models::app_language::AppLanguage;
 use crate::storage::diagnostics_log::DiagnosticsLog;
@@ -23,6 +25,17 @@ pub fn prefs_get(state: State<'_, AppState>, key: String) -> Option<Value> {
 #[tauri::command]
 pub fn prefs_set_bool(state: State<'_, AppState>, key: String, value: bool) {
     state.prefs.set_bool(&key, value);
+    if key == "lw_discord_rich_presence" {
+        let discord = Arc::clone(&state.discord_presence);
+        let snap = state.playback.snapshot();
+        tauri::async_runtime::spawn(async move {
+            if value {
+                discord.on_snapshot(snap).await;
+            } else {
+                discord.shutdown().await;
+            }
+        });
+    }
 }
 
 #[tauri::command]
@@ -57,8 +70,20 @@ pub fn prefs_get_all_settings(state: State<'_, AppState>) -> Value {
     m.insert("languageTag".into(), Value::String(p.app_language_tag()));
     m.insert("themeMode".into(), Value::String(p.theme_mode()));
     m.insert("amoled".into(), Value::Bool(p.amoled()));
+    m.insert("customThemeBase".into(), Value::from(p.custom_theme_base()));
     m.insert("accentMode".into(), Value::String(p.accent_mode()));
+    m.insert("accentSource".into(), Value::String(p.accent_source()));
     m.insert("accentColor".into(), Value::from(p.accent_color()));
+    m.insert("glassmorphism".into(), Value::Bool(p.glassmorphism()));
+    m.insert("liquidGlass".into(), Value::Bool(p.liquid_glass()));
+    m.insert("wavySeekbar".into(), Value::Bool(p.wavy_seekbar()));
+    m.insert("appFont".into(), Value::String(p.app_font()));
+    m.insert("uiScale".into(), Value::from(p.ui_scale()));
+    m.insert("nowPlayingStyle".into(), Value::String(p.now_playing_style()));
+    m.insert(
+        "nowPlayingAutoHideSec".into(),
+        Value::from(p.now_playing_auto_hide_seconds()),
+    );
     m.insert("dynamicNowPlaying".into(), Value::Bool(p.dynamic_now_playing()));
     m.insert("closeToTray".into(), Value::Bool(p.close_to_tray()));
     m.insert("miniPlayerStyle".into(), Value::String(p.mini_player_style()));
@@ -83,10 +108,17 @@ pub fn prefs_get_all_settings(state: State<'_, AppState>) -> Value {
     m.insert("primaryScrobbler".into(), Value::String(p.primary_scrobbler()));
     m.insert("scrobbleNowPlaying".into(), Value::Bool(p.scrobble_now_playing()));
     m.insert("scrobblePercent".into(), Value::from(p.scrobble_percent()));
+    m.insert("listenBrainzConnected".into(), Value::Bool(state.listen_brainz.connected()));
+    m.insert("listenBrainzUser".into(), Value::String(state.listen_brainz.username()));
+    m.insert("libreFmConnected".into(), Value::Bool(state.libre_fm.connected()));
+    m.insert("libreFmUser".into(), Value::String(state.libre_fm.username()));
+    m.insert("discordRichPresence".into(), Value::Bool(p.discord_rich_presence()));
+    m.insert("macosNowPlaying".into(), Value::Bool(p.macos_now_playing()));
     m.insert("wordByWord".into(), Value::Bool(p.word_by_word()));
     m.insert("lyricsProviderId".into(), Value::String(p.lyrics_provider_id()));
     m.insert("lyricsAnimation".into(), Value::String(p.lyrics_animation()));
     m.insert("lyricsTextScale".into(), Value::from(p.lyrics_text_scale()));
+    m.insert("lyricsTransliteration".into(), Value::Bool(p.lyrics_transliteration()));
     m.insert("lyricsTranslationLang".into(), Value::String(p.lyrics_translation_lang()));
     m.insert("lyricsAutoHideSeconds".into(), Value::from(p.lyrics_auto_hide_seconds()));
     m.insert("podcastsEnabled".into(), Value::Bool(p.podcasts_enabled()));
@@ -94,6 +126,7 @@ pub fn prefs_get_all_settings(state: State<'_, AppState>) -> Value {
     m.insert("spotifyCanvasEnabled".into(), Value::Bool(p.spotify_canvas_enabled()));
     m.insert("preferSpotifyCanvas".into(), Value::Bool(p.prefer_spotify_canvas()));
     m.insert("recommendationSource".into(), Value::String(p.recommendation_source()));
+    m.insert("verboseLogs".into(), Value::Bool(p.verbose_logs()));
     Value::Object(m)
 }
 

@@ -105,7 +105,7 @@
     settingsStore.bitPerfectEnabled = enabled;
     settingsStore.exclusiveMode = enabled;
     void ipcInvoke('audio_output_set_bit_perfect', { enabled });
-    void ipcInvoke('audio_output_set_exclusive', { enabled });
+    void ipcInvoke('audio_output_set_exclusive', { exclusive: enabled });
   }
 
   function updateQualityTier(tier: string) {
@@ -279,7 +279,15 @@
               {#each CUSTOM_THEME_PRESETS as preset (preset.name)}
                 <button
                   type="button"
-                  onclick={() => setCustomBase(preset.color)}
+                  onclick={() => {
+                    setCustomBase(preset.color);
+                    settingsStore.saveStringPref('lw_theme_mode', 'custom');
+                    settingsStore.saveBoolPref('lw_amoled', false);
+                    const rgb = parseInt(preset.color.replace('#', ''), 16);
+                    if (Number.isFinite(rgb)) {
+                      settingsStore.saveIntPref('lw_custom_theme_base', (0xff000000 | rgb) >>> 0);
+                    }
+                  }}
                   title={preset.name}
                   class="h-7 w-7 cursor-pointer rounded-full border border-white/20 transition-transform hover:scale-110"
                   style:background={preset.color}
@@ -304,6 +312,7 @@
               onchange={(v) => {
                 settingsStore.accentSource = v as typeof settingsStore.accentSource;
                 settingsStore.saveStringPref('lw_accent_mode', v);
+                settingsStore.saveStringPref('lw_accent_source', v);
                 syncThemeDocument();
               }}
             />

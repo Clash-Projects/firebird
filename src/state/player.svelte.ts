@@ -94,6 +94,20 @@ class PlayerStore {
   );
   progress = $derived(this.durationSec > 0 ? Math.min(1, this.positionSec / this.durationSec) : 0);
 
+  hydrateFromPrefs(all: Record<string, unknown> | null) {
+    if (!all) return;
+    if (typeof all.crossfadeEnabled === 'boolean') {
+      if (!all.crossfadeEnabled) {
+        this.crossfadeSec = 0;
+      } else if (typeof all.crossfadeSeconds === 'number') {
+        this.crossfadeSec = all.crossfadeSeconds;
+      }
+    }
+    if (typeof all.autoMixEnabled === 'boolean') {
+      this.automixEnabled = all.autoMixEnabled;
+    }
+  }
+
   async connectBackend(): Promise<() => void> {
     if (!isTauriRuntime()) return () => {};
     const applySnap = (snap: BackendPlayerSnapshot | null) => {

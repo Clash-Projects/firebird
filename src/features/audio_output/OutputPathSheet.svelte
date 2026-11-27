@@ -31,7 +31,7 @@
     settingsStore.bitPerfectEnabled = enabled;
     settingsStore.exclusiveMode = enabled;
     void ipcInvoke('audio_output_set_bit_perfect', { enabled });
-    void ipcInvoke('audio_output_set_exclusive', { enabled });
+    void ipcInvoke('audio_output_set_exclusive', { exclusive: enabled });
   }
 </script>
 

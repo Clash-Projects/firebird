@@ -8,6 +8,12 @@ export type HazeMaterial = 'automatic' | 'haze' | 'solid';
 export type HazeIntensity = 'low' | 'medium' | 'high';
 export type AmbientStyle = 'aurora' | 'wash' | 'mesh' | 'off';
 
+function argbIntToHex(v: unknown): string | null {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return null;
+  const rgb = (Math.trunc(v) >>> 0) & 0xffffff;
+  return `#${rgb.toString(16).padStart(6, '0')}`;
+}
+
 class SettingsStore {
   themeMode = $state<ThemeMode>('dark');
   amoled = $state(false);
@@ -73,8 +79,8 @@ class SettingsStore {
     if (shelf) shelf.visible = !shelf.visible;
   }
 
-  async loadFromBackend() {
-    if (!isTauriRuntime()) return;
+  async loadFromBackend(): Promise<Record<string, unknown> | null> {
+    if (!isTauriRuntime()) return null;
     const [all, lastfm] = await Promise.all([
       ipcInvoke<Record<string, unknown>>('prefs_get_all_settings'),
       ipcInvoke<{ status?: string; username?: string }>('lastfm_auth_state'),
@@ -87,13 +93,49 @@ class SettingsStore {
         }
       }
       if (typeof all.amoled === 'boolean') this.amoled = all.amoled;
+      const customHex = argbIntToHex(all.customThemeBase);
+      if (customHex) this.customThemeBase = customHex;
+      const accentHex = argbIntToHex(all.accentColor);
+      if (accentHex) this.accentColor = accentHex;
+      if (typeof all.accentSource === 'string') {
+        const s = all.accentSource as AccentSource;
+        if (s === 'custom' || s === 'lastwave' || s === 'system' || s === 'artwork') {
+          this.accentSource = s;
+        }
+      }
+      if (typeof all.glassmorphism === 'boolean') this.glassmorphism = all.glassmorphism;
+      if (typeof all.liquidGlass === 'boolean') this.liquidGlass = all.liquidGlass;
+      if (typeof all.wavySeekbar === 'boolean') this.wavySeekbar = all.wavySeekbar;
+      if (typeof all.appFont === 'string') this.appFont = all.appFont;
       if (typeof all.languageTag === 'string' && all.languageTag) this.language = all.languageTag;
       if (typeof all.uiScale === 'number' && all.uiScale > 0) this.uiScale = all.uiScale;
+      if (typeof all.nowPlayingStyle === 'string') {
+        const nps = all.nowPlayingStyle as NowPlayingStyle;
+        if (nps === 'fullBleed' || nps === 'minimal' || nps === 'standard') {
+          this.nowPlayingStyle = nps;
+        }
+      }
+      if (typeof all.nowPlayingAutoHideSec === 'number') {
+        this.nowPlayingAutoHideSec = all.nowPlayingAutoHideSec;
+      }
       if (typeof all.loudnessMode === 'string') {
         const lm = all.loudnessMode as 'off' | 'track' | 'album' | 'lufs';
         if (lm === 'off' || lm === 'track' || lm === 'album' || lm === 'lufs') {
           this.loudnessMode = lm;
         }
+      }
+      if (typeof all.wasapiExclusive === 'boolean') this.exclusiveMode = all.wasapiExclusive;
+      if (typeof all.bitPerfect === 'boolean') this.bitPerfectEnabled = all.bitPerfect;
+      if (typeof all.discordRichPresence === 'boolean') {
+        this.discordRpcEnabled = all.discordRichPresence;
+      }
+      if (typeof all.macosNowPlaying === 'boolean') this.smtcEnabled = all.macosNowPlaying;
+      if (typeof all.scrobblerEnabled === 'boolean') this.scrobbleEnabled = all.scrobblerEnabled;
+      if (typeof all.listenBrainzConnected === 'boolean') {
+        this.listenBrainzConnected = all.listenBrainzConnected;
+      }
+      if (typeof all.libreFmConnected === 'boolean') {
+        this.libreFmConnected = all.libreFmConnected;
       }
       if (typeof all.downloadLyrics === 'boolean') this.embedLyrics = all.downloadLyrics;
       if (typeof all.downloadStructure === 'string' && all.downloadStructure) {
@@ -106,9 +148,10 @@ class SettingsStore {
       }
     }
     if (lastfm) {
-      this.lastfmConnected = Boolean(lastfm.username) && lastfm.status === 'authenticated';
+      this.lastfmConnected = Boolean(lastfm.username) && lastfm.status === 'signedIn';
       this.lastfmUser = lastfm.username || '';
     }
+    return all ?? null;
   }
 
   saveBoolPref(key: string, value: boolean) {

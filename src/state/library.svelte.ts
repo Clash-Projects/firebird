@@ -493,7 +493,7 @@ class LibraryStore {
 
   removeDownload(trackId: string) {
     this.downloads = this.downloads.filter((d) => d.trackId !== trackId);
-    void ipcInvoke('library_downloads_delete', { trackKey: trackId });
+    void ipcInvoke('library_downloads_delete', { key: trackId });
   }
 
   toggleFollowArtist(artistId: string) {

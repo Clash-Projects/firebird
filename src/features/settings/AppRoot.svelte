@@ -55,7 +55,10 @@
     });
 
     if (isTauriRuntime()) {
-      void settingsStore.loadFromBackend();
+      void settingsStore.loadFromBackend().then((all) => {
+        featuresStore.hydrateFromPrefs(all);
+        playerStore.hydrateFromPrefs(all);
+      });
       void ipcInvoke<BackendYtConnection>('yt_get_connection').then((conn) => {
         applyYtConnection(conn);
         if (conn?.connected && !conn.accountName) {
