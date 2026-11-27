@@ -28,7 +28,17 @@
   </div>
   {#if track}
     <div class="relative flex-1 overflow-hidden rounded-[12px] shadow-[var(--lw-shadow-artwork)]">
-      <AnimatedArtworkVideo posterUrl={track.artworkUrl} videoUrl={track.canvasUrl} radius={12} class="h-full w-full" />
+      {#key track.id}
+        <AnimatedArtworkVideo
+          posterUrl={track.artworkUrl}
+          title={track.title}
+          artist={track.artist}
+          album={track.album}
+          videoUrls={track.canvasUrl ? [track.canvasUrl] : []}
+          radius={12}
+          class="h-full w-full"
+        />
+      {/key}
       <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-4 text-white">
         <div class="text-[15px] font-bold">{track.title}</div>
         <div class="text-[12.5px] text-white/80">{track.artist}</div>

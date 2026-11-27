@@ -1,6 +1,5 @@
 <script lang="ts">
   import KaraokeLyricsView from '$src/features/lyrics/KaraokeLyricsView.svelte';
-  import { ipcInvoke } from '$src/lib/ipc';
   import { featuresStore } from '$src/state/features.svelte';
   import { playerStore } from '$src/state/player.svelte';
   import AmbientStage from '$src/ui/components/AmbientStage.svelte';
@@ -11,56 +10,11 @@
   import { immersiveState } from './immersive.svelte';
   import NowPlayingOverflowMenu from './NowPlayingOverflowMenu.svelte';
 
+  let { videoUrls }: { videoUrls: readonly string[] } = $props();
+
   let track = $derived(playerStore.currentTrack);
   let doc = $derived(track ? featuresStore.getLyrics(track.id) : null);
   let lyricsMissing = $derived(!featuresStore.lyricsLoading && (!doc || doc.lines.length === 0));
-
-  let canvasVideoUrl = $state('');
-  let lastTrackKey = '';
-
-  $effect(() => {
-    const t = track;
-    if (!t) {
-      canvasVideoUrl = '';
-      lastTrackKey = '';
-      return;
-    }
-    const key = `${t.id}|${t.title}|${t.artist}`;
-    if (key === lastTrackKey) return;
-    lastTrackKey = key;
-    canvasVideoUrl = '';
-
-    void (async () => {
-      try {
-        const spotify = await ipcInvoke<{ canvasUrl?: string; url?: string }>('spotify_canvas', {
-          title: t.title,
-          artist: t.artist,
-          durationMs: Math.round((t.durationSec || 0) * 1000),
-        });
-        const spUrl = spotify?.canvasUrl || spotify?.url || '';
-        if (lastTrackKey === key && spUrl) {
-          canvasVideoUrl = spUrl;
-          return;
-        }
-      } catch {
-        // Fallback to animated artwork lookup
-      }
-
-      try {
-        const anim = await ipcInvoke<{ url?: string; fallbackUrl?: string }>('artwork_lookup_animated', {
-          artist: t.artist,
-          album: t.album || '',
-          title: t.title,
-        });
-        const url = anim?.url || anim?.fallbackUrl || '';
-        if (lastTrackKey === key && url) {
-          canvasVideoUrl = url;
-        }
-      } catch {
-        // Use static cover art
-      }
-    })();
-  });
 </script>
 
 {#if track}
@@ -99,12 +53,17 @@
         );
       "
     >
-      <AnimatedArtworkVideo
-        posterUrl={track.artworkUrl}
-        videoUrl={canvasVideoUrl || undefined}
-        radius={0}
-        class="h-full w-full"
-      />
+      {#key track.id}
+        <AnimatedArtworkVideo
+          posterUrl={track.artworkUrl}
+          title={track.title}
+          artist={track.artist}
+          album={track.album}
+          {videoUrls}
+          radius={0}
+          class="h-full w-full"
+        />
+      {/key}
     </div>
 
     <!-- 2. Right Pane: Lyrics (or clean auto-hiding "Lyrics not found" notice) -->

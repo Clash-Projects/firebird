@@ -18,7 +18,8 @@ use serde_json::Value;
 use tokio::sync::Mutex;
 
 use super::{
-    canvas_artists_match, canvas_get_text, canvas_titles_match, normalize_canvas_match,
+    canvas_get_text, canvas_titles_match, confirmed_album_match, confirmed_artist_match,
+    confirmed_track_match, normalize_canvas_match,
     primary_canvas_artist, AnimatedArtwork, CanvasSource, CANVAS_USER_AGENT,
 };
 
@@ -326,7 +327,15 @@ impl AppleMusicCanvas {
         if Self::is_compilation(hit_name) || Self::is_compilation(hit_album) {
             return None;
         }
-        if !canvas_artists_match(artist, hit_artist, Some(title), Some(hit_name)) {
+        let title_ok = if album_is_self {
+            confirmed_album_match(title, hit_name)
+        } else {
+            confirmed_track_match(title, hit_name)
+        };
+        if !title_ok
+            || !confirmed_artist_match(artist, hit_artist)
+            || album.is_some_and(|album| !confirmed_album_match(album, hit_album))
+        {
             return None;
         }
 

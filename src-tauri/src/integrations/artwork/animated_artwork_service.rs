@@ -25,8 +25,8 @@ use super::community_canvas::CommunityCanvas;
 use super::official_artwork_service::OfficialArtworkService;
 use super::tidal_canvas::TidalCanvas;
 use super::{
-    clean_canvas_query, primary_canvas_artist, strip_canvas_subtitles, AnimatedArtwork,
-    CanvasSource, CANVAS_USER_AGENT,
+    clean_canvas_query, confirmed_album_match, confirmed_artist_match, primary_canvas_artist,
+    AnimatedArtwork, CanvasSource, CANVAS_USER_AGENT,
 };
 
 pub const ANIMATED_ARTWORK_BASE_URL: &str = "https://artwork.m8tec.top";
@@ -67,23 +67,10 @@ impl AnimatedArtworkQuery {
 }
 
 pub fn animated_artwork_cache_key(artist: &str, album: &str, title: &str) -> String {
-    let cleaned_album = clean_canvas_query(&strip_canvas_subtitles(album));
-    let b = OfficialArtworkService::normalize_for_search(if cleaned_album.is_empty() {
-        album
-    } else {
-        &cleaned_album
-    });
-    if !b.is_empty() {
-        let primary = primary_canvas_artist(&clean_canvas_query(artist));
-        let a_primary = OfficialArtworkService::normalize_for_search(if primary.is_empty() {
-            artist
-        } else {
-            &primary
-        });
-        return format!("anim6|{a_primary}|{b}");
-    }
-    let a = OfficialArtworkService::normalize_for_search(artist);
-    format!("anim6|{a}||{}", OfficialArtworkService::normalize_for_search(title))
+    let key_part = |value: &str| {
+        value.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase().replace('|', "%7C")
+    };
+    format!("anim7|{}|{}|{}", key_part(artist), key_part(album), key_part(title))
 }
 
 pub fn headers_for_animated_artwork_url(url: &str) -> HashMap<String, String> {
@@ -381,9 +368,9 @@ pub fn parse_animated_artwork_payload(json: &Value) -> Option<AnimatedArtwork> {
             .unwrap_or("")
             .to_string(),
         fallback_url: None,
-        title: None,
-        artist: None,
-        album: None,
+        title: map.get("title").and_then(Value::as_str).map(str::to_string),
+        artist: map.get("artist").and_then(Value::as_str).map(str::to_string),
+        album: map.get("album").and_then(Value::as_str).map(str::to_string),
         source: CanvasSource::Apple,
     })
 }
@@ -440,13 +427,7 @@ impl AnimatedArtworkService {
     }
 
     fn track_key_id(artist: &str, title: &str) -> String {
-        let p = OfficialArtworkService::normalize_for_search(&primary_canvas_artist(
-            &clean_canvas_query(artist),
-        ));
-        let t = OfficialArtworkService::normalize_for_search(&strip_canvas_subtitles(
-            &clean_canvas_query(title),
-        ));
-        format!("{p}|{t}")
+        animated_artwork_cache_key(artist, "", title)
     }
 
     async fn fallback_album_key(&self, query: &AnimatedArtworkQuery) -> Option<String> {
@@ -496,8 +477,8 @@ impl AnimatedArtworkService {
     }
 
     pub async fn lookup(&self, query: &AnimatedArtworkQuery) -> Option<AnimatedArtwork> {
-        if OfficialArtworkService::normalize_for_search(&query.artist).is_empty()
-            && OfficialArtworkService::normalize_for_search(&query.title).is_empty()
+        if query.artist.trim().is_empty()
+            || (query.title.trim().is_empty() && query.album.trim().is_empty())
         {
             return None;
         }
@@ -518,6 +499,7 @@ impl AnimatedArtworkService {
                         if alb.is_empty() { None } else { Some(&alb) },
                     )
                     .await
+                    .filter(|art| art.matches(&query.title, &query.artist, Some(&alb)))
                     {
                         return Some(community_hit);
                     }
@@ -527,9 +509,12 @@ impl AnimatedArtworkService {
         }
 
         if let Some(alt_key) = self.fallback_album_key(query).await {
-            if let Some(Some(hit)) = self.memory.lock().await.map.get(&alt_key).cloned() {
-                self.memory.lock().await.store(key, Some(hit.clone()));
-                return Some(hit);
+            {
+                let mut mem = self.memory.lock().await;
+                if let Some(Some(hit)) = mem.map.get(&alt_key).cloned() {
+                    mem.store(key, Some(hit.clone()));
+                    return Some(hit);
+                }
             }
             if let Some((Some(hit), true)) = self.read_disk(&alt_key) {
                 let mut mem = self.memory.lock().await;
@@ -641,12 +626,13 @@ impl AnimatedArtworkService {
 
         if raw_album.is_empty() && !album.is_empty() {
             let album_key = animated_artwork_cache_key(&artist, &album, &title);
-            self.memory
-                .lock()
-                .await
-                .track_album_keys
-                .insert(Self::track_key_id(&artist, &title), album_key.clone());
-            if let Some(Some(cached)) = self.memory.lock().await.map.get(&album_key).cloned() {
+            let cached = {
+                let mut mem = self.memory.lock().await;
+                mem.track_album_keys
+                    .insert(Self::track_key_id(&artist, &title), album_key.clone());
+                mem.map.get(&album_key).cloned().flatten()
+            };
+            if let Some(cached) = cached {
                 self.store(key, Some(&cached)).await;
                 return Some(cached);
             }
@@ -667,25 +653,13 @@ impl AnimatedArtworkService {
             Some(album.as_str())
         };
 
-        let mut found: Option<AnimatedArtwork> = None;
-        for candidate in [
-            self.lookup_apple_music(&artist, &album, &title).await,
-            self.lookup_tidal(&artist, &album, &title).await,
-            self.lookup_community(&artist, &album, &title).await,
-        ] {
-            let Some(art) = candidate else {
-                continue;
-            };
-            if !art.has_url() {
-                continue;
-            }
-            let matches_with_album = art.matches(&title, &artist, album_opt);
-            let matches_song =
-                !title.is_empty() && art.title.is_some() && art.matches(&title, &artist, None);
-            if matches_with_album || matches_song {
-                found = Some(art);
-                break;
-            }
+        let verified = |art: &AnimatedArtwork| art.has_url() && art.matches(&title, &artist, album_opt);
+        let mut found = self.lookup_apple_music(&artist, &album, &title).await.filter(verified);
+        if found.is_none() {
+            found = self.lookup_tidal(&artist, &album, &title).await.filter(verified);
+        }
+        if found.is_none() {
+            found = self.lookup_community(&artist, &album, &title).await.filter(verified);
         }
 
         let Some(found) = found else {
@@ -752,29 +726,29 @@ impl AnimatedArtworkService {
             )
             .await;
             if found.is_none() && !album.is_empty() {
-                found = AppleMusicCanvas::search(&self.http, title, artist, None).await;
-            }
-            if found.is_none() && !album.is_empty() {
                 found = AppleMusicCanvas::search_album(&self.http, album, artist).await;
             }
         } else if !album.is_empty() && !artist.is_empty() {
             found = AppleMusicCanvas::search_album(&self.http, album, artist).await;
         }
+        let album_opt = (!album.is_empty()).then_some(album);
+        let verified = |art: &AnimatedArtwork| art.matches(title, artist, album_opt);
+        found = found.filter(verified);
         if found.is_some() {
             return found;
         }
 
         let primary = primary_canvas_artist(artist);
         if !album.is_empty() && !title.is_empty() {
-            found = self.request_search(artist, album, title).await;
+            found = self.request_search(artist, album, title).await.filter(verified);
             if found.is_none() && primary != artist {
-                found = self.request_search(&primary, album, title).await;
+                found = self.request_search(&primary, album, title).await.filter(verified);
             }
         }
         if found.is_none() && !album.is_empty() {
-            found = self.request_search(artist, album, "").await;
+            found = self.request_search(artist, album, "").await.filter(verified);
             if found.is_none() && primary != artist {
-                found = self.request_search(&primary, album, "").await;
+                found = self.request_search(&primary, album, "").await.filter(verified);
             }
         }
         if found.is_none() {
@@ -803,7 +777,9 @@ impl AnimatedArtworkService {
             )
             .await;
             if found.is_none() && !album.is_empty() {
-                found = TidalCanvas::search(&self.http, title, artist, None).await;
+                found = TidalCanvas::search(&self.http, title, artist, None)
+                    .await
+                    .filter(|art| art.matches(title, artist, Some(album)));
             }
             if found.is_none() && !album.is_empty() {
                 found = TidalCanvas::search_album(&self.http, album, artist).await;
@@ -822,21 +798,16 @@ impl AnimatedArtworkService {
         album: &str,
         title: &str,
     ) -> Option<AnimatedArtwork> {
-        let search_title = if title.is_empty() { album } else { title };
-        if search_title.is_empty() || artist.is_empty() {
+        if title.is_empty() || artist.is_empty() {
             return None;
         }
-        let mut found = CommunityCanvas::search(
+        CommunityCanvas::search(
             &self.http,
-            search_title,
+            title,
             artist,
-            if album.is_empty() { None } else { Some(album) },
+            (!album.is_empty()).then_some(album),
         )
-        .await;
-        if found.is_none() && !album.is_empty() && !title.is_empty() {
-            found = CommunityCanvas::search(&self.http, title, artist, None).await;
-        }
-        found
+        .await
     }
 
     async fn album_from_official(&self, artist: &str, title: &str) -> String {
@@ -878,6 +849,15 @@ impl AnimatedArtworkService {
         let val: Value = res.json().await.ok()?;
         let results = val.get("results").and_then(Value::as_array)?;
         for item in results {
+            let Some(name) = item.get("collectionName").and_then(Value::as_str) else {
+                continue;
+            };
+            let Some(credit) = item.get("artistName").and_then(Value::as_str) else {
+                continue;
+            };
+            if !confirmed_album_match(album, name) || !confirmed_artist_match(artist, credit) {
+                continue;
+            }
             let raw = item
                 .get("collectionViewUrl")
                 .and_then(Value::as_str)
@@ -886,10 +866,12 @@ impl AnimatedArtworkService {
                 continue;
             }
             let clean_url = raw.split('?').next().unwrap_or("");
-            if let Some(art) = self
+            if let Some(mut art) = self
                 .request("/api/v1/artwork/url", &[("url", clean_url)])
                 .await
             {
+                art.album.get_or_insert_with(|| name.to_string());
+                art.artist.get_or_insert_with(|| credit.to_string());
                 return Some(art);
             }
         }
@@ -1004,14 +986,71 @@ clip.mp4
     }
 
     #[test]
-    fn cache_key_uses_album_when_present() {
+    fn cache_key_keeps_track_and_release_versions_separate() {
         assert_eq!(
             animated_artwork_cache_key("The Weeknd", "After Hours (Deluxe)", "Blinding Lights"),
-            "anim6|the weeknd|after hours"
+            "anim7|the weeknd|after hours (deluxe)|blinding lights"
         );
         assert_eq!(
             animated_artwork_cache_key("The Weeknd", "", "Blinding Lights"),
-            "anim6|the weeknd||blinding lights"
+            "anim7|the weeknd||blinding lights"
         );
+        assert_ne!(
+            animated_artwork_cache_key("The Weeknd", "After Hours", "Blinding Lights"),
+            animated_artwork_cache_key("The Weeknd", "After Hours", "Save Your Tears"),
+        );
+    }
+
+    #[test]
+    fn rejects_unverified_artwork_and_different_recording_versions() {
+        let mut art = parse_animated_artwork_payload(&serde_json::json!({
+            "url": "https://example.com/cover.m3u8",
+        })).unwrap();
+        assert!(!art.matches("Song", "Artist", Some("Album")));
+        art.artist = Some("Artist".into());
+        art.album = Some("Album".into());
+        art.title = Some("Song (Live)".into());
+        assert!(!art.matches("Song", "Artist", Some("Album")));
+        art.title = Some("Song".into());
+        assert!(!art.matches("Song", "Artist", Some("Album (Deluxe)")));
+        assert!(art.matches("Song (feat. Guest)", "Artist", Some("Album")));
+    }
+
+    #[tokio::test]
+    async fn cached_album_artwork_is_reused_when_track_has_no_album() {
+        let album = "Fixture Album";
+        let query = AnimatedArtworkQuery::new("Fixture Artist", "", "Fixture Track");
+        let album_key = animated_artwork_cache_key(&query.artist, album, &query.title);
+        let artwork = AnimatedArtwork {
+            url: "https://example.com/cover.mp4".to_string(),
+            url_tall: String::new(),
+            fallback_url: None,
+            title: None,
+            artist: None,
+            album: Some(album.to_string()),
+            source: CanvasSource::Apple,
+        };
+        let lookup: AlbumLookupFn = Arc::new(|_, _| Box::pin(async { "Fixture Album".to_string() }));
+
+        for already_mapped in [true, false] {
+            let service =
+                AnimatedArtworkService::new(reqwest::Client::new(), None, None, Some(Arc::clone(&lookup)));
+            {
+                let mut memory = service.memory.lock().await;
+                memory.store(album_key.clone(), Some(artwork.clone()));
+                if already_mapped {
+                    memory.track_album_keys.insert(
+                        AnimatedArtworkService::track_key_id(&query.artist, &query.title),
+                        album_key.clone(),
+                    );
+                }
+            }
+
+            let resolved = tokio::time::timeout(Duration::from_secs(1), service.lookup(&query))
+                .await
+                .expect("reusing album artwork must not block subsequent cache access");
+            assert_eq!(resolved.as_ref(), Some(&artwork));
+            assert_eq!(service.peek(&query).await.as_ref(), Some(&artwork));
+        }
     }
 }

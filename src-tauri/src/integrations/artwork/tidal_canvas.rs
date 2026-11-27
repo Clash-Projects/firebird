@@ -12,8 +12,8 @@ use regex::Regex;
 use serde_json::Value;
 
 use super::{
-    canvas_artists_match, canvas_get_json, canvas_titles_match, AnimatedArtwork, CanvasSource,
-    CANVAS_USER_AGENT,
+    canvas_get_json, confirmed_album_match, confirmed_artist_match, confirmed_track_match,
+    AnimatedArtwork, CanvasSource, CANVAS_USER_AGENT,
 };
 
 const SEARCH_URL: &str = "https://api.tidal.com/v1/search";
@@ -84,11 +84,21 @@ impl TidalCanvas {
             };
 
             let artists = Self::extract_artists(obj.get("artists"));
-            if !Self::is_match(track_title, &artists, title, artist) {
+            if !confirmed_track_match(title, track_title)
+                || !artists.first().is_some_and(|credit| confirmed_artist_match(artist, credit))
+            {
                 continue;
             }
 
             let album_obj = obj.get("album").and_then(Value::as_object);
+            if album.is_some_and(|expected| {
+                !album_obj
+                    .and_then(|value| value.get("title"))
+                    .and_then(Value::as_str)
+                    .is_some_and(|candidate| confirmed_album_match(expected, candidate))
+            }) {
+                continue;
+            }
             let Some(video_cover) = album_obj
                 .and_then(|a| a.get("videoCover"))
                 .and_then(Value::as_str)
@@ -165,7 +175,9 @@ impl TidalCanvas {
             };
 
             let artists = Self::extract_artists(obj.get("artists"));
-            if !Self::is_match(record_title, &artists, album, artist) {
+            if !confirmed_album_match(album, record_title)
+                || !artists.first().is_some_and(|credit| confirmed_artist_match(artist, credit))
+            {
                 continue;
             }
 
@@ -208,27 +220,6 @@ impl TidalCanvas {
             .filter(|s| !s.is_empty())
             .map(str::to_string)
             .collect()
-    }
-
-    fn is_match(
-        got_name: &str,
-        got_artists: &[String],
-        want_name: &str,
-        want_artist: &str,
-    ) -> bool {
-        if !canvas_titles_match(want_name, got_name) {
-            return false;
-        }
-        let joined_credited: String = got_artists
-            .iter()
-            .filter(|s| !s.is_empty())
-            .cloned()
-            .collect::<Vec<_>>()
-            .join(", ");
-        if joined_credited.is_empty() {
-            return false;
-        }
-        canvas_artists_match(want_artist, &joined_credited, Some(want_name), Some(got_name))
     }
 
     pub fn cover_url(id: &str) -> Option<String> {

@@ -24,39 +24,42 @@
   let lyricsVisible = $state(true);
   let focusMode = $state(false);
   let ambientEnabled = $state(true);
-  let motionVideoUrl = $state('');
-  let lastMotionKey = '';
+  let albumMotion = $state<{ trackId: string; urls: string[] } | null>(null);
+  let spotifyMotion = $state<{ trackId: string; url?: string } | null>(null);
+  let albumVideoUrls = $derived(albumMotion && albumMotion.trackId === track?.id ? albumMotion.urls : []);
+  let fullBleedVideoUrls = $derived(
+    spotifyMotion && spotifyMotion.trackId === track?.id
+      ? spotifyMotion.url ? [spotifyMotion.url, ...albumVideoUrls] : albumVideoUrls
+      : [],
+  );
 
   let effectiveLyricsVisible = $derived(lyricsVisible && !lyricsMissing);
   let effectiveFocusMode = $derived(focusMode && !lyricsMissing);
 
   $effect(() => {
-    const t = track;
-    if (!t || !ambientEnabled || settingsStore.nowPlayingStyle !== 'standard') {
-      motionVideoUrl = '';
-      if (!t) lastMotionKey = '';
-      return;
-    }
-    const key = `${t.id}|${t.title}|${t.artist}`;
-    if (key === lastMotionKey) return;
-    lastMotionKey = key;
-    motionVideoUrl = '';
+    if (!track) return;
+    const { id, title, artist, album } = track;
+    let current = true;
+    void ipcInvoke<{ url: string; fallbackUrl?: string | null }>('artwork_lookup_animated', {
+      artist, album: album || '', title,
+    }).then((artwork) => {
+      if (!current) return;
+      const urls = [artwork?.url, artwork?.fallbackUrl].filter((url): url is string => Boolean(url));
+      albumMotion = { trackId: id, urls };
+    });
+    return () => { current = false; };
+  });
 
-    void (async () => {
-      try {
-        const anim = await ipcInvoke<{ url?: string; fallbackUrl?: string }>('artwork_lookup_animated', {
-          artist: t.artist,
-          album: t.album || '',
-          title: t.title,
-        });
-        const url = anim?.url || anim?.fallbackUrl || '';
-        if (lastMotionKey === key && url) {
-          motionVideoUrl = url;
-        }
-      } catch {
-        // Static artwork
-      }
-    })();
+  $effect(() => {
+    if (!track || settingsStore.nowPlayingStyle !== 'fullBleed') return;
+    const { id, title, artist, album, durationSec } = track;
+    let current = true;
+    void ipcInvoke<{ clip?: { url: string } | null }>('spotify_canvas', {
+      title, artist, album: album || null, durationMs: Math.round((durationSec || 0) * 1000),
+    }).then((canvas) => {
+      if (current) spotifyMotion = { trackId: id, url: canvas?.clip?.url };
+    });
+    return () => { current = false; };
   });
 
   function close() {
@@ -115,10 +118,11 @@
       </button>
     </div>
   {:else if settingsStore.nowPlayingStyle === 'fullBleed'}
-    <NowPlayingFullBleedView />
+    <NowPlayingFullBleedView videoUrls={fullBleedVideoUrls} />
   {:else if settingsStore.nowPlayingStyle === 'minimal'}
     <NowPlayingMinimalView
       {lyricsVisible}
+      videoUrls={albumVideoUrls}
       onToggleLyrics={toggleLyrics}
       onClose={close}
     />
@@ -167,7 +171,10 @@
               <div class="now-cover">
                 <AnimatedArtworkVideo
                   posterUrl={track.artworkUrl}
-                  videoUrl={ambientEnabled && motionVideoUrl ? motionVideoUrl : undefined}
+                  title={track.title}
+                  artist={track.artist}
+                  album={track.album}
+                  videoUrls={ambientEnabled ? albumVideoUrls : []}
                   radius={18}
                   class="aspect-square w-full"
                 />

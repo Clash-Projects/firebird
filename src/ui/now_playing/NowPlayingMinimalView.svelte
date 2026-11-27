@@ -1,6 +1,5 @@
 <script lang="ts">
   import KaraokeLyricsView from '$src/features/lyrics/KaraokeLyricsView.svelte';
-  import { ipcInvoke } from '$src/lib/ipc';
   import { featuresStore } from '$src/state/features.svelte';
   import { playerStore } from '$src/state/player.svelte';
   import AmbientStage from '$src/ui/components/AmbientStage.svelte';
@@ -13,49 +12,18 @@
 
   interface Props {
     lyricsVisible?: boolean;
+    videoUrls: readonly string[];
     onToggleLyrics?: () => void;
     onClose?: () => void;
   }
 
-  let { lyricsVisible = true, onToggleLyrics, onClose }: Props = $props();
+  let { lyricsVisible = true, videoUrls, onToggleLyrics, onClose }: Props = $props();
 
   let track = $derived(playerStore.currentTrack);
   let doc = $derived(track ? featuresStore.getLyrics(track.id) : null);
   let lyricsMissing = $derived(!featuresStore.lyricsLoading && (!doc || doc.lines.length === 0));
   let showLyrics = $derived(lyricsVisible && !lyricsMissing);
   let ambientEnabled = $state(true);
-
-  let motionVideoUrl = $state('');
-  let lastTrackKey = '';
-
-  $effect(() => {
-    const t = track;
-    if (!t) {
-      motionVideoUrl = '';
-      lastTrackKey = '';
-      return;
-    }
-    const key = `${t.id}|${t.title}|${t.artist}`;
-    if (key === lastTrackKey) return;
-    lastTrackKey = key;
-    motionVideoUrl = '';
-
-    void (async () => {
-      try {
-        const anim = await ipcInvoke<{ url?: string; fallbackUrl?: string }>('artwork_lookup_animated', {
-          artist: t.artist,
-          album: t.album || '',
-          title: t.title,
-        });
-        const url = anim?.url || anim?.fallbackUrl || '';
-        if (lastTrackKey === key && url) {
-          motionVideoUrl = url;
-        }
-      } catch {
-        // Static artwork
-      }
-    })();
-  });
 </script>
 
 {#if track}
@@ -80,12 +48,17 @@
             class="aspect-square w-full overflow-hidden rounded-[2px] shadow-[var(--lw-shadow-artwork)] transition-all duration-[420ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
             style:max-width={showLyrics ? '420px' : '440px'}
           >
-            <AnimatedArtworkVideo
-              posterUrl={track.artworkUrl}
-              videoUrl={ambientEnabled && motionVideoUrl ? motionVideoUrl : undefined}
-              radius={2}
-              class="h-full w-full"
-            />
+            {#key track.id}
+              <AnimatedArtworkVideo
+                posterUrl={track.artworkUrl}
+                title={track.title}
+                artist={track.artist}
+                album={track.album}
+                videoUrls={ambientEnabled ? videoUrls : []}
+                radius={2}
+                class="h-full w-full"
+              />
+            {/key}
           </div>
 
           <h1 class="mt-[18px] line-clamp-2 text-center text-[18px] font-bold tracking-[-0.2px] text-[var(--lw-text-primary)]">

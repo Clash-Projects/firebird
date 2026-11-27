@@ -712,10 +712,11 @@ pub async fn spotify_canvas(
     title: String,
     artist: String,
     duration_ms: i64,
+    album: Option<String>,
 ) -> Result<SpotifyCanvasResult, String> {
     Ok(state
         .spotify_api
-        .canvas(&title, &artist, duration_ms)
+        .canvas(&title, &artist, duration_ms, album.as_deref())
         .await)
 }
 

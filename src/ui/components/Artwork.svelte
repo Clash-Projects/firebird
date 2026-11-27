@@ -11,6 +11,7 @@
     album?: string;
     upgrade?: boolean;
     preserveAspect?: boolean;
+    highResolution?: boolean;
     size?: number;
     radius?: number;
     circle?: boolean;
@@ -31,6 +32,7 @@
     album = '',
     upgrade = true,
     preserveAspect = false,
+    highResolution = false,
     size,
     radius = 12,
     circle = false,
@@ -39,9 +41,11 @@
   }: Props = $props();
 
   let failedPrimary = $state(false);
+  let failedLarger = $state(false);
   let failedResolved = $state(false);
   let loaded = $state(false);
   let resolvedUrl = $state('');
+  let largerUrl = $derived(highResolution ? largerArtworkUrl(src) : '');
   let resolveSeq = 0;
 
   let displayLabel = $derived((label || album || alt || artist || '').trim());
@@ -78,6 +82,24 @@
     );
   }
 
+  function largerArtworkUrl(src: string): string {
+    let url: URL;
+    try { url = new URL(src); } catch { return ''; }
+    if (url.protocol !== 'https:') return '';
+    const host = url.hostname;
+    const originalPath = url.pathname;
+    if (/\.(?:googleusercontent|ggpht)\.com$/.test(host)) {
+      url.pathname = originalPath.replace(/=w(\d+)-h(\d+)(?:-[^/]*)?$/, (size, width, height) =>
+        Math.min(Number(width), Number(height)) < 1024 ? '=w1024-h1024-l90-rj' : size);
+    } else if (host.endsWith('.mzstatic.com')) {
+      url.pathname = originalPath.replace(/\/(\d+)x(\d+)bb(?=\.)/, (size, width, height) =>
+        Math.min(Number(width), Number(height)) < 1024 ? '/1024x1024bb' : size);
+    } else if (host.endsWith('.ytimg.com')) {
+      url.pathname = originalPath.replace(/\/(?:default|mqdefault|hqdefault|sddefault)(?=\.)/, '/maxresdefault');
+    }
+    return url.pathname === originalPath ? '' : url.href;
+  }
+
   $effect(() => {
     const currentSrc = src;
     const currentKind = kind;
@@ -87,11 +109,13 @@
     const seq = ++resolveSeq;
 
     failedPrimary = false;
+    failedLarger = false;
     failedResolved = false;
     loaded = false;
     resolvedUrl = '';
 
-    if (!upgrade || !isTauriRuntime() || !currentLabel || isOfficialUrl(currentSrc)) {
+    if (!upgrade || !isTauriRuntime() || !currentLabel || isOfficialUrl(currentSrc)
+      || (highResolution && Boolean(largerUrl) && !currentSrc.includes('ytimg.com'))) {
       return;
     }
 
@@ -132,6 +156,7 @@
 
   let activeUrl = $derived.by(() => {
     if (resolvedUrl && !failedResolved) return resolvedUrl;
+    if (largerUrl && !failedLarger) return largerUrl;
     if (src && !failedPrimary) return src;
     return '';
   });
@@ -149,6 +174,8 @@
   function handleError() {
     if (resolvedUrl && !failedResolved && activeUrl === resolvedUrl) {
       failedResolved = true;
+    } else if (largerUrl && activeUrl === largerUrl) {
+      failedLarger = true;
     } else {
       failedPrimary = true;
     }
@@ -167,6 +194,7 @@
     <img
       src={activeUrl}
       {alt}
+      loading={highResolution ? 'eager' : undefined}
       decoding="async"
       onload={() => (loaded = true)}
       onerror={handleError}

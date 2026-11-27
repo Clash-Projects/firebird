@@ -12,7 +12,7 @@ use serde_json::Value;
 use tokio::sync::Mutex;
 
 use super::{
-    canvas_artists_match, canvas_get_json, canvas_titles_match, normalize_canvas_match,
+    canvas_get_json, confirmed_album_match, confirmed_artist_match, confirmed_track_match,
     AnimatedArtwork, CanvasSource, CANVAS_USER_AGENT,
 };
 
@@ -85,89 +85,23 @@ impl CommunityCanvas {
         artist: &str,
         album: Option<&str>,
     ) -> Option<AnimatedArtwork> {
-        let want_title = normalize_canvas_match(title);
-        let want_artist = normalize_canvas_match(artist);
-        let want_album = album.map(normalize_canvas_match);
-        if want_title.is_empty() || want_artist.is_empty() {
-            return None;
-        }
-
-        // Pass 1: match song title + artist + album (when album is provided).
-        for entry in index {
-            let listed = normalize_canvas_match(&entry.album);
-            let title_ok = canvas_titles_match(title, &entry.song);
-            let artist_ok =
-                canvas_artists_match(artist, &entry.artist, Some(title), Some(&entry.song));
-            let album_ok = listed.is_empty()
-                || want_album.as_deref().map(str::is_empty).unwrap_or(true)
-                || album
-                    .map(|a| canvas_titles_match(a, &entry.album))
-                    .unwrap_or(false);
-            if title_ok && artist_ok && album_ok {
-                return Some(AnimatedArtwork {
-                    url: entry.url.clone(),
-                    url_tall: String::new(),
-                    fallback_url: None,
-                    title: Some(entry.song.clone()),
-                    artist: Some(entry.artist.clone()),
-                    album: if entry.album.trim().is_empty() {
-                        None
-                    } else {
-                        Some(entry.album.clone())
-                    },
-                    source: CanvasSource::Community,
-                });
+        index.iter().find_map(|entry| {
+            if !confirmed_track_match(title, &entry.song)
+                || !confirmed_artist_match(artist, &entry.artist)
+                || album.is_some_and(|album| !confirmed_album_match(album, &entry.album))
+            {
+                return None;
             }
-        }
-
-        // Pass 2: if noisy album metadata rejected a valid song+artist match.
-        if want_album.as_deref().map(|s| !s.is_empty()).unwrap_or(false) {
-            for entry in index {
-                let title_ok = canvas_titles_match(title, &entry.song);
-                let artist_ok =
-                    canvas_artists_match(artist, &entry.artist, Some(title), Some(&entry.song));
-                if title_ok && artist_ok {
-                    return Some(AnimatedArtwork {
-                        url: entry.url.clone(),
-                        url_tall: String::new(),
-                        fallback_url: None,
-                        title: Some(entry.song.clone()),
-                        artist: Some(entry.artist.clone()),
-                        album: if entry.album.trim().is_empty() {
-                            None
-                        } else {
-                            Some(entry.album.clone())
-                        },
-                        source: CanvasSource::Community,
-                    });
-                }
-            }
-        }
-
-        // Pass 3: album-level fallback.
-        if let Some(alb) = album.filter(|a| !normalize_canvas_match(a).is_empty()) {
-            for entry in index {
-                if entry.album.trim().is_empty() {
-                    continue;
-                }
-                let album_ok = canvas_titles_match(alb, &entry.album);
-                let artist_ok =
-                    canvas_artists_match(artist, &entry.artist, Some(title), Some(&entry.song));
-                if album_ok && artist_ok {
-                    return Some(AnimatedArtwork {
-                        url: entry.url.clone(),
-                        url_tall: String::new(),
-                        fallback_url: None,
-                        title: None,
-                        artist: Some(entry.artist.clone()),
-                        album: Some(entry.album.clone()),
-                        source: CanvasSource::Community,
-                    });
-                }
-            }
-        }
-
-        None
+            Some(AnimatedArtwork {
+                url: entry.url.clone(),
+                url_tall: String::new(),
+                fallback_url: None,
+                title: Some(entry.song.clone()),
+                artist: Some(entry.artist.clone()),
+                album: (!entry.album.trim().is_empty()).then(|| entry.album.clone()),
+                source: CanvasSource::Community,
+            })
+        })
     }
 
     async fn manifest(client: &reqwest::Client) -> Vec<CommunityEntry> {
@@ -249,7 +183,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn matches_passes_and_album_fallback() {
+    fn matches_only_the_requested_song_and_release() {
         let index = vec![CommunityEntry {
             song: "Blinding Lights".to_string(),
             artist: "The Weeknd".to_string(),
@@ -257,24 +191,26 @@ mod tests {
             url: "https://example.com/after_hours.mp4".to_string(),
         }];
 
-        // Pass 1: exact
-        let m1 = CommunityCanvas::match_from_index(
+        let matched = CommunityCanvas::match_from_index(
             &index,
             "Blinding Lights",
             "The Weeknd",
             Some("After Hours"),
         );
-        assert!(m1.is_some());
-        assert_eq!(m1.unwrap().source, CanvasSource::Community);
+        assert_eq!(matched.unwrap().source, CanvasSource::Community);
 
-        // Pass 3: album-level fallback
-        let m3 = CommunityCanvas::match_from_index(
+        let other_song = CommunityCanvas::match_from_index(
             &index,
             "Save Your Tears",
             "The Weeknd",
             Some("After Hours"),
         );
-        assert!(m3.is_some());
-        assert_eq!(m3.unwrap().title, None);
+        assert!(other_song.is_none());
+        assert!(CommunityCanvas::match_from_index(
+            &index,
+            "Blinding Lights",
+            "The Weeknd",
+            Some("After Hours (Deluxe)"),
+        ).is_none());
     }
 }

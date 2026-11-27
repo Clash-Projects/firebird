@@ -11,7 +11,9 @@ use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::integrations::artwork::normalize_canvas_match;
+use crate::integrations::artwork::{
+    confirmed_album_match, confirmed_artist_match, confirmed_track_match, normalize_canvas_match,
+};
 use crate::storage::diagnostics_log::DiagnosticsLog;
 
 use super::spotify_auth::SpotifyAuth;
@@ -109,6 +111,8 @@ impl SpotifyCanvasResult {
 struct SpotifyTrackHit {
     id: String,
     name: String,
+    artist: String,
+    album: String,
     duration_ms: i64,
 }
 
@@ -691,7 +695,7 @@ impl SpotifyApi {
         duration_ms: i64,
     ) -> Vec<SpotifyTrackRow> {
         let tag = format!("spotify-radio \"{title}\" - \"{artist}\"");
-        let Some(matched) = self.search_track(title, artist, duration_ms).await else {
+        let Some(matched) = self.search_track(title, artist, duration_ms, None).await else {
             DiagnosticsLog::info(&format!("{tag} stage=search ok=false"));
             return Vec::new();
         };
@@ -747,6 +751,7 @@ impl SpotifyApi {
         title: &str,
         artist: &str,
         duration_ms: i64,
+        album: Option<&str>,
     ) -> SpotifyCanvasResult {
         let tag = format!("spotify-canvas \"{title}\" - \"{artist}\"");
         if self.auth.personal_token().await.is_none() {
@@ -755,7 +760,10 @@ impl SpotifyApi {
                 "Spotify session is not signed in (sign in again in Settings)",
             );
         }
-        let Some(matched) = self.search_track(title, artist, duration_ms).await else {
+        let Some(matched) = self
+            .search_track(title, artist, duration_ms, Some(album.unwrap_or_default()))
+            .await
+        else {
             DiagnosticsLog::info(&format!("{tag} stage=search ok=false"));
             return SpotifyCanvasResult::none("Could not find this track on Spotify");
         };
@@ -791,7 +799,12 @@ impl SpotifyApi {
         title: &str,
         artist: &str,
         duration_ms: i64,
+        canvas_album: Option<&str>,
     ) -> Option<SpotifyTrackHit> {
+        let pick = |hits: &[SpotifyTrackHit]| match canvas_album {
+            Some(album) => Self::pick_canvas(hits, title, artist, album, duration_ms),
+            None => Self::pick(hits, title, duration_ms),
+        };
         let clean_title = CLEAN_TITLE_RE.replace_all(title, "").trim().to_string();
         let primary = ARTIST_SPLIT_RE.split(artist).next().unwrap_or("").trim();
         let first = format!("{clean_title} {primary}").trim().to_string();
@@ -855,7 +868,7 @@ impl SpotifyApi {
                         continue;
                     };
                     let hits = Self::collect_tracks(&root);
-                    if let Some(best) = Self::pick(&hits, title, duration_ms) {
+                    if let Some(best) = pick(&hits) {
                         return Some(best);
                     }
                 }
@@ -881,17 +894,9 @@ impl SpotifyApi {
         let items = at(Some(&body), &["tracks", "items"])?.as_array()?;
         let hits: Vec<SpotifyTrackHit> = items
             .iter()
-            .filter_map(|it| {
-                let id = it.get("id")?.as_str()?.to_string();
-                let name = text_val(it.get("name"));
-                Some(SpotifyTrackHit {
-                    id,
-                    name,
-                    duration_ms: int_at(it.get("duration_ms")).unwrap_or(0),
-                })
-            })
+            .filter_map(Self::hit_from_value)
             .collect();
-        Self::pick(&hits, title, duration_ms)
+        pick(&hits)
     }
 
     fn collect_tracks(root: &Value) -> Vec<SpotifyTrackHit> {
@@ -950,14 +955,39 @@ impl SpotifyApi {
         if id.is_empty() {
             return None;
         }
+        let artists = map.get("artists");
+        let artist = artists.and_then(Value::as_array)
+            .or_else(|| artists.and_then(|value| value.get("items")).and_then(Value::as_array))
+            .and_then(|items| items.first());
         Some(SpotifyTrackHit {
             id,
             name: text_val(map.get("name")),
+            artist: text_val(at(artist, &["profile", "name"]).or_else(|| at(artist, &["name"]))),
+            album: text_val(map.get("albumOfTrack").or_else(|| map.get("album")).and_then(|album| album.get("name"))),
             duration_ms: int_at(at(Some(data), &["duration", "totalMilliseconds"]))
                 .or_else(|| int_at(at(Some(data), &["trackDuration", "totalMilliseconds"])))
                 .or_else(|| int_at(map.get("duration_ms")))
                 .unwrap_or(0),
         })
+    }
+
+    fn pick_canvas(
+        hits: &[SpotifyTrackHit],
+        title: &str,
+        artist: &str,
+        album: &str,
+        duration_ms: i64,
+    ) -> Option<SpotifyTrackHit> {
+        hits.iter()
+            .filter(|hit| {
+                confirmed_track_match(title, &hit.name) && confirmed_artist_match(artist, &hit.artist)
+            })
+            .filter(|hit| album.trim().is_empty() || confirmed_album_match(album, &hit.album))
+            .filter(|hit| {
+                duration_ms <= 0 || (hit.duration_ms > 0 && hit.duration_ms.abs_diff(duration_ms) <= 5_000)
+            })
+            .min_by_key(|hit| if duration_ms > 0 { hit.duration_ms.abs_diff(duration_ms) } else { 0 })
+            .cloned()
     }
 
     fn pick(hits: &[SpotifyTrackHit], title: &str, duration_ms: i64) -> Option<SpotifyTrackHit> {
@@ -1131,6 +1161,21 @@ fn first_image(images: Option<&Value>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn canvas_ignores_same_duration_on_the_wrong_track_or_release() {
+        let hits = [
+            json!({"id":"wrong-title","name":"The Lights","artists":[{"name":"Artist"}],"album":{"name":"Release"},"duration_ms":180000}),
+            json!({"id":"wrong-artist","name":"Lights","artists":[{"name":"Another Artist"}],"album":{"name":"Release"},"duration_ms":180000}),
+            json!({"id":"wrong-release","name":"Lights","artists":[{"name":"Artist"}],"album":{"name":"Release (Live)"},"duration_ms":180000}),
+            json!({"id":"correct","name":"Lights","artists":{"items":[{"profile":{"name":"Artist"}}]},"albumOfTrack":{"name":"Release"},"duration_ms":181000}),
+        ].iter().filter_map(SpotifyApi::hit_from_value).collect::<Vec<_>>();
+        assert!(SpotifyApi::pick_canvas(&hits[..3], "Lights", "Artist", "Release", 180000).is_none());
+        assert_eq!(
+            SpotifyApi::pick_canvas(&hits, "Lights", "Artist", "Release", 180000).unwrap().id,
+            "correct",
+        );
+    }
 
     #[test]
     fn parses_song_radio_and_home_sections() {

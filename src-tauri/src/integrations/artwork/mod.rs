@@ -50,51 +50,59 @@ impl AnimatedArtwork {
 
     /// Whether this clip really belongs to the track we asked about.
     pub fn matches(&self, want_title: &str, want_artist: &str, want_album: Option<&str>) -> bool {
-        let title_ok = match &self.title {
-            None => true,
-            Some(_) if want_title.trim().is_empty() => true,
-            Some(t) => canvas_titles_match(want_title, t),
-        };
+        if !self.artist.as_deref().is_some_and(|artist| {
+            confirmed_artist_match(want_artist, artist)
+        }) {
+            return false;
+        }
 
-        let artist_ok = match &self.artist {
-            None => true,
-            Some(_) if want_artist.trim().is_empty() => true,
-            Some(a) => canvas_artists_match(
-                want_artist,
-                a,
-                Some(want_title),
-                self.title.as_deref(),
-            ),
-        };
+        let album = want_album.filter(|album| !album.trim().is_empty());
+        if album.is_some_and(|album| {
+            !self.album.as_deref().is_some_and(|candidate| {
+                confirmed_album_match(album, candidate)
+            })
+        }) {
+            return false;
+        }
 
-        let n_album = self
-            .album
-            .as_deref()
-            .map(normalize_canvas_match)
-            .unwrap_or_default();
-        let n_want_album = want_album.map(normalize_canvas_match).unwrap_or_default();
-        let s_album = self
-            .album
-            .as_deref()
-            .map(|a| normalize_canvas_match(&strip_canvas_subtitles(a)))
-            .unwrap_or_default();
-        let s_want_album = want_album
-            .map(|a| normalize_canvas_match(&strip_canvas_subtitles(a)))
-            .unwrap_or_default();
-
-        let album_ok = n_album.is_empty()
-            || n_want_album.is_empty()
-            || n_album == n_want_album
-            || n_album.contains(&n_want_album)
-            || n_want_album.contains(&n_album)
-            || (!s_album.is_empty()
-                && !s_want_album.is_empty()
-                && (s_album == s_want_album
-                    || s_album.contains(&s_want_album)
-                    || s_want_album.contains(&s_album)));
-
-        title_ok && artist_ok && album_ok
+        match self.title.as_deref().filter(|title| !title.trim().is_empty()) {
+            Some(title) if !want_title.trim().is_empty() => confirmed_track_match(want_title, title),
+            Some(_) => album.is_some(),
+            None => album.is_some() && self.source != CanvasSource::Community,
+        }
     }
+}
+
+static TRACK_CREDIT_SUFFIX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\s*(?:\((?:feat\.? |ft\.? |featuring |from )[^)]*\)|\[(?:feat\.? |ft\.? |featuring |from )[^\]]*\]|\s+-\s+(?:feat\.? |ft\.? |featuring ).*)$").unwrap()
+});
+static RELEASE_TYPE_SUFFIX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)\s+-\s+(?:single|ep)\s*$").unwrap());
+static METADATA_PUNCTUATION: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[^\p{L}\p{N}\s]").unwrap());
+
+fn normalize_confirmed_metadata(value: &str) -> String {
+    let letters: String = value
+        .nfd()
+        .filter(|ch| !unicode_normalization::char::is_combining_mark(*ch))
+        .flat_map(char::to_lowercase)
+        .collect();
+    METADATA_PUNCTUATION.replace_all(&letters, " ").split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+pub(super) fn confirmed_track_match(expected: &str, candidate: &str) -> bool {
+    let expected = normalize_confirmed_metadata(&TRACK_CREDIT_SUFFIX.replace(expected.trim(), ""));
+    !expected.is_empty() && expected == normalize_confirmed_metadata(&TRACK_CREDIT_SUFFIX.replace(candidate.trim(), ""))
+}
+
+pub(super) fn confirmed_album_match(expected: &str, candidate: &str) -> bool {
+    let expected = normalize_confirmed_metadata(&RELEASE_TYPE_SUFFIX.replace(expected, ""));
+    !expected.is_empty() && expected == normalize_confirmed_metadata(&RELEASE_TYPE_SUFFIX.replace(candidate, ""))
+}
+
+pub(super) fn confirmed_artist_match(expected: &str, candidate: &str) -> bool {
+    let expected = normalize_confirmed_metadata(&primary_canvas_artist(expected));
+    !expected.is_empty() && expected == normalize_confirmed_metadata(&primary_canvas_artist(candidate))
 }
 
 static NON_ALNUM_SPACE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[^a-z0-9\s]").unwrap());
@@ -168,57 +176,6 @@ pub fn canvas_titles_match(want_title: &str, got_title: &str) -> bool {
         }
     }
     false
-}
-
-/// Compares credited artists across platforms.
-pub fn canvas_artists_match(
-    want_artist: &str,
-    got_artist: &str,
-    want_title: Option<&str>,
-    got_title: Option<&str>,
-) -> bool {
-    let wanted = split_canvas_artists(want_artist);
-    let credited = split_canvas_artists(got_artist);
-    if wanted.is_empty() || credited.is_empty() {
-        let n_want = normalize_canvas_match(want_artist);
-        let n_got = normalize_canvas_match(got_artist);
-        if n_want.is_empty() || n_got.is_empty() {
-            return false;
-        }
-        return n_want == n_got || n_got.contains(&n_want) || n_want.contains(&n_got);
-    }
-
-    let n_got_title = got_title.map(normalize_canvas_match).unwrap_or_default();
-    let n_want_title = want_title.map(normalize_canvas_match).unwrap_or_default();
-
-    let token_matches_list = |token: &str, pool: &[String], extra_title: &str| -> bool {
-        if pool
-            .iter()
-            .any(|it| it == token || it.contains(token) || token.contains(it.as_str()))
-        {
-            return true;
-        }
-        !extra_title.is_empty() && extra_title.contains(token)
-    };
-
-    if wanted
-        .iter()
-        .all(|w| token_matches_list(w, &credited, &n_got_title))
-    {
-        return true;
-    }
-    credited
-        .iter()
-        .all(|c| token_matches_list(c, &wanted, &n_want_title))
-}
-
-/// Splits credited artists across varying separators.
-pub fn split_canvas_artists(raw: &str) -> Vec<String> {
-    ARTIST_SEPARATORS
-        .split(raw)
-        .map(normalize_canvas_match)
-        .filter(|s| !s.is_empty())
-        .collect()
 }
 
 /// Extracts the primary artist name.
