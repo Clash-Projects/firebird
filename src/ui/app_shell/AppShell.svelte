@@ -94,7 +94,7 @@
         {/if}
 
         <main data-lw="main-stage" class="relative min-w-0 flex-1 overflow-hidden">
-          <BranchSwitcher routeKey={router.path} hasDockSpacer={floatDock}>
+          <BranchSwitcher routeKey={router.path} hasDockSpacer={floatDock} fillHeight={isNowPlaying}>
             {#if customApp}
               <CustomAppHost app={customApp} />
             {:else if router.path === '/now-playing'}

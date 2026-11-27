@@ -469,7 +469,7 @@ button.lw-press {
 
 button.lw-press:enabled:active { scale: calc(1 - 0.035 * var(--lw-motion-factor)); }
 
-:focus-visible {
+:focus-visible:where(:not(.lw-text-field)) {
   outline: 2px solid var(--lw-focus-ring);
   outline-offset: 2px;
 }
@@ -480,13 +480,14 @@ button.lw-press:enabled:active { scale: calc(1 - 0.035 * var(--lw-motion-factor)
 
 input.lw-text-field:focus {
   background-color: color-mix(in srgb, var(--lw-surface) 88%, var(--lw-text-primary));
+  border-color: var(--lw-outline);
   outline: none;
+  box-shadow: none;
 }
 
 @media (forced-colors: active) {
   input.lw-text-field:focus-visible {
-    outline: 2px solid Highlight;
-    outline-offset: 2px;
+    border-color: Highlight;
   }
 }
 

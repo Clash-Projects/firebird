@@ -5,10 +5,11 @@
   interface Props {
     routeKey: string;
     hasDockSpacer?: boolean;
+    fillHeight?: boolean;
     children: Snippet;
   }
 
-  let { routeKey, hasDockSpacer = false, children }: Props = $props();
+  let { routeKey, hasDockSpacer = false, fillHeight = false, children }: Props = $props();
 
   let scroller = $state<HTMLDivElement | null>(null);
   const savedScroll = new Map<string, number>();
@@ -42,7 +43,10 @@
   class="lw-scroll stage-scroll relative z-10 h-full w-full"
 >
   {#key routeKey}
-    <div class="lw-route-enter min-h-full w-full" style:padding-bottom={hasDockSpacer ? 'var(--lw-dock-h, 68px)' : undefined}>
+    <div
+      class="lw-route-enter w-full {fillHeight ? 'h-full' : 'min-h-full'}"
+      style:padding-bottom={hasDockSpacer ? 'var(--lw-dock-h, 68px)' : undefined}
+    >
       {@render children()}
     </div>
   {/key}
