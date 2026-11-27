@@ -58,8 +58,18 @@
       void settingsStore.loadFromBackend();
       void ipcInvoke<BackendYtConnection>('yt_get_connection').then((conn) => {
         applyYtConnection(conn);
+        if (conn?.connected && !conn.accountName) {
+          void ipcInvoke<{ accountName?: string }>('yt_fetch_account_info', {
+            forceRefresh: false,
+          }).then((acc) => {
+            if (acc?.accountName) settingsStore.ytAccountName = acc.accountName;
+          });
+        }
         void libraryStore.loadLocalStorage();
         void libraryStore.loadHomeFeed(Boolean(conn?.connected));
+      });
+      void ipcInvoke<boolean>('spotify_connected').then((ok) => {
+        if (typeof ok === 'boolean') settingsStore.spotifyConnected = ok;
       });
       void featuresStore.connectBackend();
       void ipcListen<BackendYtConnection>('yt-connection-changed', (conn) => {

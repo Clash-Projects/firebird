@@ -57,6 +57,10 @@ pub fn run() {
             let handle = app.handle().clone();
             let state = app.state::<AppState>();
             state.set_app_handle(handle.clone());
+            tauri::async_runtime::block_on(async {
+                state.tube.load_persisted_connection().await;
+                state.spotify_auth.load().await;
+            });
 
             let emit_handle = handle.clone();
             let spectrum = Arc::clone(&state.spectrum);

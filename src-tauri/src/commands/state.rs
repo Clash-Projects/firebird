@@ -120,7 +120,7 @@ impl AppState {
             false,
         );
         let db = Arc::new(AppDatabase::open(&app_support_dir));
-        let secure = Arc::new(SecureStore::new());
+        let secure = Arc::new(SecureStore::from_app_support_dir(&app_support_dir));
 
         let po_tokens = Arc::new(PoTokenEngine::new(http.clone(), None, None));
         let tube = Arc::new(InnerTubeMusicApi::new(
