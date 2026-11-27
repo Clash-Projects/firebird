@@ -1312,7 +1312,7 @@ impl PlaybackService {
     /// Routes an SMTC / macOS Now Playing action into this `PlaybackService`.
     pub fn handle_media_control_action(self: &Arc<Self>, action: MediaControlAction) {
         let this = Arc::clone(self);
-        tokio::spawn(async move {
+        let fut = async move {
             match action {
                 MediaControlAction::Play => this.play_resume().await,
                 MediaControlAction::Pause | MediaControlAction::Stop => this.pause().await,
@@ -1321,7 +1321,12 @@ impl PlaybackService {
                 MediaControlAction::Previous => this.previous().await,
                 MediaControlAction::Seek(pos) => this.seek(pos).await,
             }
-        });
+        };
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            handle.spawn(fut);
+        } else {
+            tauri::async_runtime::spawn(fut);
+        }
     }
 
     pub fn snapshot(&self) -> PlayerSnapshot {
