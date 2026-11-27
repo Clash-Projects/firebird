@@ -197,22 +197,6 @@
     return sortCards(filtered, sortOrder);
   });
 
-  let showDiscoverShelves = $derived(
-    activeTab === 'discover' && !search.trim() && allMarketCards.length > 0
-  );
-
-  let rankedCards = $derived(sortCards(allMarketCards, 'featured'));
-  let heroCard = $derived(
-    rankedCards.find((c) => c.featured) ?? rankedCards[0] ?? null
-  );
-  let staffPickCards = $derived.by(() => {
-    const picked = rankedCards.filter((c) => c.staffPick);
-    return (picked.length > 0 ? picked : rankedCards).slice(0, 4);
-  });
-  let freshDropCards = $derived(
-    [...allMarketCards].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 4)
-  );
-
   function openDetail(card: StoreCardModel) {
     if (card.marketEntry) {
       detailSelection = { kind: 'market', entry: card.marketEntry };
@@ -509,7 +493,7 @@
         label="Sort plugins"
         bind:value={sortOrder}
         options={[
-          { value: 'featured', label: 'Sort: Featured' },
+          { value: 'featured', label: 'Sort: Top Ranked' },
           { value: 'recent', label: 'Recently Updated' },
           { value: 'stars', label: 'Most Starred' },
           { value: 'alpha', label: 'A–Z' },
@@ -528,122 +512,6 @@
     <div class="rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] py-12 text-center text-[13px] text-[var(--lw-text-secondary)]">
       Loading Clash-Projects/lastwave-plugins...
     </div>
-  {:else if showDiscoverShelves}
-    {#if heroCard}
-      {@const heroImg = coverFallbackUsed[heroCard.id] ? heroCard.fallbackUrl : heroCard.coverUrl}
-      <div class="overflow-hidden rounded-[16px] border border-[rgba(255,255,255,0.08)] bg-[var(--lw-bg-elevated,var(--lw-surface-raised))] shadow-[var(--lw-shadow-lift)]">
-        <div class="grid grid-cols-1 lg:grid-cols-12">
-          <div class="aspect-[16/10] bg-[var(--lw-bg-deep)] lg:col-span-7">
-            {#if heroImg && !coverFailed[heroCard.id]}
-              <img
-                src={heroImg}
-                alt="{heroCard.name} spotlight"
-                onerror={() => handleCoverError(heroCard)}
-                class="h-full w-full object-cover"
-              />
-            {:else if heroCard.swatch}
-              <div class="flex h-full w-full">
-                {#each heroCard.swatch as hex (hex)}
-                  <div class="h-full flex-1" style:background={hex}></div>
-                {/each}
-              </div>
-            {:else}
-              <div class="flex h-full w-full items-center justify-center text-[var(--lw-text-tertiary)]">
-                <WaveIcon name={typeIcon(heroCard.type)} size={48} />
-              </div>
-            {/if}
-          </div>
-
-          <div class="flex flex-col justify-between p-5 lg:col-span-5">
-            <div class="space-y-2">
-              <div class="flex flex-wrap items-center gap-2">
-                <span class="rounded-full bg-[var(--lw-accent)]/15 px-2.5 py-0.5 text-[10.5px] font-bold tracking-[0.6px] text-[var(--lw-accent)] uppercase">
-                  Featured Spotlight
-                </span>
-                <span class="rounded-[6px] border px-2 py-0.5 text-[10px] font-semibold uppercase {typeBadgeClass(heroCard.type)}">
-                  {typeLabel(heroCard.type)}
-                </span>
-              </div>
-
-              <h2 class="text-[22px] font-bold tracking-[-0.02em]">{heroCard.name}</h2>
-              <div class="text-[12px] text-[var(--lw-text-secondary)]">
-                by @{heroCard.authorGithub}
-                {#if heroCard.stars > 0}
-                  <span class="ml-2">· ★ {heroCard.stars}</span>
-                {/if}
-              </div>
-              <p class="text-[13px] leading-relaxed text-[var(--lw-text-secondary)]">
-                {heroCard.description}
-              </p>
-              {#if heroCard.tags.length > 0}
-                <div class="flex flex-wrap gap-1.5 pt-1">
-                  {#each heroCard.tags.slice(0, 5) as tag (tag)}
-                    <span class="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10.5px] text-[var(--lw-text-secondary)]">
-                      #{tag}
-                    </span>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-
-            <div class="mt-4 flex flex-wrap items-center gap-2">
-              <Buttons
-                variant={heroCard.installedRecord?.enabled && !heroCard.hasUpdate ? 'secondary' : 'primary'}
-                size="md"
-                disabled={busyId === heroCard.id || pluginManager.safeMode || pluginManager.allDisabled}
-                onclick={(e) => void handleCardAction(e, heroCard)}
-              >
-                {#if busyId === heroCard.id}
-                  Working...
-                {:else if heroCard.hasUpdate}
-                  Update
-                {:else if heroCard.installedRecord}
-                  {heroCard.installedRecord.enabled ? 'Active' : 'Enable'}
-                {:else}
-                  Install
-                {/if}
-              </Buttons>
-              <Buttons variant="secondary" size="md" onclick={() => openDetail(heroCard)}>
-                Preview
-              </Buttons>
-            </div>
-          </div>
-        </div>
-      </div>
-    {/if}
-
-    <section class="space-y-3">
-      <div class="flex items-center justify-between">
-        <h3 class="text-[16px] font-bold tracking-[-0.015em]">Staff Picks & Trending</h3>
-      </div>
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {#each staffPickCards as card (card.key)}
-          {@render pluginCard(card, card.staffPick)}
-        {/each}
-      </div>
-    </section>
-
-    <section class="space-y-3">
-      <div class="flex items-center justify-between">
-        <h3 class="text-[16px] font-bold tracking-[-0.015em]">Fresh Drops</h3>
-      </div>
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {#each freshDropCards as card (`fresh:${card.id}`)}
-          {@render pluginCard(card, false)}
-        {/each}
-      </div>
-    </section>
-
-    <section class="space-y-3">
-      <div class="flex items-center justify-between">
-        <h3 class="text-[16px] font-bold tracking-[-0.015em]">All Plugins</h3>
-      </div>
-      <div class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
-        {#each visibleCards as card (`all:${card.id}`)}
-          {@render pluginCard(card, false)}
-        {/each}
-      </div>
-    </section>
   {:else if visibleCards.length === 0}
     <div class="rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] py-12 text-center text-[13px] text-[var(--lw-text-secondary)]">
       {#if activeTab !== 'installed' && pluginManager.marketplace.length === 0 && !search.trim()}

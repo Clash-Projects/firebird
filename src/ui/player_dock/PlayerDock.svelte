@@ -155,7 +155,7 @@
       >
         {#key track.id}
           <div class="lw-route-enter">
-            <Artwork src={track.artworkUrl} alt={`Cover art for ${track.title}`} size={48} radius={6} />
+            <Artwork src={track.artworkUrl} alt={`Cover art for ${track.title}`} size={44} radius={6} />
           </div>
         {/key}
       </button>
@@ -474,19 +474,19 @@
     position: relative;
     z-index: 20;
     display: flex;
-    height: var(--lw-dock-h, 80px);
+    height: var(--lw-dock-h, 70px);
     flex: none;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     padding-inline: 12px;
     border-top: 1px solid var(--lw-divider);
     background: var(--lw-dock-translucent);
   }
 
-  /* LEFT: 290px identity */
+  /* LEFT: 270px identity */
   .dock-left {
     display: flex;
-    width: 290px;
+    width: 270px;
     min-width: 0;
     flex: none;
     align-items: center;
@@ -501,8 +501,8 @@
   }
   .dock-idle-art {
     display: grid;
-    width: 48px;
-    height: 48px;
+    width: 44px;
+    height: 44px;
     flex: none;
     place-items: center;
     border: 1px solid var(--lw-outline);
@@ -553,11 +553,11 @@
   .dock-glyph[aria-pressed="true"] { color: var(--lw-accent); }
   .dock-glyph:disabled { color: color-mix(in srgb, var(--lw-text-tertiary) 50%, transparent); cursor: default; }
 
-  /* 36px accent disc matching _PlayGlyph */
+  /* 34px accent disc */
   .dock-play {
     display: inline-flex;
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
     flex: none;
     align-items: center;
     justify-content: center;
@@ -601,14 +601,14 @@
   .dock-progress {
     display: flex;
     width: 100%;
-    max-width: 560px;
+    max-width: 480px;
     align-items: center;
     gap: 8px;
   }
   .dock-time {
-    width: 38px;
+    width: 34px;
     flex: none;
-    font-size: 11px;
+    font-size: 10.5px;
     color: var(--lw-text-tertiary);
   }
   .dock-time-pos { text-align: right; }
@@ -618,7 +618,7 @@
   .dock-slider {
     position: relative;
     display: flex;
-    height: 18px;
+    height: 14px;
     min-width: 0;
     flex: 1;
     align-items: center;
@@ -630,13 +630,13 @@
   .dock-slider-track {
     position: relative;
     width: 100%;
-    height: 3px;
+    height: 2px;
     overflow: hidden;
     border-radius: 999px;
     background: var(--lw-outline);
     transition: height 120ms ease;
   }
-  .dock-slider.active .dock-slider-track { height: 4px; }
+  .dock-slider.active .dock-slider-track { height: 3px; }
   .dock-slider-fill {
     height: 100%;
     border-radius: 999px;
@@ -650,8 +650,8 @@
   .dock-slider-thumb {
     position: absolute;
     top: 50%;
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background: var(--lw-accent);
     transform: translate(-50%, -50%) scale(0);
@@ -714,7 +714,7 @@
     margin-right: 4px;
   }
   .dock-vol-slider {
-    width: 84px;
+    width: 72px;
     flex: none;
   }
 
