@@ -141,11 +141,13 @@
       id="lw-now-playing-options"
       data-open={open}
       inert={!open}
-      class="lw-popover absolute right-0 top-10 z-40 w-[290px] rounded-[12px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] p-1.5 shadow-[var(--lw-shadow-flyout)]"
+      class="lw-popover now-playing-menu absolute right-0 top-10 z-40 w-[290px] rounded-[12px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] p-1.5 shadow-[var(--lw-shadow-flyout)]"
+      class:immersive={immersiveState.isImmersive}
+      class:has-submenu={activeSubmenu !== null}
     >
       {#if activeSubmenu !== null}
         <!-- Submenu View -->
-        <div class="flex items-center gap-2 border-b border-[var(--lw-divider)] px-2 py-1.5">
+        <div class="flex shrink-0 items-center gap-2 border-b border-[var(--lw-divider)] px-2 py-1.5">
           <button
             type="button"
             onclick={() => (activeSubmenu = null)}
@@ -166,7 +168,7 @@
           </span>
         </div>
 
-        <div use:waveSmoothScroll class="lw-scroll max-h-[320px] space-y-0.5 overflow-y-auto p-1">
+        <div use:waveSmoothScroll class="lw-scroll min-h-0 max-h-[320px] space-y-0.5 overflow-y-auto p-1">
           {#if activeSubmenu === 'source'}
             {#each LYRICS_PROVIDERS as p (p.id)}
               <button
@@ -437,6 +439,18 @@
 </div>
 
 <style>
+  .now-playing-menu {
+    /* Leave room for the toolbar, its popover offset, and a gap below the menu. */
+    max-height: calc(100dvh - var(--lw-titlebar-h) - var(--lw-dock-h) - 70px);
+  }
+  .now-playing-menu.immersive {
+    max-height: calc(100dvh - 70px);
+  }
+  .now-playing-menu.has-submenu[data-open='true'] {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
   .menu-row {
     display: flex;
     width: 100%;
