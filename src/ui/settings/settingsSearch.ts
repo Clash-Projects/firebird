@@ -16,13 +16,12 @@ export function getSettingsSearchIndex(platform: HostPlatform = 'windows'): Sett
         : ['wasapi', 'exclusive', 'bit-perfect', 'dac', 'replaygain', 'lufs', 'quality', 'crossfade', 'automix'];
 
   return [
-    { section: 'general', label: 'Language, UI Scale & Performance Mode', keywords: ['language', 'scale', 'zoom', 'performance', 'update'] },
+    { section: 'general', label: 'Language, UI Scale & Diagnostic Logs', keywords: ['language', 'scale', 'zoom', 'logs', 'export', 'diagnostics', 'update'] },
     { section: 'appearance', label: 'Theme, Accent, Glass & Fonts', keywords: ['theme', 'dark', 'amoled', 'light', 'glass', 'liquid', 'seekbar', 'font', 'accent'] },
     { section: 'audio', label: `Quality, ${audioCopy.exclusiveTitle}, Loudness & AutoMix`, keywords: platformKeywords },
     { section: 'lyrics', label: 'Lyrics Provider, Karaoke Sync & Romanization', keywords: ['lyrics', 'karaoke', 'provider', 'romanized', 'font'] },
     { section: 'integrations', label: 'YouTube Music, Spotify, Scrobblers & Discord RPC', keywords: ['youtube', 'spotify', 'lastfm', 'listenbrainz', 'librefm', 'scrobble', 'discord', 'rpc'] },
     { section: 'library', label: 'Local Folders, Downloads, Backup & Cache', keywords: ['folder', 'scan', 'download', 'backup', 'cache'] },
-    { section: 'plugins', label: 'UI Plugins, Palettes & Themes', keywords: ['plugin', 'theme', 'palette', 'snippet', 'widget', 'store'] },
     { section: 'about', label: 'Version & Updates', keywords: ['version', 'about', 'update'] },
   ];
 }

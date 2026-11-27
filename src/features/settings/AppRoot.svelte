@@ -58,7 +58,8 @@
       void settingsStore.loadFromBackend();
       void ipcInvoke<BackendYtConnection>('yt_get_connection').then((conn) => {
         applyYtConnection(conn);
-        void libraryStore.connectBackend();
+        void libraryStore.loadLocalStorage();
+        void libraryStore.loadHomeFeed(Boolean(conn?.connected));
       });
       void featuresStore.connectBackend();
       void ipcListen<BackendYtConnection>('yt-connection-changed', (conn) => {

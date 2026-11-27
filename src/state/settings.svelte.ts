@@ -25,7 +25,6 @@ class SettingsStore {
   appFont = $state('');
   uiScale = $state(1.0);
   language = $state('en');
-  performanceMode = $state(false);
   reduceMotion = $state(false);
 
   platform = $state<HostPlatform>(detectHostPlatform());
@@ -89,7 +88,6 @@ class SettingsStore {
       }
       if (typeof all.amoled === 'boolean') this.amoled = all.amoled;
       if (typeof all.languageTag === 'string' && all.languageTag) this.language = all.languageTag;
-      if (typeof all.performanceMode === 'boolean') this.performanceMode = all.performanceMode;
       if (typeof all.uiScale === 'number' && all.uiScale > 0) this.uiScale = all.uiScale;
       if (typeof all.loudnessMode === 'string') {
         const lm = all.loudnessMode as 'off' | 'track' | 'album' | 'lufs';

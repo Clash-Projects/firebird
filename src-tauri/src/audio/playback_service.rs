@@ -396,17 +396,48 @@ static SHARED_LIBMPV: OnceLock<Result<Arc<libloading::Library>, String>> = OnceL
 fn load_libmpv_once() -> Result<Arc<libloading::Library>, String> {
     let res = SHARED_LIBMPV.get_or_init(|| {
         #[cfg(target_os = "windows")]
-        let candidates = ["libmpv-2.dll", "mpv-2.dll", "libmpv.dll"];
+        let names = ["libmpv-2.dll", "mpv-2.dll", "libmpv.dll"];
         #[cfg(target_os = "macos")]
-        let candidates = ["libmpv.2.dylib", "libmpv.dylib"];
+        let names = ["libmpv.2.dylib", "libmpv.dylib"];
         #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-        let candidates = ["libmpv.so.2", "libmpv.so"];
+        let names = ["libmpv.so.2", "libmpv.so"];
 
-        for name in candidates {
+        for name in names {
             if let Ok(lib) = unsafe { libloading::Library::new(name) } {
                 return Ok(Arc::new(lib));
             }
         }
+
+        let mut search_dirs: Vec<PathBuf> = Vec::new();
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                search_dirs.push(dir.to_path_buf());
+                search_dirs.push(dir.join("resources"));
+            }
+        }
+        if let Ok(cwd) = std::env::current_dir() {
+            search_dirs.push(cwd.clone());
+            search_dirs.push(cwd.join("src-tauri"));
+            search_dirs.push(cwd.join("src-tauri").join("resources"));
+        }
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(local_app) = dirs::data_local_dir() {
+                search_dirs.push(local_app.join("Programs").join("LastWave"));
+            }
+        }
+
+        for dir in search_dirs {
+            for name in names {
+                let candidate = dir.join(name);
+                if candidate.is_file() {
+                    if let Ok(lib) = unsafe { libloading::Library::new(&candidate) } {
+                        return Ok(Arc::new(lib));
+                    }
+                }
+            }
+        }
+
         Err("could not load libmpv shared library".to_string())
     });
     res.clone()
@@ -812,7 +843,11 @@ impl MpvDeck for LibmpvDeck {
             let _ = self.set_property("start", "none");
         }
         let _ = self.set_property("pause", if play { "no" } else { "yes" });
-        self.command(&["loadfile", url, "replace"])
+        self.command(&["loadfile", url, "replace"])?;
+        if play {
+            let _ = self.set_property("pause", "no");
+        }
+        Ok(())
     }
 
     fn play(&self) -> Result<(), String> {
@@ -1535,8 +1570,19 @@ impl PlaybackService {
             cache_dir,
         };
 
-        let Ok(deck) = self.deck_factory.create(config) else {
-            return;
+        let deck = match self.deck_factory.create(config) {
+            Ok(d) => d,
+            Err(err) => {
+                self.crumb(&format!("ensure_player create failed: {err}"));
+                crate::audio::play_diag::PlayDiag::log(&format!("ensure_player failed: {err}"));
+                if let Ok(mut d) = self.data.lock() {
+                    d.snapshot.is_buffering = false;
+                    d.snapshot.is_playing = false;
+                    d.snapshot.error = Some(err);
+                }
+                self.emit_snapshot(self.snapshot());
+                return;
+            }
         };
         let deck_id = deck.id();
         {
@@ -4558,6 +4604,11 @@ impl PlaybackService {
                 return;
             };
 
+            if let Ok(mut d) = self.data.lock() {
+                if d.resolve_generation == generation {
+                    d.resolving = false;
+                }
+            }
             let open_sw = Instant::now();
             self.open(&track, &stream, generation, &wanted_key).await;
             if self.is_stale(generation, &wanted_key) {

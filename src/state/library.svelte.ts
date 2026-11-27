@@ -1,5 +1,14 @@
 import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
-import type { Album, Artist, DownloadItem, GenreItem, Playlist, Track } from './types';
+import type {
+  Album,
+  Artist,
+  DownloadItem,
+  GenreItem,
+  HomeEntityItem,
+  HomeShelfItem,
+  Playlist,
+  Track,
+} from './types';
 
 interface BackendYtTrack {
   videoId: string;
@@ -141,6 +150,7 @@ class LibraryStore {
   searchHistory = $state<string[]>([]);
   localFolders = $state<string[]>([]);
   downloads = $state<DownloadItem[]>([]);
+  homeShelves = $state<HomeShelfItem[]>([]);
   loadingHome = $state(false);
   homeError = $state<string | null>(null);
 
@@ -239,36 +249,89 @@ class LibraryStore {
     }
   }
 
-  async loadHomeFeed(authenticated = true) {
+  private applyHomeShelves(shelves: BackendYtHomeShelf[]) {
+    const mappedShelves: HomeShelfItem[] = [];
+    const nextTracks: Track[] = [];
+    const nextAlbums: Album[] = [];
+    const nextArtists: Artist[] = [];
+
+    for (const shelf of shelves) {
+      const tracks = (shelf.tracks ?? []).map(mapYtTrack);
+      const trackCards = (shelf.trackCards ?? []).map(mapYtTrack);
+      const entities: HomeEntityItem[] = (shelf.entities ?? []).map((e) => {
+        const rawKind = (e.kind || '').toLowerCase();
+        const kind: HomeEntityItem['kind'] =
+          rawKind === 'artist'
+            ? 'artist'
+            : rawKind === 'playlist'
+              ? 'playlist'
+              : rawKind === 'mix'
+                ? 'mix'
+                : 'album';
+        if (kind === 'album') nextAlbums.push(mapYtAlbum(e));
+        else if (kind === 'artist') nextArtists.push(mapYtArtist(e));
+        return {
+          kind,
+          id: e.browseId || e.playlistId || e.name,
+          name: e.name || '',
+          subtitle: e.subtitle || e.artist || '',
+          browseId: e.browseId || '',
+          playlistId: e.playlistId || '',
+          artworkUrl: e.artworkUrl || '',
+        };
+      });
+
+      nextTracks.push(...tracks, ...trackCards);
+      if (tracks.length > 0 || trackCards.length > 0 || entities.length > 0) {
+        mappedShelves.push({
+          title: shelf.title || 'Recommended',
+          subtitle: shelf.subtitle || '',
+          tracks,
+          trackCards,
+          entities,
+        });
+      }
+    }
+
+    this.homeShelves = mappedShelves;
+    this.upsertTracks(nextTracks);
+    this.upsertAlbums(nextAlbums);
+    this.upsertArtists(nextArtists);
+  }
+
+  async loadHomeFeed(authenticated = true, forceFresh = false) {
     if (!isTauriRuntime()) return;
     this.loadingHome = true;
     this.homeError = null;
     try {
-      const shelves = await ipcInvoke<BackendYtHomeShelf[]>('yt_fetch_home_shelves', {
-        maxShelves: 12,
-        maxItemsPerShelf: 16,
-        maxPages: 2,
-        authenticated,
-      });
-      if (!Array.isArray(shelves)) return;
-
-      const nextTracks: Track[] = [];
-      const nextAlbums: Album[] = [];
-      const nextArtists: Artist[] = [];
-
-      for (const shelf of shelves) {
-        for (const t of shelf.tracks ?? []) nextTracks.push(mapYtTrack(t));
-        for (const t of shelf.trackCards ?? []) nextTracks.push(mapYtTrack(t));
-        for (const e of shelf.entities ?? []) {
-          const kind = (e.kind || '').toLowerCase();
-          if (kind === 'album') nextAlbums.push(mapYtAlbum(e));
-          else if (kind === 'artist') nextArtists.push(mapYtArtist(e));
+      if (!forceFresh && this.homeShelves.length === 0) {
+        const cached = await ipcInvoke<BackendYtHomeShelf[]>('yt_swr_home_shelves', {
+          forceFresh: false,
+        });
+        if (Array.isArray(cached) && cached.length > 0) {
+          this.applyHomeShelves(cached);
         }
       }
 
-      this.upsertTracks(nextTracks);
-      this.upsertAlbums(nextAlbums);
-      this.upsertArtists(nextArtists);
+      let shelves = await ipcInvoke<BackendYtHomeShelf[]>('yt_fetch_home_shelves', {
+        maxShelves: 16,
+        maxItemsPerShelf: 20,
+        maxPages: 3,
+        authenticated,
+      });
+
+      if ((!Array.isArray(shelves) || shelves.length === 0) && authenticated) {
+        shelves = await ipcInvoke<BackendYtHomeShelf[]>('yt_fetch_home_shelves', {
+          maxShelves: 16,
+          maxItemsPerShelf: 20,
+          maxPages: 2,
+          authenticated: false,
+        });
+      }
+
+      if (Array.isArray(shelves) && shelves.length > 0) {
+        this.applyHomeShelves(shelves);
+      }
     } catch (err) {
       this.homeError = err instanceof Error ? err.message : 'Failed to load YouTube Music feed';
     } finally {

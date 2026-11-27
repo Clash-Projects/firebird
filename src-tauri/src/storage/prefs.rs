@@ -764,24 +764,7 @@ impl Prefs {
         self.set_bool("lw_macos_now_playing", v);
     }
 
-    // -- Performance Mode & Haze / material ----------------------------------
-    pub fn performance_mode(&self) -> bool {
-        self.get_bool("lw_performance_mode").unwrap_or(false)
-    }
-
-    pub fn set_performance_mode(&self, v: bool) {
-        self.set_bool("lw_performance_mode", v);
-    }
-
-    pub fn performance_prompt_dismissed(&self) -> bool {
-        self.get_bool("lw_performance_prompt_dismissed")
-            .unwrap_or(false)
-    }
-
-    pub fn set_performance_prompt_dismissed(&self, v: bool) {
-        self.set_bool("lw_performance_prompt_dismissed", v);
-    }
-
+    // -- Haze / material -----------------------------------------------------
     pub fn haze_material(&self) -> String {
         self.get_string("lw_haze_material")
             .unwrap_or_else(|| "automatic".to_string())

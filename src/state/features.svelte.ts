@@ -1,6 +1,13 @@
 import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
 import { settingsStore } from './settings.svelte';
-import type { AudioDevice, LyricsDocument, PodcastShow, ToastMessage, Track } from './types';
+import type {
+  AudioDevice,
+  LyricsDocument,
+  PodcastShelfItem,
+  PodcastShow,
+  ToastMessage,
+  Track,
+} from './types';
 
 export const LYRICS_PROVIDERS: ReadonlyArray<{ id: string; label: string }> = [
   { id: 'auto', label: 'Auto (Word-First Racer)' },
@@ -87,8 +94,8 @@ interface BackendPodcastShelf {
     showId?: string;
     showTitle?: string;
     description?: string;
-    publishedAt?: string;
-    durationSeconds?: number;
+    publishedLabel?: string;
+    durationMs?: number;
     artworkUrl?: string;
   }>;
 }
@@ -114,7 +121,9 @@ class FeaturesStore {
   lyricsFontScale = $state(1.0);
 
   podcasts = $state<PodcastShow[]>([]);
+  podcastShelves = $state<PodcastShelfItem[]>([]);
   podcastsLoading = $state(false);
+  podcastsError = $state<string | null>(null);
 
   jamConnected = $state(false);
   jamRoomCode = $state('');
@@ -192,50 +201,57 @@ class FeaturesStore {
   async loadPodcasts(force = false) {
     if (!isTauriRuntime()) return;
     this.podcastsLoading = true;
+    this.podcastsError = null;
     try {
       const shelves = await ipcInvoke<BackendPodcastShelf[]>('podcasts_home', { force });
       if (!Array.isArray(shelves)) return;
+
       const byId = new Map<string, PodcastShow>();
+      const mappedShelves: PodcastShelfItem[] = [];
+
       for (const shelf of shelves) {
-        for (const s of shelf.shows ?? []) {
-          if (!s.showId || byId.has(s.showId)) continue;
-          byId.set(s.showId, {
+        const shows: PodcastShow[] = (shelf.shows ?? [])
+          .filter((s) => Boolean(s.showId))
+          .map((s) => ({
             id: s.showId,
             title: s.title,
             publisher: s.publisher || '',
             description: s.description || '',
             artworkUrl: s.artworkUrl || '',
             episodes: [],
-          });
+          }));
+
+        for (const s of shows) {
+          if (!byId.has(s.id)) byId.set(s.id, s);
         }
-        if (shelf.episodes && shelf.episodes.length > 0) {
-          const shelfId = `shelf-${(shelf.title || 'episodes').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-          const existing = byId.get(shelfId);
-          const eps = shelf.episodes.map((ep) => ({
+
+        const episodes = (shelf.episodes ?? [])
+          .filter((ep) => Boolean(ep.videoId))
+          .map((ep) => ({
             id: ep.videoId,
-            showId: ep.showId || shelfId,
+            showId: ep.showId || '',
+            showTitle: ep.showTitle || '',
             title: ep.title,
             description: ep.description || ep.showTitle || '',
-            publishedAt: ep.publishedAt || '',
-            durationSec: Number(ep.durationSeconds) || 0,
+            publishedAt: ep.publishedLabel || '',
+            durationSec: Math.max(0, Math.round(Number(ep.durationMs || 0) / 1000)),
             resumeSec: 0,
             artworkUrl: ep.artworkUrl || '',
           }));
-          if (existing) {
-            existing.episodes = [...existing.episodes, ...eps];
-          } else {
-            byId.set(shelfId, {
-              id: shelfId,
-              title: shelf.title || 'Featured Episodes',
-              publisher: 'YouTube Music Podcasts',
-              description: `${eps.length} episodes`,
-              artworkUrl: eps[0]?.artworkUrl || '',
-              episodes: eps,
-            });
-          }
+
+        if (shows.length > 0 || episodes.length > 0) {
+          mappedShelves.push({
+            title: shelf.title || 'Podcasts',
+            shows,
+            episodes,
+          });
         }
       }
+
+      this.podcastShelves = mappedShelves;
       this.podcasts = Array.from(byId.values());
+    } catch (err) {
+      this.podcastsError = err instanceof Error ? err.message : 'Failed to load podcasts';
     } finally {
       this.podcastsLoading = false;
     }

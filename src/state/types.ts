@@ -90,6 +90,7 @@ export interface LyricsDocument {
 export interface PodcastEpisode {
   id: string;
   showId: string;
+  showTitle?: string;
   title: string;
   description: string;
   publishedAt: string;
@@ -105,6 +106,30 @@ export interface PodcastShow {
   artworkUrl: string;
   description: string;
   episodes: PodcastEpisode[];
+}
+
+export interface PodcastShelfItem {
+  title: string;
+  shows: PodcastShow[];
+  episodes: PodcastEpisode[];
+}
+
+export interface HomeEntityItem {
+  kind: 'album' | 'artist' | 'playlist' | 'mix';
+  id: string;
+  name: string;
+  subtitle: string;
+  browseId: string;
+  playlistId: string;
+  artworkUrl: string;
+}
+
+export interface HomeShelfItem {
+  title: string;
+  subtitle: string;
+  tracks: Track[];
+  trackCards: Track[];
+  entities: HomeEntityItem[];
 }
 
 export interface GenreItem {

@@ -84,11 +84,29 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// Resolves the default application support directory for LastWave Desktop.
+    /// Resolves the application support directory:
+    /// 1) Portable mode: `<exe_dir>/data` when `--portable`, `<exe_dir>/.portable`,
+    ///    or an existing `<exe_dir>/data` folder is present.
+    /// 2) Desktop mode: `%APPDATA%/Clash-Projects/LastWave` (matching official
+    ///    LastWave Desktop builds so existing library, stats, and prefs persist).
     pub fn default_app_support_dir() -> PathBuf {
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(exe_dir) = exe.parent() {
+                let portable_data = exe_dir.join("data");
+                let has_flag = std::env::args().any(|a| a == "--portable");
+                if has_flag
+                    || portable_data.is_dir()
+                    || exe_dir.join(".portable").exists()
+                    || exe_dir.join("lastwave.db").exists()
+                {
+                    return portable_data;
+                }
+            }
+        }
         dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("com.lastwave.lastwave_desktop")
+            .join("Clash-Projects")
+            .join("LastWave")
     }
 
     /// Initializes all backend stores and services rooted at `app_support_dir`.
@@ -97,6 +115,10 @@ impl AppState {
 
         let http = HttpClientFactory::create().unwrap_or_else(|_| reqwest::Client::new());
         let prefs = Arc::new(Prefs::load(&app_support_dir));
+        crate::storage::diagnostics_log::DiagnosticsLog::init(
+            &app_support_dir.join("logs"),
+            false,
+        );
         let db = Arc::new(AppDatabase::open(&app_support_dir));
         let secure = Arc::new(SecureStore::new());
 

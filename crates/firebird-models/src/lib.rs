@@ -12,7 +12,6 @@ pub mod lyrics_models;
 pub mod match_vocab;
 pub mod output_path_status;
 pub mod pcm_format;
-pub mod performance_controller;
 pub mod player_state;
 pub mod podcast_models;
 pub mod secrets;

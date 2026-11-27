@@ -11,7 +11,7 @@ export const lwHazeSpecs: Record<LwHazeLevel, { blurSigma: number; darkAlpha: nu
 
 export function resolveHazeBlur(level: LwHazeLevel, enableBlur = true): number {
   if (!enableBlur || level === 'l0') return 0;
-  if (settingsStore.hazeMaterial === 'solid' || settingsStore.performanceMode) return 0;
+  if (settingsStore.hazeMaterial === 'solid') return 0;
   if (level === 'l1' && settingsStore.hazeIntensity === 'low') return 0;
   const intensityScale =
     settingsStore.hazeIntensity === 'low' ? 0.6 : settingsStore.hazeIntensity === 'high' ? 1.25 : 1.0;

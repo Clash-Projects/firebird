@@ -110,15 +110,14 @@ impl PodcastRepository {
         }
 
         let shelves = match self.tube.fetch_podcast_home().await {
-            Ok(shelves) => shelves,
+            Ok(shelves) if !shelves.is_empty() => shelves,
+            Ok(_) => {
+                DiagnosticsLog::info("podcasts home empty -> fallback=search");
+                self.search_home().await
+            }
             Err(err) => {
-                // YouTube Music's Podcasts page is not served in every region (e.g. 404/403);
-                // fall back to search-built shelves instead of failing the whole page.
-                if err.status_code != Some(404) && err.status_code != Some(403) {
-                    return Err(err);
-                }
                 DiagnosticsLog::info(&format!(
-                    "podcasts home http={:?} fallback=search",
+                    "podcasts home err={err} status={:?} -> fallback=search",
                     err.status_code
                 ));
                 let fallback = self.search_home().await;

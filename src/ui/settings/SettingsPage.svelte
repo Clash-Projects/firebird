@@ -19,8 +19,6 @@
   import CacheSettings from './CacheSettings.svelte';
   import DownloadLayoutSettings from './DownloadLayoutSettings.svelte';
   import LibrarySettings from './LibrarySettings.svelte';
-  import PerformanceModeCard from './PerformanceModeCard.svelte';
-  import PluginsSettings from './PluginsSettings.svelte';
   import ScrobblerSettings from './ScrobblerSettings.svelte';
   import { searchSettings } from './settingsSearch';
   import SpotifyConnect from './SpotifyConnect.svelte';
@@ -39,7 +37,6 @@
     { id: 'lyrics', label: 'Lyrics', icon: 'lyrics' },
     { id: 'integrations', label: 'Accounts & Scrobblers', icon: 'globe' },
     { id: 'library', label: 'Library & Downloads', icon: 'library' },
-    { id: 'plugins', label: 'Plugins & Themes', icon: 'plugin' },
     { id: 'about', label: 'About', icon: 'info' },
   ];
 
@@ -55,6 +52,35 @@
   let activeSection = $state('general');
   let query = $state('');
   let keyGuideOpen = $state(false);
+  let verboseLogs = $state(false);
+  let exportingLogs = $state(false);
+
+  $effect(() => {
+    void ipcInvoke<boolean>('diagnostics_is_verbose').then((v) => {
+      if (typeof v === 'boolean') verboseLogs = v;
+    });
+  });
+
+  async function exportLogs() {
+    if (exportingLogs) return;
+    exportingLogs = true;
+    try {
+      const savedPath = await ipcInvoke<string>('diagnostics_export_logs');
+      featuresStore.showToast({
+        title: 'Diagnostic logs exported',
+        subtitle: savedPath ?? 'Saved zip bundle to Downloads',
+        severity: 'success',
+      });
+    } catch (err) {
+      featuresStore.showToast({
+        title: 'Log export failed',
+        subtitle: err instanceof Error ? err.message : 'Could not create diagnostic archive',
+        severity: 'error',
+      });
+    } finally {
+      exportingLogs = false;
+    }
+  }
 
   $effect(() => {
     const alias =
@@ -161,7 +187,7 @@
       </nav>
     </aside>
 
-    <div class="lw-scroll flex-1 space-y-5 pb-12 pr-2 {activeSection === 'plugins' ? 'max-w-[1060px]' : 'max-w-[780px]'}">
+    <div class="lw-scroll max-w-[780px] flex-1 space-y-5 pb-12 pr-2">
       <h2 class="text-[20px] font-bold tracking-[-0.3px]">
         {sections.find((s) => s.id === activeSection)?.label ?? 'Settings'}
       </h2>
@@ -203,7 +229,29 @@
             />
           </div>
 
-          <PerformanceModeCard />
+          <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+            <div>
+              <div class="text-[13.5px] font-semibold">Diagnostic Logs</div>
+              <div class="text-[12px] text-[var(--lw-text-secondary)]">Export redacted playback, mpv, and network session logs (.zip)</div>
+            </div>
+            <div class="flex items-center gap-3">
+              <label class="flex cursor-pointer items-center gap-1.5 text-[12px] text-[var(--lw-text-secondary)]">
+                <input
+                  type="checkbox"
+                  checked={verboseLogs}
+                  onchange={(e) => {
+                    verboseLogs = e.currentTarget.checked;
+                    void ipcInvoke('diagnostics_set_verbose', { verbose: verboseLogs });
+                  }}
+                  class="h-4 w-4 accent-[var(--lw-accent)]"
+                />
+                Verbose
+              </label>
+              <Buttons variant="secondary" size="sm" disabled={exportingLogs} onclick={exportLogs}>
+                {exportingLogs ? 'Exporting...' : 'Export Logs'}
+              </Buttons>
+            </div>
+          </div>
         </div>
       {:else if activeSection === 'appearance'}
         <div class="space-y-4">
@@ -535,8 +583,6 @@
           <BackupSettings />
           <CacheSettings />
         </div>
-      {:else if activeSection === 'plugins'}
-        <PluginsSettings />
       {:else if activeSection === 'about'}
         <div class="space-y-4">
           <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">

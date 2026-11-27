@@ -1,16 +1,15 @@
 //! Tauri IPC command handlers for Prefs, SecureStore, AppLanguage,
-//! Performance Mode, and DiagnosticsLog / LogBundle.
+//! and DiagnosticsLog / LogBundle.
 
 use std::path::PathBuf;
 
 use serde_json::{Map, Value};
 use tauri::State;
 
+use crate::audio::play_diag::PlayDiag;
 use crate::commands::state::AppState;
+use crate::models::app_info::APP_VERSION;
 use crate::models::app_language::AppLanguage;
-use crate::models::performance_controller::{
-    is_modest_hardware, performance_optimizations, PerformanceOptimizationItem, PerformanceState,
-};
 use crate::storage::diagnostics_log::DiagnosticsLog;
 use crate::storage::log_bundle::LogBundle;
 
@@ -95,8 +94,6 @@ pub fn prefs_get_all_settings(state: State<'_, AppState>) -> Value {
     m.insert("spotifyCanvasEnabled".into(), Value::Bool(p.spotify_canvas_enabled()));
     m.insert("preferSpotifyCanvas".into(), Value::Bool(p.prefer_spotify_canvas()));
     m.insert("recommendationSource".into(), Value::String(p.recommendation_source()));
-    m.insert("performanceMode".into(), Value::Bool(p.performance_mode()));
-    m.insert("performancePromptDismissed".into(), Value::Bool(p.performance_prompt_dismissed()));
     Value::Object(m)
 }
 
@@ -141,36 +138,6 @@ pub fn language_effective(state: State<'_, AppState>) -> AppLanguage {
     let tag = state.prefs.app_language_tag();
     AppLanguage::from_tag(if tag.is_empty() { None } else { Some(tag.as_str()) })
         .effective_language()
-}
-
-// Performance Mode
-
-#[tauri::command]
-pub fn performance_get_state(state: State<'_, AppState>) -> PerformanceState {
-    PerformanceState {
-        performance_mode: state.prefs.performance_mode(),
-        prompt_dismissed: state.prefs.performance_prompt_dismissed(),
-        is_modest_hardware: is_modest_hardware(),
-    }
-}
-
-#[tauri::command]
-pub fn performance_set_mode(state: State<'_, AppState>, enabled: bool) -> PerformanceState {
-    state.prefs.set_performance_mode(enabled);
-    performance_get_state(state)
-}
-
-#[tauri::command]
-pub fn performance_dismiss_prompt(state: State<'_, AppState>) -> PerformanceState {
-    state.prefs.set_performance_prompt_dismissed(true);
-    performance_get_state(state)
-}
-
-#[tauri::command]
-pub fn performance_get_optimizations(
-    state: State<'_, AppState>,
-) -> Vec<PerformanceOptimizationItem> {
-    performance_optimizations(state.prefs.performance_mode())
 }
 
 // DiagnosticsLog & LogBundle
@@ -219,4 +186,61 @@ pub fn diagnostics_export_bundle(report: String, dest_path: String) -> Result<St
 #[tauri::command]
 pub fn diagnostics_build_bundle_bytes(report: String) -> Result<Vec<u8>, String> {
     LogBundle::build(&report).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn diagnostics_play_diag() -> String {
+    PlayDiag::dump()
+}
+
+#[tauri::command]
+pub fn diagnostics_export_logs(state: State<'_, AppState>) -> Result<String, String> {
+    let snap = state.playback.snapshot();
+    let audio = state.audio_output.state();
+    let stats = state.db.get_local_stats_summary(None, None);
+    let recent_plays_count = stats.map(|s| s.total_plays).unwrap_or(0);
+    let cache_stats = state.db.cache_stats();
+    let cache_entries: i64 = cache_stats.values().map(|s| s.entries).sum();
+
+    let report = format!(
+        "LastWave Desktop Diagnostics\n\
+         Version: {APP_VERSION}\n\
+         OS: {} ({})\n\
+         App Support Dir: {}\n\
+         Quality: lossless_quality={} prefer_lossless={}\n\
+         Audio Output: selected={} exclusive={} bit_perfect={} devices={}\n\
+         Stats & Cache: local_plays={recent_plays_count} cache_entries={}\n\
+         Player State: playing={} buffering={} pos_ms={} dur_ms={} error={:?} queue_len={}\n\
+         Current Track: {}\n\n\
+         --- PlayDiag ---\n{}\n",
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        state.app_support_dir.display(),
+        state.prefs.lossless_quality(),
+        state.prefs.prefer_lossless(),
+        audio.selected_id,
+        audio.exclusive_requested,
+        audio.bit_perfect_requested,
+        audio.devices.len(),
+        cache_entries,
+        snap.is_playing,
+        snap.is_buffering,
+        snap.position_ms,
+        snap.duration_ms,
+        snap.error,
+        snap.queue.len(),
+        snap.current
+            .as_ref()
+            .map(|t| format!("{} - {} (videoId={})", t.title, t.artist, t.video_id))
+            .unwrap_or_else(|| "<none>".to_string()),
+        PlayDiag::dump(),
+    );
+
+    let dest_dir = dirs::download_dir()
+        .or_else(dirs::desktop_dir)
+        .unwrap_or_else(|| state.app_support_dir.clone());
+    let dest = dest_dir.join(LogBundle::suggested_name(None));
+    let saved = LogBundle::export_to_path(&report, &dest).map_err(|e| e.to_string())?;
+    LogBundle::reveal_file(&saved);
+    Ok(saved.to_string_lossy().into_owned())
 }

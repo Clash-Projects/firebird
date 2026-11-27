@@ -38,6 +38,7 @@ fn shutdown_audio_and_resources(app: &tauri::AppHandle) {
     state.spectrum.unsubscribe(None);
     state.playback.shutdown_sync();
     state.audio_output.dispose();
+    crate::storage::diagnostics_log::DiagnosticsLog::mark_clean_exit();
 }
 
 fn quit_application(app: &tauri::AppHandle) {
@@ -172,10 +173,6 @@ pub fn run() {
             commands::settings::language_get,
             commands::settings::language_set,
             commands::settings::language_effective,
-            commands::settings::performance_get_state,
-            commands::settings::performance_set_mode,
-            commands::settings::performance_dismiss_prompt,
-            commands::settings::performance_get_optimizations,
             commands::settings::diagnostics_is_verbose,
             commands::settings::diagnostics_set_verbose,
             commands::settings::diagnostics_previous_exit_clean,
@@ -184,6 +181,8 @@ pub fn run() {
             commands::settings::diagnostics_suggested_bundle_name,
             commands::settings::diagnostics_export_bundle,
             commands::settings::diagnostics_build_bundle_bytes,
+            commands::settings::diagnostics_play_diag,
+            commands::settings::diagnostics_export_logs,
             // commands::extractor
             commands::extractor::yt_search_songs,
             commands::extractor::yt_search_mixed,
