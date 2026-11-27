@@ -16,7 +16,7 @@
   class="flex h-full w-[360px] shrink-0 flex-col border-l border-[var(--lw-divider)] bg-[var(--lw-panel-translucent)] shadow-[var(--lw-shadow-panel)]"
 >
   <div class="flex items-center justify-between px-4 pt-3.5 pb-0.5">
-    <h2 class="text-[18px] font-bold tracking-[-0.3px]">Queue</h2>
+    <h2 class="lw-display text-[23px] font-bold">Queue</h2>
     <button
       type="button"
       onclick={() => windowState.closeRightPanel()}
@@ -36,7 +36,11 @@
           <div class="truncate text-[13px] font-semibold text-[var(--lw-accent)]">{current.title}</div>
           <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{current.artist}</div>
         </div>
-        <span class="lw-eq-bars mr-1" aria-hidden="true"><span></span><span></span><span></span></span>
+        {#if playerStore.isPlaying}
+          <span class="lw-eq-bars mr-1" aria-hidden="true"><span></span><span></span><span></span></span>
+        {:else}
+          <WaveIcon name="pause" size={14} class="mr-1 text-[var(--lw-accent)]" />
+        {/if}
       </div>
     </div>
     <div class="mx-4 my-2.5 h-px bg-[var(--lw-divider)]"></div>
@@ -66,7 +70,11 @@
 
   <div class="lw-scroll flex-1 space-y-0.5 px-2 pb-3">
     {#if upcoming.length === 0}
-      <div class="py-12 text-center text-[12px] text-[var(--lw-text-tertiary)]">Queue ends here.</div>
+      <div class="grid justify-items-center gap-2 px-5 py-12 text-center">
+        <span class="grid h-10 w-10 place-items-center rounded-[10px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] text-[var(--lw-accent)]"><WaveIcon name="queue" size={18} /></span>
+        <p class="font-semibold">{current ? 'Queue ends here' : 'Your queue is empty'}</p>
+        <p class="text-[12px] text-[var(--lw-text-secondary)]">Add a track to listen to it next.</p>
+      </div>
     {:else}
       {#each upcoming as track, offset (track.id + '-' + offset)}
         {@const queueIdx = playerStore.currentIndex + 1 + offset}

@@ -10,7 +10,13 @@
 </script>
 
 {#key routeKey}
-  <div class="lw-enter h-full w-full" style:--lw-rise="8px" style:--lw-delay="0ms">
-    {@render children()}
+  <div class="lw-scroll stage-scroll relative z-10 h-full w-full scrollbar-gutter-stable">
+    <div class="lw-route-enter h-full w-full">
+      {@render children()}
+    </div>
   </div>
 {/key}
+
+<style>
+  .stage-scroll { overscroll-behavior: contain; scroll-behavior: var(--lw-scroll-behavior); }
+</style>

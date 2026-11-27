@@ -16,7 +16,7 @@
 <section data-lw="shelf" class="space-y-3">
   <div class="flex items-end justify-between gap-3">
     <div>
-      <h2 class="text-[15px] font-bold tracking-[-0.2px] text-[var(--lw-text-primary)]">{title}</h2>
+      <h2 class="lw-display text-[19px] font-bold text-[var(--lw-text-primary)]">{title}</h2>
       {#if subtitle}
         <p class="text-[12px] text-[var(--lw-text-secondary)]">{subtitle}</p>
       {/if}

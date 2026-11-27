@@ -6,6 +6,7 @@
   import { settingsStore } from '$src/state/settings.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import Select from '$src/ui/components/Select.svelte';
+  import Switch from '$src/ui/components/Switch.svelte';
   import WaveHaze from '$src/ui/theme/WaveHaze.svelte';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
 
@@ -63,12 +64,10 @@
       <p class="text-[11.5px] text-[var(--lw-text-tertiary)]">Studio DSP filter chain</p>
     </div>
     <div class="flex items-center gap-2">
-      <input
-        type="checkbox"
+      <Switch
         checked={featuresStore.eqEnabled}
-        onchange={(e) => toggleEqEnabled(e.currentTarget.checked)}
-        aria-label="Enable EQ"
-        class="h-4 w-4 accent-[var(--lw-accent)]"
+        onchange={toggleEqEnabled}
+        label="Enable EQ"
       />
       <button
         type="button"
@@ -83,11 +82,12 @@
   <div class="lw-scroll flex-1 space-y-4">
     <div class="grid grid-cols-2 gap-2">
       <Select
+        label="Equalizer preset"
         value={featuresStore.eqPreset}
         options={[...presetOptions, { value: 'Custom', label: 'Custom' }]}
         onchange={(v) => v !== 'Custom' && featuresStore.applyEqPreset(v)}
       />
-      <Buttons variant="secondary" size="sm" onclick={resetEq}>Reset Flat</Buttons>
+      <Buttons variant="secondary" onclick={resetEq}>Reset Flat</Buttons>
     </div>
 
     <div class="rounded-[16px] border border-[var(--lw-outline)] bg-[var(--lw-surface)] p-3">
@@ -130,14 +130,18 @@
 
     <div class="space-y-2 rounded-[16px] border border-[var(--lw-outline)] bg-[var(--lw-surface)] p-3">
       <div class="text-[12px] font-semibold">AutoEQ Headphone Curve</div>
-      <Select value={featuresStore.headphoneProfile} options={headphoneOptions} onchange={changeHeadphoneProfile} class="w-full" />
-      <label class="flex cursor-pointer items-center justify-between pt-1 text-[12px]">
+      <Select
+        label="AutoEQ Headphone Curve"
+        value={featuresStore.headphoneProfile}
+        options={headphoneOptions}
+        onchange={changeHeadphoneProfile}
+        class="w-full"
+      />
+      <label class="flex cursor-pointer items-center justify-between gap-3 pt-1 text-[12px]">
         <span class="text-[var(--lw-text-secondary)]">Studio Master Clarity Filter</span>
-        <input
-          type="checkbox"
+        <Switch
           checked={featuresStore.studioClarity}
-          onchange={(e) => toggleStudioClarity(e.currentTarget.checked)}
-          class="h-4 w-4 accent-[var(--lw-accent)]"
+          onchange={toggleStudioClarity}
         />
       </label>
     </div>

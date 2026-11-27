@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { router } from '$src/app/router.svelte';
   import { libraryStore } from '$src/state/library.svelte';
   import Artwork from '$src/ui/components/Artwork.svelte';
   import DesktopTable from '$src/ui/components/DesktopTable.svelte';
+  import States from '$src/ui/components/States.svelte';
   import DownloadsPage from '$src/ui/collections/DownloadsPage.svelte';
   import { goAlbum, goArtist, goPlaylist } from '$src/ui/navigation/waveNav';
   import LibraryFolders from './LibraryFolders.svelte';
@@ -22,14 +24,15 @@
 </script>
 
 <div class="flex h-full flex-col">
-  <div class="px-6 pt-5 pb-1">
-    <h1 class="text-[22px] font-bold tracking-[-0.4px] leading-[1.15]">Library</h1>
-    <div class="mt-2.5 flex items-center border-b border-[var(--lw-divider)]">
+  <div class="px-6 pt-6 pb-1 md:px-8">
+    <h1 class="lw-display text-[34px] font-bold leading-tight">Library</h1>
+    <div class="mt-3 flex flex-wrap items-center border-b border-[var(--lw-divider)]">
       {#each TABS as item (item.id)}
         {@const active = tab === item.id}
         <button
           type="button"
           onclick={() => (tab = item.id)}
+          aria-pressed={active}
           class="mr-5 cursor-pointer border-b-2 px-0.5 py-2 text-[13.5px] transition-colors duration-[110ms] {active
             ? 'border-[var(--lw-accent)] font-semibold text-[var(--lw-text-primary)]'
             : 'border-transparent font-normal text-[var(--lw-text-secondary)] hover:text-[var(--lw-text-primary)]'}"
@@ -40,9 +43,20 @@
     </div>
   </div>
 
-  <div class="lw-scroll flex-1 px-6 py-4 pb-10">
+  <div class="lw-scroll flex-1 px-6 py-4 pb-10 md:px-8">
     {#if tab === 'songs'}
-      <DesktopTable tracks={libraryStore.tracks} />
+      {#if libraryStore.tracks.length}
+        <DesktopTable tracks={libraryStore.tracks} />
+      {:else}
+        <States icon="music" title="No songs yet" description="Find music online or add a folder from your computer.">
+          {#snippet action()}
+            <div class="flex flex-wrap items-center justify-center gap-2">
+              <button type="button" onclick={() => router.navigate('/search')} class="cursor-pointer rounded-[9px] bg-[var(--lw-accent)] px-3 py-1.5 font-semibold text-[var(--lw-on-accent)]">Find music</button>
+              <button type="button" onclick={() => (tab = 'folders')} class="cursor-pointer rounded-[9px] border border-[var(--lw-outline)] px-3 py-1.5 font-semibold hover:bg-[var(--lw-wash-hover)]">Add a folder</button>
+            </div>
+          {/snippet}
+        </States>
+      {/if}
     {:else if tab === 'albums'}
       <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
         {#each libraryStore.albums as album (album.id)}

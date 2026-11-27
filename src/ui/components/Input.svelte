@@ -2,6 +2,7 @@
   interface Props {
     value: string;
     placeholder?: string;
+    ariaLabel?: string;
     type?: string;
     class?: string;
     autofocus?: boolean;
@@ -12,6 +13,7 @@
   let {
     value = $bindable(''),
     placeholder = '',
+    ariaLabel,
     type = 'text',
     class: className = '',
     autofocus = false,
@@ -24,6 +26,7 @@
 <input
   {type}
   {placeholder}
+  aria-label={ariaLabel}
   {autofocus}
   bind:value
   oninput={(e) => oninput?.((e.currentTarget as HTMLInputElement).value)}

@@ -99,7 +99,7 @@
         toggleTrackLike(track);
       }}
       aria-label={liked ? 'Unlike track' : 'Like track'}
-      class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[10px] transition-all duration-[110ms] hover:bg-[var(--lw-wash-hover)] active:scale-95 {liked
+      class="lw-press flex h-8 w-8 cursor-pointer items-center justify-center rounded-[10px] hover:bg-[var(--lw-wash-hover)] {liked
         ? 'text-[var(--lw-danger)] opacity-100'
         : 'text-[var(--lw-text-tertiary)] opacity-0 group-hover:opacity-100 hover:text-[var(--lw-text-primary)]'}"
     >
@@ -110,7 +110,7 @@
       type="button"
       onclick={(e) => contextMenu.showForTrack(e, track)}
       aria-label="Track options"
-      class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[10px] text-[var(--lw-text-tertiary)] opacity-0 transition-all duration-[110ms] group-hover:opacity-100 hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
+      class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[10px] text-[var(--lw-text-tertiary)] opacity-0 transition-[opacity,background-color,color] group-hover:opacity-100 focus-visible:opacity-100 hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
     >
       <WaveIcon name="more" size={15} />
     </button>

@@ -17,3 +17,30 @@ export function announcePolite(message: string) {
     if (region) region.textContent = message;
   });
 }
+
+export function dismissFlyout(node: HTMLElement, options: { open: boolean; close: () => void }) {
+  function dismissOutside(event: Event) {
+    const target = event instanceof FocusEvent ? event.relatedTarget : event.target;
+    if (options.open && target instanceof Node && !node.contains(target)) options.close();
+  }
+
+  function dismissWithEscape(event: KeyboardEvent) {
+    if (event.defaultPrevented || event.key !== 'Escape' || !options.open) return;
+    event.preventDefault();
+    options.close();
+    if (node.contains(document.activeElement)) node.querySelector<HTMLButtonElement>('button[aria-expanded]')?.focus();
+  }
+
+  document.addEventListener('pointerdown', dismissOutside);
+  document.addEventListener('keydown', dismissWithEscape);
+  node.addEventListener('focusout', dismissOutside);
+
+  return {
+    update(next: typeof options) { options = next; },
+    destroy() {
+      document.removeEventListener('pointerdown', dismissOutside);
+      document.removeEventListener('keydown', dismissWithEscape);
+      node.removeEventListener('focusout', dismissOutside);
+    },
+  };
+}

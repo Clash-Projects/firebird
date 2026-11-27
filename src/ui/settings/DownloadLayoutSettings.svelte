@@ -1,6 +1,7 @@
 <script lang="ts">
   import { settingsStore } from '$src/state/settings.svelte';
   import Select from '$src/ui/components/Select.svelte';
+  import Switch from '$src/ui/components/Switch.svelte';
 
   const STRUCTURE_OPTIONS = [
     { value: 'artist_album', label: 'Artist / Album / Track' },
@@ -18,6 +19,7 @@
       <p class="text-[12px] text-[var(--lw-text-secondary)]">How offline audio files are organized on disk</p>
     </div>
     <Select
+      label="Download folder structure"
       value={settingsStore.downloadFolderTemplate}
       options={STRUCTURE_OPTIONS}
       onchange={(v) => {
@@ -28,14 +30,12 @@
   </div>
   <label class="flex cursor-pointer items-center justify-between text-[12.5px]">
     <span>Save synced .lrc lyrics alongside downloads</span>
-    <input
-      type="checkbox"
+    <Switch
       checked={settingsStore.embedLyrics}
-      onchange={(e) => {
-        settingsStore.embedLyrics = e.currentTarget.checked;
+      onchange={(checked) => {
+        settingsStore.embedLyrics = checked;
         settingsStore.saveBoolPref('lw_download_lyrics', settingsStore.embedLyrics);
       }}
-      class="h-4 w-4 accent-[var(--lw-accent)]"
     />
   </label>
 </div>

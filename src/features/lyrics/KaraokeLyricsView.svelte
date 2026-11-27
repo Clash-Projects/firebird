@@ -1,7 +1,9 @@
 <script lang="ts">
+  import type { AmLyrics } from '@uimaxbai/am-lyrics';
   import { featuresStore } from '$src/state/features.svelte';
   import { playerStore } from '$src/state/player.svelte';
-  import { activeLineIndex, wordProgress } from './lyricAdapter';
+  import { settingsStore } from '$src/state/settings.svelte';
+  import { activeLineIndex, toTimedText, wordProgress } from './lyricAdapter';
 
   interface Props {
     compact?: boolean;
@@ -13,84 +15,128 @@
   let track = $derived(playerStore.currentTrack);
   let doc = $derived(track ? featuresStore.getLyrics(track.id) : null);
   let offsetMs = $derived(track ? featuresStore.getLyricsOffset(track.id) : 0);
-
-  let smoothPosMs = $state(0);
-  let lineEls = $state<Record<number, HTMLDivElement | null>>({});
-  let lastScrolledIdx = -1;
+  let posMs = $derived(Math.max(0, playerStore.positionSec * 1000 + offsetMs));
+  let activeIdx = $derived(doc ? activeLineIndex(doc.lines, posMs) : 0);
+  let activeLine = $derived(doc?.lines[activeIdx]);
+  let durationMs = $derived(playerStore.durationSec * 1000);
+  let timedText = $derived(doc ? toTimedText(doc, durationMs, featuresStore.wordByWord) : null);
+  let enhancedReady = $state(false);
+  let lyricsView = $state<HTMLDivElement | null>(null);
+  let lastManualScroll = -Infinity;
 
   $effect(() => {
-    const baseMs = playerStore.positionSec * 1000;
-    const playing = playerStore.isPlaying;
-    const speed = playerStore.speed || 1;
-    const anchor = performance.now();
-    smoothPosMs = baseMs;
-
-    if (!playing) return;
-
-    let rafId = 0;
-    const tick = (now: number) => {
-      smoothPosMs = baseMs + (now - anchor) * speed;
-      rafId = requestAnimationFrame(tick);
-    };
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
+    if (!timedText || enhancedReady) return;
+    let mounted = true;
+    void import('@uimaxbai/am-lyrics/am-lyrics.js').then(() => {
+      if (mounted) enhancedReady = true;
+    }).catch((error) => console.warn('Synced lyrics renderer failed to load:', error));
+    return () => { mounted = false; };
   });
 
-  let effectivePosMs = $derived(Math.max(0, smoothPosMs + offsetMs));
-  let activeIdx = $derived(doc?.synced ? activeLineIndex(doc.lines, effectivePosMs) : -1);
+  function configureRenderer(element: AmLyrics) {
+    const seek = (event: Event) => {
+      const { timestamp } = (event as CustomEvent<{ timestamp: number }>).detail;
+      if (Number.isFinite(timestamp)) seekLine(timestamp);
+    };
+    element.addEventListener('line-click', seek);
+
+    // The pinned renderer exposes theme variables but no parts for its embedded controls.
+    // LastWave supplies the controls and provider attribution around the scroll area.
+    const chrome = document.createElement('style');
+    // The footer supplies the renderer's end-of-list measurement, even when hidden.
+    chrome.textContent = `
+      :host .lyrics-header { display: none; }
+      :host .lyrics-footer.lyrics-line {
+        height: 0;
+        min-height: 0;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        visibility: hidden;
+      }
+    `;
+    void element.updateComplete.then(() => element.shadowRoot?.prepend(chrome));
+
+    return { destroy: () => element.removeEventListener('line-click', seek) };
+  }
+
+  function shareActiveLine() {
+    if (activeLine) onShareLine?.(activeLine.text);
+  }
+
+  function seekLine(timestamp: number) {
+    playerStore.seek(Math.max(0, (timestamp - offsetMs) / 1000));
+  }
 
   $effect(() => {
-    if (!doc?.synced || activeIdx < 0 || activeIdx === lastScrolledIdx) return;
-    lastScrolledIdx = activeIdx;
-    const el = lineEls[activeIdx];
-    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if ((enhancedReady && timedText) || !doc?.synced || !lyricsView || !playerStore.isPlaying) return;
+    const line = lyricsView.querySelector<HTMLElement>(`[data-line-index="${activeIdx}"]`);
+    const container = lyricsView.closest<HTMLElement>('.lw-scroll');
+    if (!line || !container || performance.now() - lastManualScroll < 3000) return;
+
+    const lineRect = line.getBoundingClientRect();
+    const centerOffset = lineRect.top - container.getBoundingClientRect().top + (lineRect.height - container.clientHeight) / 2;
+    const reduced = settingsStore.reduceMotion || matchMedia('(prefers-reduced-motion: reduce)').matches;
+    container.scrollTo({ top: container.scrollTop + centerOffset, behavior: reduced ? 'instant' : 'smooth' });
   });
 </script>
 
-<div data-lw="lyrics-view" class="mx-auto w-full max-w-[620px] space-y-3 py-6">
-  {#if featuresStore.lyricsLoading && !doc}
-    <div class="px-3 py-10 text-center text-[13px] text-[var(--lw-text-secondary)]">
-      Fetching synced lyrics...
+{#if enhancedReady && timedText && doc}
+  <div class="synced-lyrics" class:compact data-lw="lyrics-view">
+    {#key doc.trackId}
+      <am-lyrics
+        use:configureRenderer
+        ttml={timedText}
+        currentTime={posMs}
+        duration={durationMs || undefined}
+        paused={!playerStore.isPlaying || playerStore.isBuffering}
+        interpolate={playerStore.speed === 1}
+        noAutoAlternates={true}
+        noBlur={settingsStore.reduceMotion}
+        reducedMotion={settingsStore.reduceMotion}
+        fontFamily="var(--lw-font-family)"
+        style:--lw-lyrics-scale={featuresStore.lyricsFontScale}
+      ></am-lyrics>
+    {/key}
+    {#if (featuresStore.showTranslation && activeLine?.translation) || (featuresStore.showRomanized && activeLine?.romanized)}
+      <div class="active-translation">
+        {#if featuresStore.showRomanized && activeLine?.romanized}<div>{activeLine.romanized}</div>{/if}
+        {#if featuresStore.showTranslation && activeLine?.translation}<div>{activeLine.translation}</div>{/if}
+      </div>
+    {/if}
+    <div class="lyrics-meta">
+      <span title={doc.provider}>Source: {doc.provider}</span>
+      {#if onShareLine && activeLine?.text}
+        <button type="button" onclick={shareActiveLine} title="Share lyric card">Share line</button>
+      {/if}
     </div>
-  {:else if doc}
-    {#each doc.lines as line, i (`${i}-${line.startMs}`)}
+  </div>
+{:else}
+<div bind:this={lyricsView} onwheel={() => (lastManualScroll = performance.now())} data-lw="lyrics-view" class="mx-auto w-full max-w-[660px] py-4" class:compact style:--lw-lyrics-scale={featuresStore.lyricsFontScale}>
+  {#if doc}
+    {#each doc.lines as line, i}
       {@const active = doc.synced && i === activeIdx}
       {@const past = doc.synced && i < activeIdx}
-      {@const distance = activeIdx >= 0 ? Math.abs(i - activeIdx) : 0}
       <div
-        bind:this={lineEls[i]}
         data-lw="lyrics-line"
+        data-line-index={i}
         data-active={active}
-        class="group flex items-start gap-2 rounded-[14px] px-3 py-2 transition-all duration-300 ease-out hover:bg-[var(--lw-wash-hover)]"
-        style:transform={active ? 'scale(1.025)' : 'scale(1)'}
-        style:transform-origin="left center"
-        style:filter={!active && doc.synced && distance >= 2 ? 'blur(0.6px)' : 'none'}
+        class="lyric-line group"
+        class:past
       >
         <button
           type="button"
-          onclick={() => doc.synced && playerStore.seek(Math.max(0, (line.startMs - offsetMs) / 1000))}
-          class="flex-1 cursor-pointer text-left"
+          onclick={() => doc.synced && seekLine(line.startMs)}
+          class="min-w-0 flex-1 cursor-pointer text-left"
+          aria-current={active ? 'true' : undefined}
         >
-          <div
-            class="leading-[1.35] transition-all duration-300 {active
-              ? 'font-bold tracking-[-0.2px] text-[var(--lw-text-primary)]'
-              : past
-                ? 'font-medium text-[var(--lw-text-tertiary)] opacity-55 group-hover:opacity-90'
-                : 'font-medium text-[var(--lw-text-secondary)] opacity-70 group-hover:opacity-95'}"
-            style:font-size="{Math.round((active ? (compact ? 19 : 24) : (compact ? 15 : 17)) * featuresStore.lyricsFontScale)}px"
-          >
-            {#if line.words && line.words.length > 0 && active && featuresStore.wordByWord}
-              {#each line.words as w, wi (`${wi}-${w.startMs}`)}
-                {@const p = wordProgress(w.startMs, w.endMs, effectivePosMs)}
-                {@const pct = Math.round(p * 100)}
+          <div class="lyric-text">
+            {#if line.words && active && featuresStore.wordByWord}
+              {#each line.words as w, wi (w.startMs)}
+                {@const p = wordProgress(w.startMs, w.endMs, posMs)}
                 <span
-                  class="inline-block will-change-transform"
-                  style:transform="translateY({p > 0 && p < 1 ? -1.5 : 0}px)"
-                  style:transition="transform 140ms ease-out"
-                  style:background-image="linear-gradient(90deg, var(--lw-text-primary) 0%, var(--lw-text-primary) {pct}%, color-mix(in srgb, var(--lw-text-primary) 32%, transparent) {pct}%)"
-                  style:-webkit-background-clip="text"
-                  style:background-clip="text"
-                  style:color="transparent"
+                  class="inline-block transition-opacity duration-[var(--lw-motion-fast)]"
+                  style:opacity={0.8 + p * 0.2}
                 >{w.text}{wi < line.words.length - 1 ? '\u00A0' : ''}</span>
               {/each}
             {:else}
@@ -101,7 +147,6 @@
           {#if featuresStore.showRomanized && line.romanized}
             <div class="mt-1 text-[12.5px] text-[var(--lw-text-tertiary)]">{line.romanized}</div>
           {/if}
-
           {#if featuresStore.showTranslation && line.translation}
             <div class="mt-1 text-[13px] text-[var(--lw-text-secondary)]">{line.translation}</div>
           {/if}
@@ -119,12 +164,103 @@
         {/if}
       </div>
     {/each}
-    <div class="flex items-center justify-between px-3 pt-4 text-[11px] text-[var(--lw-text-tertiary)]">
-      <span>Source: {doc.provider}{doc.wordSynced ? ' · Word-Synced Karaoke' : doc.synced ? ' · Line-Synced' : ' · Plain'}</span>
+    <div class="px-3 pt-4 text-[11px] text-[var(--lw-text-tertiary)]">
+      Source: {doc.provider}
     </div>
   {:else}
     <div class="px-3 py-10 text-center text-[13px] text-[var(--lw-text-secondary)]">
-      {track ? 'No lyrics available for this track.' : 'Play a track to view lyrics.'}
+      {featuresStore.lyricsLoading ? 'Fetching synced lyrics...' : track ? 'No lyrics available for this track.' : 'Play a track to view lyrics.'}
     </div>
   {/if}
 </div>
+{/if}
+
+<style>
+  .synced-lyrics {
+    display: flex;
+    width: min(100%, 660px);
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+    margin-inline: auto;
+  }
+  am-lyrics {
+    min-height: 0;
+    flex: 1 1 0;
+    --am-lyrics-highlight-color: var(--lw-text-primary);
+    --am-lyrics-highlight-surface: color-mix(in srgb, var(--lw-accent) 12%, transparent);
+    --am-lyrics-highlight-radius: 10px;
+    --am-lyrics-inline-padding: 4px;
+    --am-lyrics-compact-font-size: calc(23px * var(--lw-lyrics-scale));
+    --am-lyrics-wide-font-size: calc(32px * var(--lw-lyrics-scale));
+    --am-lyrics-compact-line-spacing: 13px;
+    --am-lyrics-wide-line-spacing: 16px;
+  }
+  .compact {
+    --lw-sidebar-lyric-size: 24px;
+    --lw-sidebar-lyric-spacing: 22px;
+  }
+  .compact am-lyrics {
+    --am-lyrics-compact-font-size: calc(var(--lw-sidebar-lyric-size) * var(--lw-lyrics-scale));
+    --am-lyrics-wide-font-size: var(--am-lyrics-compact-font-size);
+    --am-lyrics-compact-line-spacing: var(--lw-sidebar-lyric-spacing);
+    --am-lyrics-wide-line-spacing: var(--lw-sidebar-lyric-spacing);
+  }
+  .lyrics-meta {
+    display: flex;
+    min-height: 34px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 2px 8px;
+    color: var(--lw-text-secondary);
+    font-size: 11px;
+  }
+  .lyrics-meta span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lyrics-meta button {
+    flex: none;
+    padding: 4px 8px;
+    border: 1px solid var(--lw-outline-soft);
+    border-radius: 7px;
+    color: var(--lw-text-primary);
+    cursor: pointer;
+  }
+  .lyrics-meta button:hover { background: var(--lw-wash-hover); }
+  .active-translation {
+    margin: 0;
+    padding: 8px;
+    border-top: 1px solid var(--lw-divider);
+    color: var(--lw-text-secondary);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
+  .lyric-line {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    color: var(--lw-text-secondary);
+    transition: background-color var(--lw-motion-normal), color var(--lw-motion-normal);
+  }
+  .compact .lyric-line { padding-block: calc(var(--lw-sidebar-lyric-spacing) / 2); }
+  .lyric-line.past { color: var(--lw-text-tertiary); }
+  .lyric-line[data-active="true"] { background: color-mix(in srgb, var(--lw-accent) 10%, transparent); color: var(--lw-text-primary); }
+  .lyric-line::before {
+    position: absolute;
+    inset: 10px auto 10px 0;
+    width: 2px;
+    border-radius: 3px;
+    background: var(--lw-accent);
+    opacity: 0;
+    content: '';
+    transition: opacity var(--lw-motion-normal);
+  }
+  .lyric-line[data-active="true"]::before { opacity: 1; }
+  .lyric-text { font-size: calc(23px * var(--lw-lyrics-scale)); font-weight: 650; line-height: 1.36; overflow-wrap: anywhere; }
+  .compact .lyric-text { font-size: calc(var(--lw-sidebar-lyric-size) * var(--lw-lyrics-scale)); line-height: 1.22; }
+  @media (hover: hover) and (pointer: fine) {
+    .lyric-line[data-active="false"]:hover { background: var(--lw-wash-hover); color: var(--lw-text-primary); }
+  }
+</style>

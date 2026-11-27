@@ -4,10 +4,11 @@ import { playerStore } from '$src/state/player.svelte';
 
 export function attachWaveHotkeys(): () => void {
   const onKeyDown = (e: KeyboardEvent) => {
-    const target = e.target as HTMLElement | null;
+    if (e.defaultPrevented) return;
+    const target = e.target instanceof HTMLElement ? e.target : null;
     const isInput =
       target &&
-      (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      (target.matches('input, textarea, select') || target.isContentEditable);
 
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
@@ -24,8 +25,9 @@ export function attachWaveHotkeys(): () => void {
     if (isInput) return;
 
     if (e.code === 'Space') {
+      if (target?.closest('button, a[href], [role="button"]')) return;
       e.preventDefault();
-      playerStore.togglePlay();
+      if (playerStore.currentTrack) playerStore.togglePlay();
     } else if (e.key === 'ArrowRight' && e.altKey) {
       router.forward();
     } else if (e.key === 'ArrowLeft' && e.altKey) {

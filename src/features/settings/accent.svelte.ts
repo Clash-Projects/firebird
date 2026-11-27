@@ -1,6 +1,6 @@
 import { playerStore } from '$src/state/player.svelte';
 import { settingsStore, type AccentSource } from '$src/state/settings.svelte';
-import { WaveColors } from '$src/ui/theme/tokens';
+import { isLightBase, WaveColors } from '$src/ui/theme/tokens';
 import { readSystemAccent } from './systemAccent';
 
 export interface AccentResolution {
@@ -14,7 +14,10 @@ export function resolveAccent(): AccentResolution {
   const custom = settingsStore.accentColor;
 
   if (source === 'lastwave') {
-    return { source, color: WaveColors.defaultAccent, resolved: true };
+    const mode = settingsStore.themeMode;
+    if (mode === 'amoled') return { source, color: WaveColors.amoledAccent, resolved: true };
+    const light = mode === 'light' || (mode === 'custom' && isLightBase(settingsStore.customThemeBase));
+    return { source, color: light ? WaveColors.lightAccent : WaveColors.defaultAccent, resolved: true };
   }
   if (source === 'system') {
     const sys = readSystemAccent();

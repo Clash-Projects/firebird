@@ -14,8 +14,8 @@
 </script>
 
 <div class="space-y-3">
-  <div class="flex gap-2">
-    <Input bind:value={newPath} placeholder="Add music folder path (e.g. D:\Lossless)..." />
+  <div class="flex items-center gap-2">
+    <Input bind:value={newPath} ariaLabel="Music folder path" class="min-w-0 flex-1" placeholder="Add music folder path (e.g. D:\Lossless)..." />
     <Buttons variant="primary" onclick={addFolder}>Add Folder</Buttons>
   </div>
 

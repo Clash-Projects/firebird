@@ -1,44 +1,39 @@
 <script lang="ts">
   import { router } from '$src/app/router.svelte';
   import { playTrackNow } from '$src/app/trackActions';
-  import { featuresStore } from '$src/state/features.svelte';
   import { libraryStore } from '$src/state/library.svelte';
   import { formatDuration, playerStore } from '$src/state/player.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
   import type { HomeEntityItem } from '$src/state/types';
   import Artwork from '$src/ui/components/Artwork.svelte';
+  import ShelfRail from '$src/ui/components/ShelfRail.svelte';
   import { contextMenu } from '$src/ui/components/contextMenuState.svelte';
-  import States from '$src/ui/components/States.svelte';
   import { goAlbum, goArtist, goPlaylist } from '$src/ui/navigation/waveNav';
   import WaveEntrance from '$src/ui/theme/WaveEntrance.svelte';
-  import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
+  import WaveIcon, { type WaveIconName } from '$src/ui/theme/WaveIcon.svelte';
+  import HomeSpotlight from './HomeSpotlight.svelte';
   import SpotifyHome from './SpotifyHome.svelte';
 
-  const greeting = (() => {
-    const h = new Date().getHours();
-    if (h < 5) return 'Up late';
-    if (h < 12) return 'Good morning';
-    if (h < 18) return 'Good afternoon';
-    return 'Good evening';
-  })();
-
-  const dateLabel = new Intl.DateTimeFormat('en-US', {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-  }).format(new Date());
+  const today = new Date();
+  const hour = today.getHours();
+  const greeting = hour < 5 ? 'Up late' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const dateLabel = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).format(today);
+  const shortcuts: ReadonlyArray<{ label: string; description: string; icon: WaveIconName; route: string }> = [
+    { label: 'Liked songs', description: 'Your favorites', icon: 'heart', route: '/liked' },
+    { label: 'Playlists', description: 'Your mixes', icon: 'queue', route: '/playlists' },
+    { label: 'Downloads', description: 'Listen offline', icon: 'download', route: '/downloads' },
+    { label: 'History', description: 'Recently played', icon: 'clock', route: '/history' },
+  ];
 
   let username = $derived(settingsStore.ytAccountName);
   let shelves = $derived(libraryStore.homeShelves);
-  let firstTrackShelf = $derived(shelves.find((s) => s.tracks.length > 0 || s.trackCards.length > 0));
-  let heroPool = $derived(
-    firstTrackShelf
-      ? (firstTrackShelf.tracks.length > 0 ? firstTrackShelf.tracks : firstTrackShelf.trackCards)
-      : libraryStore.tracks
-  );
+  let firstTrackShelf = $derived(shelves.find((shelf) => shelf.tracks.length || shelf.trackCards.length));
+  let heroPool = $derived(firstTrackShelf
+    ? (firstTrackShelf.tracks.length ? firstTrackShelf.tracks : firstTrackShelf.trackCards)
+    : libraryStore.tracks);
   let featured = $derived(heroPool[0]);
-  let companions = $derived(heroPool.slice(1, 4));
-  let fallbackQuickPicks = $derived(libraryStore.tracks.slice(0, 6));
+  let quickPicks = $derived(libraryStore.tracks.slice(0, 6));
+  let charts = $derived(libraryStore.tracks.slice(0, 5));
   let visibleIds = $derived(new Set(settingsStore.homeShelves.filter((s) => s.visible).map((s) => s.id)));
 
   function openEntity(e: HomeEntityItem) {
@@ -56,147 +51,70 @@
   }
 </script>
 
-<div class="w-full space-y-7 px-4 pt-[22px] pb-12 md:px-6 xl:px-7">
+<div class="home-page" data-lw="home-page">
   <WaveEntrance index={0}>
-    <header class="flex items-center justify-between gap-4">
+    <header class="home-header">
       <div class="min-w-0">
-        <h1 class="truncate text-[24px] font-bold tracking-[-0.025em] leading-[1.15]">
+        <h1 class="lw-display home-title" title={username ? `${greeting}, ${username}` : greeting}>
           {username ? `${greeting}, ${username}` : greeting}
         </h1>
-        <p class="mt-0.5 text-[12px] text-[var(--lw-text-secondary)]">
-          {settingsStore.ytConnected && username
-            ? `YouTube Music · ${username} · ${dateLabel}`
-            : settingsStore.ytConnected
-              ? `YouTube Music · ${dateLabel}`
-              : `${dateLabel} · picked for you`}
-        </p>
+        <p>{dateLabel}</p>
       </div>
-      <div class="flex shrink-0 items-center gap-2">
-        <button
-          type="button"
-          onclick={() => void libraryStore.loadHomeFeed(settingsStore.ytConnected, true)}
-          disabled={libraryStore.loadingHome}
-          class="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-[10px] px-3 text-[12px] font-semibold text-[var(--lw-text-secondary)] transition-colors hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)] disabled:opacity-50"
-        >
-          <WaveIcon name="refresh" size={14} class={libraryStore.loadingHome ? 'animate-spin' : ''} />
-          Refresh
-        </button>
-        <button
-          type="button"
-          onclick={() => router.navigate('/home/layout')}
-          class="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-[10px] px-3 text-[12px] font-semibold text-[var(--lw-text-secondary)] transition-colors hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
-        >
-          <WaveIcon name="layers" size={14} />
-          Edit home
-        </button>
-      </div>
+      <button type="button" class="home-edit" onclick={() => router.navigate('/home/layout')}>
+        <WaveIcon name="layers" size={15} /> Customize home
+      </button>
     </header>
   </WaveEntrance>
 
-  {#if libraryStore.loadingHome && shelves.length === 0 && !featured}
-    <div class="rounded-[18px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] px-6 py-12 text-center text-[13px] text-[var(--lw-text-secondary)]">
-      Loading YouTube Music feed...
-    </div>
-  {:else if shelves.length === 0 && !featured && libraryStore.albums.length === 0 && libraryStore.artists.length === 0}
-    <div class="space-y-3 text-center">
-      <States
-        icon="music"
-        title="Your feed is empty"
-        description={libraryStore.homeError ?? 'Sign in to YouTube Music or add local music folders in Settings to start listening.'}
-      />
-      <button
-        type="button"
-        onclick={() => void libraryStore.loadHomeFeed(settingsStore.ytConnected, true)}
-        class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--lw-outline)] bg-[var(--lw-surface)] px-4 py-2 text-[12.5px] font-semibold text-[var(--lw-text-primary)] hover:bg-[var(--lw-wash-hover)]"
-      >
-        Refresh Feed
-      </button>
-    </div>
-  {/if}
+  <WaveEntrance index={1}>
+    <HomeSpotlight track={featured} queue={heroPool} />
+  </WaveEntrance>
 
-  {#if featured}
-    <WaveEntrance index={1}>
-      <section class="lw-surface-lit relative overflow-hidden rounded-[20px] bg-white/[0.035] p-5">
-        <div class="flex flex-col gap-5 lg:flex-row lg:items-center">
-          <div class="flex min-w-0 flex-[58] items-center gap-5">
-            <div class="relative h-[132px] w-[132px] shrink-0 sm:h-[176px] sm:w-[176px]">
-              <div
-                class="pointer-events-none absolute -inset-[75px] rounded-full opacity-90 transition-colors duration-500"
-                style:background="radial-gradient(circle, color-mix(in srgb, {featured.accentColor} 34%, transparent) 0%, color-mix(in srgb, {featured.accentColor} 12%, transparent) 55%, transparent 100%)"
-              ></div>
-              <div class="relative z-10 h-full w-full">
-                <Artwork src={featured.artworkUrl} alt={featured.title} radius={12} shadow="artwork" class="h-full w-full" />
-              </div>
-            </div>
+  <WaveEntrance index={2}>
+    <section aria-labelledby="home-shortcuts">
+      <h2 class="home-section-title lw-display" id="home-shortcuts">Your collection</h2>
+      <div class="home-shortcuts">
+        {#each shortcuts as shortcut (shortcut.route)}
+          <button type="button" class="home-shortcut" onclick={() => router.navigate(shortcut.route)}>
+            <span class="shortcut-icon"><WaveIcon name={shortcut.icon} size={19} /></span>
+            <span class="min-w-0 flex-1">
+              <span class="shortcut-title">{shortcut.label}</span>
+              <span class="shortcut-description">{shortcut.description}</span>
+            </span>
+            <WaveIcon class="shortcut-arrow" name="chevronRight" size={15} />
+          </button>
+        {/each}
+      </div>
+    </section>
+  </WaveEntrance>
 
-            <div class="relative z-10 min-w-0 flex-1">
-              <div class="text-[10px] font-bold tracking-[1px] text-[var(--lw-text-tertiary)] uppercase">
-                {firstTrackShelf?.title || 'FOR YOU · FEATURED MIX'}
-              </div>
-              <h2 class="mt-1.5 line-clamp-2 text-[22px] font-bold tracking-[-0.5px] leading-[1.15] sm:text-[26px]">
-                {featured.title}
-              </h2>
-              <p class="mt-1 truncate text-[14px] text-[var(--lw-text-secondary)]">{featured.artist}</p>
-              <div class="mt-0.5 text-[12px] text-[var(--lw-text-tertiary)]">
-                {featured.codec} · {featured.bitDepth}-bit / {(featured.sampleRateHz / 1000).toFixed(0)} kHz
-              </div>
-
-              <div class="mt-3.5 flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onclick={() => playTrackNow(featured, heroPool)}
-                  class="inline-flex cursor-pointer items-center gap-2 rounded-full bg-[var(--lw-accent)] px-[22px] py-[10px] text-[12px] font-semibold tracking-[0.2px] text-[var(--lw-on-accent)] transition-all hover:brightness-95 active:scale-[0.98]"
-                >
-                  <WaveIcon name="play" size={14} filled />
-                  Play
-                </button>
-                <button
-                  type="button"
-                  onclick={() => {
-                    playTrackNow(featured, [...heroPool].reverse());
-                    featuresStore.showToast({ title: 'Started endless radio', subtitle: featured.title, severity: 'info' });
-                  }}
-                  class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--lw-divider)] px-[22px] py-[10px] text-[12px] font-semibold tracking-[0.2px] text-[var(--lw-text-secondary)] transition-colors hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
-                >
-                  <WaveIcon name="radio" size={14} />
-                  Radio
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="hidden h-[180px] w-px bg-white/[0.08] lg:block"></div>
-
-          <div class="relative z-10 min-w-0 flex-[42]">
-            <div class="mb-2 text-[9.5px] font-bold tracking-[1px] text-[var(--lw-text-tertiary)] uppercase">
-              MORE FOR YOU
-            </div>
-            <div class="space-y-0.5">
-              {#each companions as track (track.id)}
-                <button
-                  type="button"
-                  onclick={() => playTrackNow(track, heroPool)}
-                  oncontextmenu={(e) => contextMenu.showForTrack(e, track)}
-                  class="group flex w-full cursor-pointer items-center gap-2.5 rounded-[12px] px-1.5 py-[5px] text-left transition-colors hover:bg-white/[0.05]"
-                >
-                  <div class="relative h-[44px] w-[44px] shrink-0 overflow-hidden rounded-[10px]">
-                    <Artwork src={track.artworkUrl} alt={track.title} size={44} radius={10} />
-                    <div class="absolute inset-0 flex items-center justify-center bg-black/55 text-white opacity-0 transition-opacity group-hover:opacity-100">
-                      <WaveIcon name="play" size={15} filled />
-                    </div>
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <div class="truncate text-[12.5px] font-semibold">{track.title}</div>
-                    <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{track.artist}</div>
-                  </div>
-                  <span class="text-[11px] text-[var(--lw-text-tertiary)] lw-tabular">
-                    {formatDuration(track.durationSec)}
-                  </span>
-                </button>
-              {/each}
-            </div>
-          </div>
+  {#if !featured && (libraryStore.loadingHome || (libraryStore.albums.length === 0 && libraryStore.artists.length === 0))}
+    <WaveEntrance index={3}>
+      <section class="home-feed" aria-labelledby="home-discovery" aria-busy={libraryStore.loadingHome}>
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="home-section-title lw-display" id="home-discovery">Discover</h2>
+          <button
+            type="button"
+            class="home-edit feed-refresh"
+            onclick={() => void libraryStore.loadHomeFeed(settingsStore.ytConnected, true)}
+            disabled={libraryStore.loadingHome}
+          >
+            <WaveIcon name="refresh" size={14} /> Refresh feed
+          </button>
         </div>
+        {#if libraryStore.loadingHome}
+          <p role="status">Loading YouTube Music…</p>
+          <div class="feed-skeleton" aria-hidden="true">
+            {#each Array(3) as _}
+              <div class="lw-skeleton h-[50px] rounded-[9px]"></div>
+            {/each}
+          </div>
+        {:else}
+          <p>{libraryStore.homeError ?? 'Connect YouTube Music to see recommendations from your account.'}</p>
+          <button type="button" class="feed-connect" onclick={() => router.navigate('/settings/integrations')}>
+            <WaveIcon name="globe" size={15} /> Music accounts <WaveIcon name="arrowRight" size={14} />
+          </button>
+        {/if}
       </section>
     </WaveEntrance>
   {/if}
@@ -212,7 +130,7 @@
                   {shelf.subtitle}
                 </div>
               {/if}
-              <h2 class="text-[16px] font-bold tracking-[-0.2px]">{shelf.title}</h2>
+              <h2 class="home-section-title lw-display">{shelf.title}</h2>
             </div>
 
             {#if shelf.tracks.length > 0 || shelf.trackCards.length > 0}
@@ -228,7 +146,7 @@
           </div>
 
           {#if shelf.tracks.length > 0}
-            <div class="grid grid-cols-1 gap-x-2.5 gap-y-1 md:grid-cols-2 xl:grid-cols-3">
+            <div class="quick-picks-grid">
               {#each shelf.tracks.slice(0, 12) as track (`${shelf.title}-${track.id}`)}
                 {@const playing = playerStore.currentTrack?.id === track.id}
                 <button
@@ -328,37 +246,132 @@
         </section>
       </WaveEntrance>
     {/each}
-  {:else if visibleIds.has('quick_picks') && fallbackQuickPicks.length > 0}
-    <WaveEntrance index={2}>
+  {/if}
+
+  {#if !shelves.length && visibleIds.has('quick_picks') && quickPicks.length > 0}
+    <WaveEntrance index={3}>
       <section class="space-y-2.5">
         <div class="flex items-end justify-between">
-          <div>
-            <div class="text-[10px] font-bold tracking-[1px] text-[var(--lw-text-tertiary)] uppercase">LIBRARY</div>
-            <h2 class="text-[15px] font-bold tracking-[-0.2px]">Quick Picks</h2>
-          </div>
+          <h2 class="home-section-title lw-display">Quick Picks</h2>
           <button
             type="button"
-            onclick={() => fallbackQuickPicks[0] && playTrackNow(fallbackQuickPicks[0], fallbackQuickPicks)}
+            onclick={() => quickPicks[0] && playTrackNow(quickPicks[0], quickPicks)}
             class="cursor-pointer rounded-[8px] px-2 py-1 text-[12px] font-semibold text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
           >
             Play all
           </button>
         </div>
 
-        <div class="grid grid-cols-1 gap-x-2 gap-y-1 md:grid-cols-2 xl:grid-cols-3">
-          {#each fallbackQuickPicks as track (track.id)}
+        <div class="quick-picks-grid">
+          {#each quickPicks as track (track.id)}
+            {@const playing = playerStore.currentTrack?.id === track.id}
             <button
               type="button"
-              onclick={() => playTrackNow(track, fallbackQuickPicks)}
+              onclick={() => playTrackNow(track, quickPicks)}
               oncontextmenu={(e) => contextMenu.showForTrack(e, track)}
-              class="group flex h-[56px] w-full cursor-pointer items-center gap-2.5 rounded-[12px] px-1 py-1 text-left transition-colors hover:bg-white/[0.05]"
+              class="group flex h-[56px] w-full cursor-pointer items-center gap-2.5 rounded-[12px] px-1 py-1 text-left transition-colors {playing
+                ? 'bg-[var(--lw-accent)]/12'
+                : 'hover:bg-[var(--lw-wash-hover)]'}"
             >
-              <Artwork src={track.artworkUrl} alt={track.title} size={44} radius={10} />
+              <div class="relative h-[48px] w-[48px] shrink-0 overflow-hidden rounded-[12px]">
+                <Artwork src={track.artworkUrl} alt={track.title} size={48} radius={12} />
+                <div
+                  class="absolute inset-0 flex items-center justify-center bg-black/55 text-white transition-opacity {playing
+                    ? 'opacity-100'
+                    : 'opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100'}"
+                >
+                  <WaveIcon name={playing && playerStore.isPlaying ? 'pause' : 'play'} size={16} filled />
+                </div>
+              </div>
               <div class="min-w-0 flex-1">
-                <div class="truncate text-[12.5px] font-semibold">{track.title}</div>
+                <div class="truncate text-[12.5px] font-semibold {playing ? 'text-[var(--lw-accent)]' : ''}">
+                  {track.title}
+                </div>
                 <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{track.artist}</div>
               </div>
-              <span class="pr-2 text-[11px] text-[var(--lw-text-tertiary)] lw-tabular">
+              {#if track.durationSec > 0}
+                <span class="pr-2 text-[11px] text-[var(--lw-text-tertiary)] lw-tabular">{formatDuration(track.durationSec)}</span>
+              {/if}
+            </button>
+          {/each}
+        </div>
+      </section>
+    </WaveEntrance>
+  {/if}
+
+  {#if !shelves.length && visibleIds.has('albums') && libraryStore.albums.length > 0}
+    <WaveEntrance index={3}>
+      <ShelfRail title="Albums For You" eyebrow="Rotation" onSeeAll={() => router.navigate('/albums')}>
+          {#each libraryStore.albums as album (album.id)}
+            <button
+              type="button"
+              onclick={() => goAlbum(album.id)}
+              class="lw-press group w-[160px] shrink-0 cursor-pointer text-left"
+            >
+              <div class="relative overflow-hidden rounded-[12px]">
+                <Artwork src={album.artworkUrl} alt={album.title} size={160} radius={12} />
+                <div class="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-transparent to-black/55 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                  <div class="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--lw-accent)] text-[var(--lw-on-accent)] shadow-[0_4px_12px_rgba(0,0,0,0.4)]">
+                    <WaveIcon name="arrowRight" size={18} />
+                  </div>
+                </div>
+              </div>
+              <div class="mt-2 truncate text-[13px] font-semibold">{album.title}</div>
+              <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{album.artist} · {album.year}</div>
+            </button>
+          {/each}
+      </ShelfRail>
+    </WaveEntrance>
+  {/if}
+
+  {#if !shelves.length && visibleIds.has('personal_mix') && libraryStore.artists.length > 0}
+    <WaveEntrance index={4}>
+      <ShelfRail title="Artists For You" onSeeAll={() => router.navigate('/artists')}>
+          {#each libraryStore.artists as artist (artist.id)}
+            <button
+              type="button"
+              onclick={() => goArtist(artist.id)}
+              class="lw-press group w-[144px] shrink-0 cursor-pointer text-center"
+            >
+              <div class="mx-auto w-[124px]">
+                <Artwork src={artist.artworkUrl} alt={artist.name} size={124} circle shadow="lift" />
+              </div>
+              <div class="mt-2.5 truncate text-[13px] font-semibold">{artist.name}</div>
+              <div class="truncate text-[11.5px] text-[var(--lw-text-tertiary)]">{artist.monthlyListeners}</div>
+            </button>
+          {/each}
+      </ShelfRail>
+    </WaveEntrance>
+  {/if}
+
+  {#if !shelves.length && visibleIds.has('recent_plays') && charts.length > 0}
+    <WaveEntrance index={5}>
+      <section class="space-y-2">
+        <div>
+          <div class="text-[10px] font-bold tracking-[1px] text-[var(--lw-text-tertiary)] uppercase">CHARTS</div>
+          <h2 class="home-section-title lw-display">Trending Now</h2>
+        </div>
+
+        <div class="space-y-0.5">
+          {#each charts as track, i (track.id)}
+            <button
+              type="button"
+              onclick={() => playTrackNow(track, charts)}
+              oncontextmenu={(e) => contextMenu.showForTrack(e, track)}
+              class="group flex h-[54px] w-full cursor-pointer items-center gap-3.5 rounded-[12px] px-2 text-left transition-colors hover:bg-[var(--lw-wash-hover)]"
+            >
+              <span class="w-8 text-center text-[20px] font-bold tracking-[-0.5px] text-[var(--lw-text-tertiary)] lw-tabular">
+                {String(i + 1).padStart(2, '0')}
+              </span>
+              <Artwork src={track.artworkUrl} alt={track.title} size={40} radius={10} />
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-[13.5px] font-semibold">{track.title}</div>
+                <div class="truncate text-[12px] text-[var(--lw-text-secondary)]">{track.artist}</div>
+              </div>
+              <span class="hidden rounded-[6px] border border-[var(--lw-outline)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--lw-text-tertiary)] sm:inline">
+                {track.codec}
+              </span>
+              <span class="w-11 text-right text-[12px] text-[var(--lw-text-tertiary)] lw-tabular">
                 {formatDuration(track.durationSec)}
               </span>
             </button>
@@ -372,3 +385,113 @@
     <SpotifyHome />
   {/if}
 </div>
+
+<style>
+  .home-page {
+    display: grid;
+    max-width: 1440px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: max-content;
+    gap: 24px;
+    margin-inline: auto;
+    padding: 23px clamp(18px, 2.6vw, 38px) 44px;
+    container-type: inline-size;
+  }
+
+  .home-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+  .home-title {
+    overflow: hidden;
+    font-size: clamp(27px, 3.1cqi, 39px);
+    font-weight: 700;
+    line-height: 1.12;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .home-header p { margin-top: 3px; color: var(--lw-text-secondary); font-size: 13px; }
+  .home-edit {
+    display: inline-flex;
+    min-height: 34px;
+    flex: none;
+    align-items: center;
+    gap: 7px;
+    padding-inline: 10px;
+    border: 1px solid var(--lw-outline);
+    border-radius: 8px;
+    background: var(--lw-surface);
+    color: var(--lw-text-secondary);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: background-color var(--lw-motion-fast), color var(--lw-motion-fast);
+  }
+
+  .home-section-title { font-size: 22px; font-weight: 700; line-height: 1.25; }
+  .quick-picks-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 8px; }
+  .home-shortcuts {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .home-shortcut {
+    display: flex;
+    min-height: 67px;
+    align-items: center;
+    gap: 11px;
+    padding: 9px 11px;
+    border: 1px solid var(--lw-outline-soft);
+    border-radius: 12px;
+    background: var(--lw-surface);
+    cursor: pointer;
+    text-align: left;
+    transition: background-color var(--lw-motion-fast), border-color var(--lw-motion-fast), transform var(--lw-motion-fast) var(--ease-wave);
+  }
+
+  .home-shortcut:active { transform: scale(calc(1 - 0.02 * var(--lw-motion-factor))); }
+  .shortcut-icon {
+    display: grid;
+    width: 37px;
+    height: 37px;
+    flex: none;
+    place-items: center;
+    border: 1px solid color-mix(in srgb, var(--lw-accent) 18%, transparent);
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--lw-accent) 9%, transparent);
+    color: var(--lw-accent);
+  }
+  .shortcut-title, .shortcut-description { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .shortcut-title { font-size: 13px; font-weight: 700; }
+  .shortcut-description { color: var(--lw-text-secondary); font-size: 11.5px; }
+  .home-shortcut :global(.shortcut-arrow) {
+    color: var(--lw-text-tertiary);
+    transition: color var(--lw-motion-fast), transform var(--lw-motion-fast) var(--ease-wave);
+  }
+
+  .home-feed { border-top: 1px solid var(--lw-divider); padding-top: 15px; }
+  .home-feed p { margin-top: 4px; color: var(--lw-text-secondary); font-size: 13px; }
+  .feed-refresh:disabled { cursor: default; opacity: 0.55; }
+  .feed-connect { display: inline-flex; align-items: center; gap: 7px; margin-top: 9px; color: var(--lw-accent); cursor: pointer; font-weight: 650; }
+  .feed-skeleton { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+
+  @media (hover: hover) and (pointer: fine) {
+    .home-edit:not(:disabled):hover { background: var(--lw-surface-raised); color: var(--lw-text-primary); }
+    .home-shortcut:hover { border-color: var(--lw-outline); background: var(--lw-surface-raised); }
+    .home-shortcut:hover :global(.shortcut-arrow) { color: var(--lw-accent); transform: translateX(calc(2px * var(--lw-motion-factor))); }
+    .feed-connect:hover { text-decoration: underline; text-underline-offset: 3px; }
+  }
+
+  @container (max-width: 790px) {
+    .quick-picks-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .home-shortcut { gap: 8px; padding-inline: 8px; }
+    .home-shortcut :global(.shortcut-arrow) { display: none; }
+  }
+
+  @container (max-width: 640px) {
+    .home-shortcuts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  @container (max-width: 460px) {
+    .quick-picks-grid { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>

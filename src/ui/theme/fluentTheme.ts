@@ -1,8 +1,8 @@
+import type { ThemeMode } from '$src/state/settings.svelte';
 import { isLightBase, onAccentFor, surfacesFromCustomBase, WaveColors } from './tokens';
 
 export interface WaveThemeOptions {
-  mode: 'dark' | 'light' | 'amoled' | 'custom' | 'artwork';
-  amoled: boolean;
+  mode: ThemeMode;
   customBase: string;
   accent: string;
   glass: boolean;
@@ -34,8 +34,8 @@ export function applyWaveThemeToDocument(opts: WaveThemeOptions) {
 
   if (effectiveLight) {
     root.dataset.theme = 'light';
-  } else if (opts.mode === 'amoled' || opts.amoled) {
-    root.dataset.theme = 'amoled';
+  } else if (opts.mode === 'amoled' || opts.mode === 'volt') {
+    root.dataset.theme = opts.mode;
   } else {
     root.dataset.theme = 'dark';
   }
@@ -73,8 +73,10 @@ export function applyWaveThemeToDocument(opts: WaveThemeOptions) {
       '--lw-font-family',
       `"${opts.fontFamily}", "Segoe UI Variable", system-ui, sans-serif`
     );
+    root.style.setProperty('--lw-font-display', 'var(--lw-font-family)');
   } else {
     root.style.removeProperty('--lw-font-family');
+    root.style.removeProperty('--lw-font-display');
   }
 
   root.style.setProperty('--lw-ui-scale', String(opts.uiScale));
