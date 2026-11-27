@@ -2,11 +2,11 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "LastWave",
   "version": "2.6.0",
-  "identifier": "com.lastwave.lastwave_desktop",
+  "identifier": "com.lastwave.lastwave-desktop",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "bun run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -26,7 +26,8 @@
   "bundle": {
     "active": false,
     "icon": [
-      "icons/icon.ico"
+      "icons/icon.ico",
+      "icons/icon.png"
     ],
     "resources": [
       "assets/po_token.html",
