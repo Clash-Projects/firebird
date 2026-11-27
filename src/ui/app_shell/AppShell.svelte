@@ -5,7 +5,6 @@
   import EqualizerPanel from '$src/features/equalizer/EqualizerPanel.svelte';
   import { uiSlots } from '$src/lib/plugins/uiSlots.svelte';
   import WidgetSandboxHost from '$src/lib/plugins/WidgetSandboxHost.svelte';
-  import CanvasPanel from '$src/ui/canvas/CanvasPanel.svelte';
   import AlbumDetailPage from '$src/ui/collections/AlbumDetailPage.svelte';
   import AlbumsPage from '$src/ui/collections/AlbumsPage.svelte';
   import ArtistDetailPage from '$src/ui/collections/ArtistDetailPage.svelte';
@@ -141,8 +140,6 @@
                 <QueuePanel />
               {:else if panel === 'lyrics'}
                 <LyricsPanel />
-              {:else if panel === 'canvas'}
-                <CanvasPanel />
               {:else if panel === 'eq'}
                 <EqualizerPanel />
               {:else if panel === 'output'}

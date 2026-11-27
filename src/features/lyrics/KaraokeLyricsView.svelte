@@ -7,22 +7,48 @@
 
   interface Props {
     compact?: boolean;
+    fontSize?: number;
+    showHeaderControls?: boolean;
     onShareLine?: (text: string) => void;
   }
 
-  let { compact = false, onShareLine }: Props = $props();
+  let { compact = false, fontSize, showHeaderControls = true, onShareLine }: Props = $props();
 
   let track = $derived(playerStore.currentTrack);
   let doc = $derived(track ? featuresStore.getLyrics(track.id) : null);
   let offsetMs = $derived(track ? featuresStore.getLyricsOffset(track.id) : 0);
-  let posMs = $derived(Math.max(0, playerStore.positionSec * 1000 + offsetMs));
+
+  // 60fps interpolated audio clock (mirrors OG Flutter WaveKaraokeLyricsView Ticker)
+  let baseAudioMs = $state(playerStore.positionSec * 1000);
+  let baseSyncPerf = $state(typeof performance !== 'undefined' ? performance.now() : 0);
+  let rafTickMs = $state(playerStore.positionSec * 1000);
+
+  $effect(() => {
+    baseAudioMs = playerStore.positionSec * 1000;
+    baseSyncPerf = performance.now();
+    rafTickMs = baseAudioMs;
+  });
+
+  $effect(() => {
+    if (!playerStore.isPlaying || playerStore.isBuffering || !doc?.synced) return;
+    let frameId = 0;
+    const step = () => {
+      rafTickMs = baseAudioMs + (performance.now() - baseSyncPerf) * playerStore.speed;
+      frameId = requestAnimationFrame(step);
+    };
+    frameId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frameId);
+  });
+
+  let posMs = $derived(Math.max(0, rafTickMs + offsetMs));
   let activeIdx = $derived(doc ? activeLineIndex(doc.lines, posMs) : 0);
   let activeLine = $derived(doc?.lines[activeIdx]);
   let durationMs = $derived(playerStore.durationSec * 1000);
   let timedText = $derived(doc ? toTimedText(doc, durationMs, featuresStore.wordByWord) : null);
   let enhancedReady = $state(false);
   let lyricsView = $state<HTMLDivElement | null>(null);
-  let lastManualScroll = -Infinity;
+  let lastManualScroll = $state(-Infinity);
+  let userScrolled = $derived(typeof performance !== 'undefined' && performance.now() - lastManualScroll < 3000);
 
   $effect(() => {
     if (!timedText || enhancedReady) return;
@@ -96,7 +122,12 @@
 </script>
 
 {#if enhancedReady && timedText && doc}
-  <div class="synced-lyrics" class:compact data-lw="lyrics-view">
+  <div
+    class="synced-lyrics"
+    class:compact
+    data-lw="lyrics-view"
+    style:--lw-wide-override={fontSize ? `${fontSize}px` : undefined}
+  >
     {#key doc.trackId}
       <am-lyrics
         use:configureRenderer
@@ -111,25 +142,39 @@
         reducedMotion={settingsStore.reduceMotion}
         fontFamily="var(--lw-font-family)"
         style:--lw-lyrics-scale={featuresStore.lyricsFontScale}
+        style:--am-lyrics-wide-font-size={fontSize ? `calc(${fontSize}px * var(--lw-lyrics-scale))` : undefined}
       ></am-lyrics>
     {/key}
-    <footer class="lyrics-footer">
-      {#if (featuresStore.showTranslation && activeLine?.translation) || (featuresStore.showRomanized && activeLine?.romanized)}
-        <div class="active-translation lw-scroll">
-          {#if featuresStore.showRomanized && activeLine?.romanized}<div>{activeLine.romanized}</div>{/if}
-          {#if featuresStore.showTranslation && activeLine?.translation}<div>{activeLine.translation}</div>{/if}
-        </div>
-      {/if}
-      <div class="lyrics-meta">
-        <span title={doc.provider}>Source: {doc.provider}</span>
-        {#if onShareLine && activeLine?.text}
-          <button type="button" onclick={shareActiveLine} title="Share lyric card">Share line</button>
+    {#if showHeaderControls || (featuresStore.showTranslation && activeLine?.translation) || (featuresStore.showRomanized && activeLine?.romanized)}
+      <footer class="lyrics-footer">
+        {#if (featuresStore.showTranslation && activeLine?.translation) || (featuresStore.showRomanized && activeLine?.romanized)}
+          <div class="active-translation lw-scroll">
+            {#if featuresStore.showRomanized && activeLine?.romanized}<div>{activeLine.romanized}</div>{/if}
+            {#if featuresStore.showTranslation && activeLine?.translation}<div>{activeLine.translation}</div>{/if}
+          </div>
         {/if}
-      </div>
-    </footer>
+        {#if showHeaderControls}
+          <div class="lyrics-meta">
+            <span title={doc.provider}>Source: {doc.provider}</span>
+            {#if onShareLine && activeLine?.text}
+              <button type="button" onclick={shareActiveLine} title="Share lyric card">Share line</button>
+            {/if}
+          </div>
+        {/if}
+      </footer>
+    {/if}
   </div>
 {:else}
-<div bind:this={lyricsView} onwheel={() => (lastManualScroll = performance.now())} data-lw="lyrics-view" class="lyrics-fallback mx-auto w-full max-w-[660px] py-4" class:compact class:lw-scroll={compact} style:--lw-lyrics-scale={featuresStore.lyricsFontScale}>
+<div
+  bind:this={lyricsView}
+  onwheel={() => (lastManualScroll = performance.now())}
+  data-lw="lyrics-view"
+  class="lyrics-fallback mx-auto w-full max-w-[660px] py-4"
+  class:compact
+  class:lw-scroll={compact}
+  style:--lw-lyrics-scale={featuresStore.lyricsFontScale}
+  style:--lw-wide-override={fontSize ? `${fontSize}px` : undefined}
+>
   {#if doc}
     {#each doc.lines as line, i}
       {@const active = doc.synced && i === activeIdx}

@@ -1,40 +1,147 @@
 <script lang="ts">
-  import { formatDuration, playerStore } from '$src/state/player.svelte';
-  import Artwork from '$src/ui/components/Artwork.svelte';
+  import KaraokeLyricsView from '$src/features/lyrics/KaraokeLyricsView.svelte';
+  import { ipcInvoke } from '$src/lib/ipc';
+  import { featuresStore } from '$src/state/features.svelte';
+  import { playerStore } from '$src/state/player.svelte';
+  import AmbientStage from '$src/ui/components/AmbientStage.svelte';
+  import AnimatedArtworkVideo from '$src/ui/components/AnimatedArtworkVideo.svelte';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
+  import { immersiveState } from './immersive.svelte';
+  import NowPlayingOverflowMenu from './NowPlayingOverflowMenu.svelte';
+
+  interface Props {
+    lyricsVisible?: boolean;
+    onToggleLyrics?: () => void;
+    onClose?: () => void;
+  }
+
+  let { lyricsVisible = true, onToggleLyrics, onClose }: Props = $props();
 
   let track = $derived(playerStore.currentTrack);
+  let doc = $derived(track ? featuresStore.getLyrics(track.id) : null);
+  let lyricsMissing = $derived(!featuresStore.lyricsLoading && (!doc || doc.lines.length === 0));
+  let showLyrics = $derived(lyricsVisible && !lyricsMissing);
+  let ambientEnabled = $state(true);
+
+  let motionVideoUrl = $state('');
+  let lastTrackKey = '';
+
+  $effect(() => {
+    const t = track;
+    if (!t) {
+      motionVideoUrl = '';
+      lastTrackKey = '';
+      return;
+    }
+    const key = `${t.id}|${t.title}|${t.artist}`;
+    if (key === lastTrackKey) return;
+    lastTrackKey = key;
+    motionVideoUrl = '';
+
+    void (async () => {
+      try {
+        const anim = await ipcInvoke<{ url?: string; fallbackUrl?: string }>('artwork_lookup_animated', {
+          artist: t.artist,
+          album: t.album || '',
+          title: t.title,
+        });
+        const url = anim?.url || anim?.fallbackUrl || '';
+        if (lastTrackKey === key && url) {
+          motionVideoUrl = url;
+        }
+      } catch {
+        // Static artwork
+      }
+    })();
+  });
 </script>
 
 {#if track}
-  <div class="flex h-full flex-col items-center justify-center px-6 py-8 text-center">
-    <Artwork src={track.artworkUrl} alt={track.title} size={300} radius={24} shadow="artwork" />
-    <h1 class="mt-6 text-[24px] font-bold tracking-[-0.4px]">{track.title}</h1>
-    <p class="mt-1 text-[14px] text-[var(--lw-text-secondary)]">{track.artist}</p>
+  <div class="relative h-full w-full overflow-hidden">
+    <!-- 1. Backdrop -->
+    {#if ambientEnabled}
+      <AmbientStage color={track.accentColor} intensity={0.38} />
+    {/if}
 
-    <div class="mt-6 flex w-full max-w-[440px] items-center gap-3">
-      <span class="text-[12px] text-[var(--lw-text-tertiary)] lw-tabular">{formatDuration(playerStore.positionSec)}</span>
-      <input
-        type="range"
-        min="0"
-        max={playerStore.durationSec || 1}
-        value={playerStore.positionSec}
-        oninput={(e) => playerStore.seek(Number((e.currentTarget as HTMLInputElement).value))}
-        class="h-1.5 flex-1 cursor-pointer accent-[var(--lw-accent)]"
-      />
-      <span class="text-[12px] text-[var(--lw-text-tertiary)] lw-tabular">{formatDuration(playerStore.durationSec)}</span>
+    <!-- 2. Main Layout: Centers cover smoothly when lyrics are hidden or unavailable -->
+    <div class="relative z-10 flex h-full w-full items-center justify-center px-[56px] py-[40px]">
+      <div
+        class="flex h-full w-full items-center justify-center transition-all duration-[420ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
+        style:gap={showLyrics ? '48px' : '0px'}
+      >
+        <!-- Cover + Centered Track Info -->
+        <div
+          class="flex shrink-0 flex-col items-center transition-all duration-[420ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
+          style:width={showLyrics ? 'min(42%, 440px)' : 'min(100%, 440px)'}
+        >
+          <div
+            class="aspect-square w-full overflow-hidden rounded-[2px] shadow-[var(--lw-shadow-artwork)] transition-all duration-[420ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
+            style:max-width={showLyrics ? '420px' : '440px'}
+          >
+            <AnimatedArtworkVideo
+              posterUrl={track.artworkUrl}
+              videoUrl={ambientEnabled && motionVideoUrl ? motionVideoUrl : undefined}
+              radius={2}
+              class="h-full w-full"
+            />
+          </div>
+
+          <h1 class="mt-[18px] line-clamp-2 text-center text-[18px] font-bold tracking-[-0.2px] text-[var(--lw-text-primary)]">
+            {track.title}
+          </h1>
+          <p class="mt-1 truncate text-center text-[13.5px] text-[var(--lw-text-secondary)]">
+            {track.artist}
+          </p>
+        </div>
+
+        <!-- Right Column: Synced Lyrics (collapses smoothly when hidden or not found) -->
+        <div
+          class="h-full min-h-0 overflow-hidden transition-all duration-[420ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
+          style:width={showLyrics ? '54%' : '0px'}
+          style:opacity={showLyrics ? 1 : 0}
+          class:pointer-events-none={!showLyrics}
+        >
+          <div class="lw-scroll h-full min-w-[320px] overflow-y-auto">
+            <KaraokeLyricsView fontSize={34} showHeaderControls={false} />
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div class="mt-5 flex items-center gap-4">
-      <button type="button" onclick={() => playerStore.previous()} class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-[10px] hover:bg-[var(--lw-wash-hover)]">
-        <WaveIcon name="prev" size={20} />
-      </button>
-      <button type="button" onclick={() => playerStore.togglePlay()} class="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-[var(--lw-accent)] text-[var(--lw-on-accent)] shadow-[var(--lw-shadow-transport)]">
-        <WaveIcon name={playerStore.isPlaying ? 'pause' : 'play'} size={20} filled />
-      </button>
-      <button type="button" onclick={() => playerStore.next()} class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-[10px] hover:bg-[var(--lw-wash-hover)]">
-        <WaveIcon name="next" size={20} />
-      </button>
+    <!-- 3. Top-Left Exit Fullscreen button (only in immersive fullscreen, fades on idle) -->
+    {#if immersiveState.isImmersive}
+      <div
+        class="absolute top-[18px] left-[20px] z-30 transition-opacity duration-350"
+        class:pointer-events-none={immersiveState.controlsIdle}
+        style:opacity={immersiveState.controlsIdle ? 0 : 1}
+      >
+        <button
+          type="button"
+          title="Exit fullscreen (F11)"
+          onclick={() => {
+            immersiveState.ping();
+            onClose?.();
+          }}
+          class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[6px] bg-white/10 text-[var(--lw-text-primary)] transition hover:bg-white/20"
+        >
+          <WaveIcon name="chevronLeft" size={15} />
+        </button>
+      </div>
+    {/if}
+
+    <!-- 4. Unified Top-Right Control Bar (Ambient, Fullscreen, Overflow — fades on idle) -->
+    <div
+      class="absolute top-[18px] right-[20px] z-30 transition-opacity duration-350"
+      class:pointer-events-none={immersiveState.controlsIdle}
+      style:opacity={immersiveState.controlsIdle ? 0 : 1}
+    >
+      <NowPlayingOverflowMenu
+        showAmbientToggle={true}
+        {ambientEnabled}
+        onToggleAmbient={() => (ambientEnabled = !ambientEnabled)}
+        {lyricsVisible}
+        {onToggleLyrics}
+      />
     </div>
   </div>
 {/if}

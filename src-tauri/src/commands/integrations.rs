@@ -627,6 +627,12 @@ pub fn jam_invite_link(state: State<'_, AppState>, code: String) -> String {
 }
 
 #[tauri::command]
+pub async fn jam_clear_notice(state: State<'_, AppState>) -> Result<(), String> {
+    state.jam.clear_notice().await;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn jam_on_player_snapshot(
     state: State<'_, AppState>,
     previous: Option<PlayerSnapshot>,

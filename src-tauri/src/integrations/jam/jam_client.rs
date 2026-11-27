@@ -281,6 +281,7 @@ pub struct JamController {
     state: Arc<RwLock<JamSnapshot>>,
     remote_tx: broadcast::Sender<JamRemote>,
     rtc_tx: broadcast::Sender<JamRtcSignal>,
+    snapshot_tx: broadcast::Sender<JamSnapshot>,
     generation: Arc<AtomicU64>,
     outbound_tx: Arc<Mutex<Option<mpsc::UnboundedSender<String>>>>,
     signal_queue: Arc<Mutex<Vec<String>>>,
@@ -292,18 +293,24 @@ impl JamController {
     pub fn new(prefs: Arc<Prefs>, http: reqwest::Client) -> Self {
         let (remote_tx, _) = broadcast::channel(64);
         let (rtc_tx, _) = broadcast::channel(64);
+        let (snapshot_tx, _) = broadcast::channel(64);
         Self {
             prefs,
             http,
             state: Arc::new(RwLock::new(JamSnapshot::default())),
             remote_tx,
             rtc_tx,
+            snapshot_tx,
             generation: Arc::new(AtomicU64::new(0)),
             outbound_tx: Arc::new(Mutex::new(None)),
             signal_queue: Arc::new(Mutex::new(Vec::new())),
             signal_pump_running: Arc::new(Mutex::new(false)),
             pending_web_guests: Arc::new(Mutex::new(false)),
         }
+    }
+
+    pub fn subscribe_snapshot(&self) -> broadcast::Receiver<JamSnapshot> {
+        self.snapshot_tx.subscribe()
     }
 
     pub async fn snapshot(&self) -> JamSnapshot {
@@ -447,12 +454,14 @@ impl JamController {
             let mut st = self.state.write().await;
             st.phase = JamPhase::Error;
             st.error = "Room code is required".to_string();
+            let _ = self.snapshot_tx.send(st.clone());
             return;
         }
         if JAM_STATIONS.iter().any(|s| s.code == code) && is_default_name(display_name) {
             let mut st = self.state.write().await;
             st.phase = JamPhase::Error;
             st.error = "Pick your own display name to join this public room".to_string();
+            let _ = self.snapshot_tx.send(st.clone());
             return;
         }
         let open_msg = json!({
@@ -508,6 +517,7 @@ impl JamController {
             .await;
         let mut st = self.state.write().await;
         st.queue = shared;
+        let _ = self.snapshot_tx.send(st.clone());
     }
 
     /// Live listener counts for the always-on rooms (`{code: count}`).
@@ -561,6 +571,7 @@ impl JamController {
         }
         st.notice.clear();
         st.retry_at_ms = 0;
+        let _ = self.snapshot_tx.send(st.clone());
     }
 
     pub async fn broadcast_play(&self, position_ms: i64) {
@@ -613,6 +624,7 @@ impl JamController {
     async fn connect(&self, open_msg: String, code: Option<String>) {
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         self.close(false).await;
+        let snap_tx_connect = self.snapshot_tx.clone();
         {
             let mut st = self.state.write().await;
             *st = JamSnapshot {
@@ -620,6 +632,7 @@ impl JamController {
                 room_code: code.unwrap_or_default(),
                 ..Default::default()
             };
+            let _ = snap_tx_connect.send(st.clone());
         }
 
         let url = self.server_url();
@@ -642,6 +655,7 @@ impl JamController {
                     error: err,
                     ..Default::default()
                 };
+                let _ = snap_tx_connect.send(st.clone());
             }
             return;
         };
@@ -659,6 +673,7 @@ impl JamController {
         let state_ref = Arc::clone(&self.state);
         let remote_tx = self.remote_tx.clone();
         let rtc_tx = self.rtc_tx.clone();
+        let snapshot_tx = self.snapshot_tx.clone();
         let pending_wg = Arc::clone(&self.pending_web_guests);
         let out_tx_clone = tx.clone();
 
@@ -702,6 +717,8 @@ impl JamController {
                             &out_tx_clone,
                         )
                         .await;
+                        let snap = state_ref.read().await.clone();
+                        let _ = snapshot_tx.send(snap);
                     }
                     Ok(Message::Close(_)) => break,
                     Err(e) => {
@@ -709,6 +726,9 @@ impl JamController {
                             let mut st = state_ref.write().await;
                             st.phase = JamPhase::Error;
                             st.error = e.to_string();
+                            let snap = st.clone();
+                            drop(st);
+                            let _ = snapshot_tx.send(snap);
                         }
                         break;
                     }
@@ -720,6 +740,9 @@ impl JamController {
                 if st.phase != JamPhase::Error {
                     *st = JamSnapshot::default();
                 }
+                let snap = st.clone();
+                drop(st);
+                let _ = snapshot_tx.send(snap);
             }
         });
     }
@@ -739,7 +762,9 @@ impl JamController {
         self.signal_queue.lock().await.clear();
         *self.outbound_tx.lock().await = None;
         if clear {
-            *self.state.write().await = JamSnapshot::default();
+            let mut st = self.state.write().await;
+            *st = JamSnapshot::default();
+            let _ = self.snapshot_tx.send(st.clone());
         }
     }
 }

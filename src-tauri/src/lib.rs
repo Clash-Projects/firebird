@@ -212,6 +212,8 @@ pub fn run() {
             let emit_handle = handle.clone();
             let spectrum = Arc::clone(&state.spectrum);
             let discord = Arc::clone(&state.discord_presence);
+            let jam_ctrl = Arc::clone(&state.jam);
+            let jam_sync = Arc::clone(&state.jam_sync);
             let playback_for_eq = Arc::clone(&state.playback);
             state.equalizer.set_filter_sink(Some(Arc::new(move |af: &str| {
                 let pb = Arc::clone(&playback_for_eq);
@@ -252,12 +254,59 @@ pub fn run() {
                 });
             }
 
+            {
+                let mut remote_rx = jam_ctrl.subscribe_remote();
+                let jam_sync_remote = Arc::clone(&jam_sync);
+                tauri::async_runtime::spawn(async move {
+                    loop {
+                        match remote_rx.recv().await {
+                            Ok(event) => jam_sync_remote.apply_remote(event).await,
+                            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                        }
+                    }
+                });
+            }
+
+            {
+                let mut snap_rx = jam_ctrl.subscribe_snapshot();
+                let jam_sync_sess = Arc::clone(&jam_sync);
+                let jam_emit_handle = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    let mut prev_jam: Option<crate::integrations::jam::jam_client::JamSnapshot> = None;
+                    loop {
+                        match snap_rx.recv().await {
+                            Ok(next) => {
+                                jam_sync_sess.on_session_changed(prev_jam.as_ref(), &next).await;
+                                let _ = jam_emit_handle.emit("jam:snapshot", &next);
+                                prev_jam = Some(next);
+                            }
+                            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                        }
+                    }
+                });
+            }
+
+            let prev_player_snap: Arc<std::sync::Mutex<Option<crate::models::player_state::PlayerSnapshot>>> =
+                Arc::new(std::sync::Mutex::new(None));
             state.playback.add_snapshot_listener(Arc::new(move |snap| {
                 spectrum.update_playback(snap);
                 let discord_snap = Arc::clone(&discord);
                 let snap_clone = snap.clone();
                 tauri::async_runtime::spawn(async move {
                     discord_snap.on_snapshot(snap_clone).await;
+                });
+                let prev = prev_player_snap
+                    .lock()
+                    .ok()
+                    .and_then(|mut guard| guard.replace(snap.clone()));
+                let jam_sync_pb = Arc::clone(&jam_sync);
+                let next_clone = snap.clone();
+                tauri::async_runtime::spawn(async move {
+                    jam_sync_pb
+                        .on_player_snapshot(prev.as_ref(), &next_clone)
+                        .await;
                 });
                 let _ = emit_handle.emit("player:snapshot", snap);
             }));
@@ -551,6 +600,7 @@ pub fn run() {
             commands::integrations::jam_room_counts,
             commands::integrations::jam_parse_code,
             commands::integrations::jam_invite_link,
+            commands::integrations::jam_clear_notice,
             commands::integrations::jam_on_player_snapshot,
             commands::integrations::spotify_connected,
             commands::integrations::spotify_connect_sp_dc,

@@ -103,6 +103,7 @@ pub fn prefs_get_all_settings(state: State<'_, AppState>) -> Value {
     let mut m = Map::new();
     let profile_picture_path = p.profile_picture_path();
     m.insert("displayName".into(), Value::String(p.display_name()));
+    m.insert("jamDisplayName".into(), Value::String(p.jam_display_name()));
     m.insert(
         "profilePicturePath".into(),
         Value::String(profile_picture_path.clone()),

@@ -30,7 +30,7 @@ class WindowState {
   isAlwaysOnTop = $state(false);
   isMiniPlayer = $state(false);
   railExpanded = $state(false);
-  activeRightPanel = $state<'none' | 'queue' | 'lyrics' | 'canvas' | 'eq' | 'output'>('none');
+  activeRightPanel = $state<'none' | 'queue' | 'lyrics' | 'eq' | 'output'>('none');
   commandPaletteOpen = $state(false);
   updateDialogOpen = $state(false);
   welcomeOpen = $state(false);
@@ -39,7 +39,7 @@ class WindowState {
     this.railExpanded = !this.railExpanded;
   }
 
-  toggleRightPanel(panel: 'queue' | 'lyrics' | 'canvas' | 'eq' | 'output') {
+  toggleRightPanel(panel: 'queue' | 'lyrics' | 'eq' | 'output') {
     this.activeRightPanel = this.activeRightPanel === panel ? 'none' : panel;
   }
 

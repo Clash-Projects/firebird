@@ -61,6 +61,7 @@ class SettingsStore {
   ytAccountEmail = $state('');
   ytAccountAvatar = $state('');
   displayName = $state('');
+  jamDisplayName = $state('');
   profilePicturePath = $state('');
   profilePictureUrl = $state('');
   spotifyConnected = $state(false);
@@ -116,6 +117,7 @@ class SettingsStore {
     ]);
     if (all) {
       if (typeof all.displayName === 'string') this.displayName = all.displayName;
+      if (typeof all.jamDisplayName === 'string') this.jamDisplayName = all.jamDisplayName;
       if (typeof all.profilePicturePath === 'string') {
         this.profilePicturePath = all.profilePicturePath;
       }

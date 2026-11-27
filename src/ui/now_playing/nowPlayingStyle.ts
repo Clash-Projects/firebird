@@ -5,7 +5,7 @@ export const NOW_PLAYING_STYLES: ReadonlyArray<{
   label: string;
   description: string;
 }> = [
-  { id: 'standard', label: 'Studio Split', description: 'Artwork and controls on the left, live karaoke lyrics on the right.' },
-  { id: 'minimal', label: 'Minimal Focus', description: 'Centered floating cover art with quiet transport controls.' },
-  { id: 'fullBleed', label: 'Full Bleed', description: 'Edge-to-edge blurred canvas stage with bottom glass overlay.' },
+  { id: 'standard', label: 'Standard', description: 'Cover art on the left, synced lyrics on the right.' },
+  { id: 'fullBleed', label: 'Full Bleed', description: 'Edge-to-edge canvas artwork blended into ambient lyrics.' },
+  { id: 'minimal', label: 'Minimal', description: 'Sharp square cover art, centered metadata, and clean lyrics.' },
 ];
