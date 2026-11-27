@@ -1,0 +1,99 @@
+import type { PlayerEventType } from '$src/state/player.svelte';
+import type { Track } from '$src/state/types';
+
+export type PluginType = 'palette' | 'theme' | 'snippet' | 'widget';
+
+export interface PluginManifest {
+  id: string;
+  name: string;
+  version: string;
+  author: string;
+  description: string;
+  type: PluginType;
+  entry?: string;
+  css?: string;
+  icon?: string;
+  route?: string;
+  swatch?: [string, string, string];
+}
+
+export interface PluginRecord {
+  manifest: PluginManifest;
+  enabled: boolean;
+  builtin?: boolean;
+  sourceCode?: string;
+  cssCode?: string;
+  error?: string | null;
+}
+
+export interface SidebarSlotItem {
+  id: string;
+  pluginId: string;
+  label: string;
+  route: string;
+  icon?: string;
+}
+
+export interface PlayerBarControlSlot {
+  id: string;
+  pluginId: string;
+  label: string;
+  icon?: string;
+  onClick: () => void;
+}
+
+export interface TrackContextMenuItemSlot {
+  id: string;
+  pluginId: string;
+  label: string;
+  onClick: (track: Track) => void;
+}
+
+export interface CustomAppRouteSlot {
+  id: string;
+  pluginId: string;
+  route: string;
+  title: string;
+  mount: (container: HTMLElement) => void | (() => void);
+}
+
+export interface ScopedPluginStorage {
+  get<T = unknown>(key: string, fallback?: T): T | undefined;
+  set(key: string, value: unknown): void;
+  remove(key: string): void;
+}
+
+export interface LastWaveAPI {
+  readonly version: string;
+  readonly player: {
+    readonly play: () => void;
+    readonly pause: () => void;
+    readonly togglePlay: () => void;
+    readonly next: () => void;
+    readonly previous: () => void;
+    readonly seek: (sec: number) => void;
+    readonly setVolume: (val: number) => void;
+    readonly getCurrentTrack: () => Track | null;
+    readonly isPlaying: () => boolean;
+    readonly getQueue: () => Track[];
+    readonly getPosition: () => number;
+  };
+  readonly events: {
+    readonly on: (event: PlayerEventType, fn: (payload: unknown) => void) => () => void;
+    readonly off: (event: PlayerEventType, fn: (payload: unknown) => void) => void;
+  };
+  readonly ui: {
+    readonly registerSidebarItem: (item: Omit<SidebarSlotItem, 'pluginId'>, pluginId: string) => () => void;
+    readonly registerPlayerBarControl: (item: Omit<PlayerBarControlSlot, 'pluginId'>, pluginId: string) => () => void;
+    readonly registerTrackMenuItem: (item: Omit<TrackContextMenuItemSlot, 'pluginId'>, pluginId: string) => () => void;
+    readonly registerCustomApp: (item: Omit<CustomAppRouteSlot, 'pluginId'>, pluginId: string) => () => void;
+    readonly showToast: (title: string, subtitle?: string, severity?: 'info' | 'success' | 'warning' | 'error') => void;
+  };
+  readonly storage: (pluginId: string) => ScopedPluginStorage;
+}
+
+declare global {
+  interface Window {
+    LastWave?: LastWaveAPI;
+  }
+}
