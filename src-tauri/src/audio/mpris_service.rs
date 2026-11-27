@@ -332,7 +332,7 @@ mod linux_dbus {
     use super::*;
     use std::borrow::Cow;
     use std::collections::HashMap;
-    use zbus::fdo::properties::PropertiesSignals;
+    use zbus::fdo::Properties;
     use zbus::fdo::RequestNameFlags;
     use zbus::names::InterfaceName;
     use zbus::object_server::SignalEmitter;
@@ -714,9 +714,13 @@ mod linux_dbus {
             changed.insert("Position", Value::from((snap.position_ms as i64) * 1000));
 
             if let Ok(iface_name) = InterfaceName::try_from(PLAYER_IFACE) {
-                let _ = emitter
-                    .properties_changed(iface_name, changed, Cow::Borrowed(&[]))
-                    .await;
+                let _ = Properties::properties_changed(
+                    emitter,
+                    iface_name,
+                    changed,
+                    Cow::Borrowed(&[]),
+                )
+                .await;
             }
         }
 
