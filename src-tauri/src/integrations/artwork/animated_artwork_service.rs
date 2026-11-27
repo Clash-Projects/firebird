@@ -25,7 +25,7 @@ use super::community_canvas::CommunityCanvas;
 use super::official_artwork_service::OfficialArtworkService;
 use super::tidal_canvas::TidalCanvas;
 use super::{
-    clean_canvas_query, confirmed_album_match, confirmed_artist_match, primary_canvas_artist,
+    clean_canvas_query, confirmed_album_match, confirmed_artist_match, known_cover_album, primary_canvas_artist,
     AnimatedArtwork, CanvasSource, CANVAS_USER_AGENT,
 };
 
@@ -33,7 +33,7 @@ pub const ANIMATED_ARTWORK_BASE_URL: &str = "https://artwork.m8tec.top";
 const ANIM_HIT: &str = "anim";
 const ANIM_TIDAL_HIT: &str = "anim-tidal";
 const ANIM_COMMUNITY_HIT: &str = "anim-community";
-const ANIM_MISS: &str = "anim-v2-miss";
+const ANIM_MISS: &str = "anim-v3-miss";
 const HIT_TTL_MS: i64 = 30 * 24 * 3600 * 1000;
 const MISS_TTL_MS: i64 = 12 * 3600 * 1000;
 
@@ -62,7 +62,11 @@ impl AnimatedArtworkQuery {
     }
 
     pub fn cache_key(&self) -> String {
-        animated_artwork_cache_key(&self.artist, &self.album, &self.title)
+        animated_artwork_cache_key(
+            &self.artist,
+            known_cover_album(&self.title, &self.album).unwrap_or_default(),
+            &self.title,
+        )
     }
 }
 
@@ -431,7 +435,7 @@ impl AnimatedArtworkService {
     }
 
     async fn fallback_album_key(&self, query: &AnimatedArtworkQuery) -> Option<String> {
-        if !query.album.trim().is_empty() {
+        if known_cover_album(&query.title, &query.album).is_some() {
             return None;
         }
         let id = Self::track_key_id(&query.artist, &query.title);
@@ -492,14 +496,14 @@ impl AnimatedArtworkService {
                 }
                 drop(mem);
                 if !query.title.trim().is_empty() {
-                    let alb = clean_canvas_query(&query.album);
+                    let alb = known_cover_album(&query.title, &query.album);
                     if let Some(community_hit) = CommunityCanvas::peek_match(
                         &clean_canvas_query(&query.title),
                         &clean_canvas_query(&query.artist),
-                        if alb.is_empty() { None } else { Some(&alb) },
+                        alb,
                     )
                     .await
-                    .filter(|art| art.matches(&query.title, &query.artist, Some(&alb)))
+                    .filter(|art| art.matches(&query.title, &query.artist, alb))
                     {
                         return Some(community_hit);
                     }
@@ -525,8 +529,10 @@ impl AnimatedArtworkService {
         }
 
         if let Some((maybe_hit, fresh)) = self.read_disk(&key) {
-            self.memory.lock().await.store(key.clone(), maybe_hit.clone());
             if let Some(ref hit) = maybe_hit {
+                if fresh {
+                    self.memory.lock().await.store(key.clone(), maybe_hit.clone());
+                }
                 let http = self.http.clone();
                 let url = hit.url.clone();
                 tokio::spawn(async move {
@@ -543,14 +549,14 @@ impl AnimatedArtworkService {
             let maybe_notify = {
                 let mut map = self.inflight.lock().await;
                 if let Some(n) = map.get(&key) {
-                    Some(Arc::clone(n))
+                    Some(Arc::clone(n).notified_owned())
                 } else {
                     map.insert(key.clone(), Arc::new(tokio::sync::Notify::new()));
                     None
                 }
             };
-            if let Some(notify) = maybe_notify {
-                notify.notified().await;
+            if let Some(wait) = maybe_notify {
+                wait.await;
                 return self.memory.lock().await.map.get(&key).cloned().flatten();
             }
             break;
@@ -601,12 +607,8 @@ impl AnimatedArtworkService {
     ) -> Option<AnimatedArtwork> {
         let artist = clean_canvas_query(query.artist.trim());
         let title = clean_canvas_query(query.title.trim());
-        let raw_album = query.album.trim();
-        let mut album = if raw_album.is_empty() {
-            String::new()
-        } else {
-            clean_canvas_query(raw_album)
-        };
+        let requested_album = known_cover_album(&query.title, &query.album);
+        let mut album = requested_album.map(clean_canvas_query).unwrap_or_default();
 
         if album.is_empty() && (!artist.is_empty() || !title.is_empty()) {
             album = self.album_from_official(&artist, &title).await;
@@ -624,7 +626,7 @@ impl AnimatedArtworkService {
             }
         }
 
-        if raw_album.is_empty() && !album.is_empty() {
+        if requested_album.is_none() && !album.is_empty() {
             let album_key = animated_artwork_cache_key(&artist, &album, &title);
             let cached = {
                 let mut mem = self.memory.lock().await;
@@ -654,7 +656,18 @@ impl AnimatedArtworkService {
         };
 
         let verified = |art: &AnimatedArtwork| art.has_url() && art.matches(&title, &artist, album_opt);
-        let mut found = self.lookup_apple_music(&artist, &album, &title).await.filter(verified);
+        // A catalog song can identify its own release when the source provided
+        // no album. Search it before relying on a separately inferred album.
+        let mut found = if requested_album.is_none() && !title.is_empty() {
+            AppleMusicCanvas::search(&self.http, &title, &artist, None)
+                .await
+                .filter(|art| art.has_url() && art.matches(&title, &artist, None))
+        } else {
+            None
+        };
+        if found.is_none() {
+            found = self.lookup_apple_music(&artist, &album, &title).await.filter(verified);
+        }
         if found.is_none() {
             found = self.lookup_tidal(&artist, &album, &title).await.filter(verified);
         }
@@ -672,11 +685,7 @@ impl AnimatedArtworkService {
             Some(f) if !f.is_empty() => Some(self.resolve_playable_if_needed(f).await),
             _ => None,
         };
-        let effective_album = if !album.is_empty() {
-            album.clone()
-        } else {
-            found.album.as_deref().unwrap_or("").trim().to_string()
-        };
+        let effective_album = found.album.as_deref().unwrap_or(&album).trim().to_string();
         let resolved = AnimatedArtwork {
             url: playable,
             url_tall: found.url_tall,
@@ -938,10 +947,9 @@ impl AnimatedArtworkService {
     }
 
     async fn store(&self, key: &str, art: Option<&AnimatedArtwork>) {
-        self.memory
-            .lock()
-            .await
-            .store(key.to_string(), art.cloned());
+        if let Some(art) = art {
+            self.memory.lock().await.store(key.to_string(), Some(art.clone()));
+        }
         let provider = match art.map(|a| a.source) {
             None => ANIM_MISS,
             Some(CanvasSource::Apple) => ANIM_HIT,
@@ -1014,6 +1022,20 @@ clip.mp4
         art.title = Some("Song".into());
         assert!(!art.matches("Song", "Artist", Some("Album (Deluxe)")));
         assert!(art.matches("Song (feat. Guest)", "Artist", Some("Album")));
+    }
+
+    #[test]
+    fn repeated_song_title_does_not_count_as_album_metadata() {
+        let title = "Go Easy (from GTAVI: The Album)";
+        let repeated = AnimatedArtworkQuery::new("Dua Lipa", title, title);
+        let unknown = AnimatedArtworkQuery::new("Dua Lipa", "", title);
+        assert_eq!(repeated.cache_key(), unknown.cache_key());
+        assert_ne!(
+            unknown.cache_key(),
+            AnimatedArtworkQuery::new("Dua Lipa", "Grand Theft Auto VI: The Album", title)
+                .cache_key(),
+        );
+        assert_eq!(super::super::canvas_track_title(title), "Go Easy");
     }
 
     #[tokio::test]

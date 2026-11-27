@@ -834,7 +834,13 @@ pub async fn artwork_resolve_track(
     title: String,
     artist: String,
     album: Option<String>,
+    verified: Option<bool>,
 ) -> Result<Option<OfficialArtworkResult>, String> {
+    if verified.unwrap_or(false) {
+        return Ok(state.official_artwork
+            .resolve_verified_cover(&title, &artist, album.as_deref().unwrap_or(""))
+            .await);
+    }
     Ok(state
         .official_artwork
         .resolve_official_artwork(&title, &artist, album.as_deref().unwrap_or(""))

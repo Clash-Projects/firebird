@@ -15,6 +15,8 @@ use tokio::sync::{Mutex, Semaphore};
 use crate::models::artist_parser::{primary_artist_name, split_artist_credits};
 use crate::storage::app_database::AppDatabase;
 
+use super::{confirmed_album_match, confirmed_artist_match, confirmed_track_match, known_cover_album};
+
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OfficialArtworkResult {
@@ -411,14 +413,14 @@ impl OfficialArtworkService {
             let maybe_notify = {
                 let mut map = self.inflight.lock().await;
                 if let Some(n) = map.get(&cache_key) {
-                    Some(Arc::clone(n))
+                    Some(Arc::clone(n).notified_owned())
                 } else {
                     map.insert(cache_key.clone(), Arc::new(tokio::sync::Notify::new()));
                     None
                 }
             };
-            if let Some(notify) = maybe_notify {
-                notify.notified().await;
+            if let Some(wait) = maybe_notify {
+                wait.await;
                 if let Some(res) = self.state.lock().await.cache.get(&cache_key).cloned() {
                     return Some(res);
                 }
@@ -466,6 +468,41 @@ impl OfficialArtworkService {
                 .await
         })
         .await
+    }
+
+    pub async fn resolve_verified_cover(
+        &self,
+        title: &str,
+        artist: &str,
+        album: &str,
+    ) -> Option<OfficialArtworkResult> {
+        let album = known_cover_album(title, album).unwrap_or_default();
+        let clean_title = Self::normalize_for_search(title);
+        let clean_artist = Self::normalize_for_search(artist);
+        if clean_title.is_empty() || clean_artist.is_empty() {
+            return None;
+        }
+        let key = format!("verified-cover|{}", serde_json::json!([artist, album, title]));
+        self.cached_resolve(key, "catalog", || async {
+            if !album.is_empty() {
+                let cover = self.do_resolve_album(
+                    &Self::normalize_for_search(album), &clean_artist, album, artist,
+                ).await;
+                if let Some(cover) = cover.filter(|cover| {
+                    confirmed_album_match(album, &cover.album_title)
+                        && confirmed_artist_match(artist, &cover.artist)
+                }) {
+                    return Some(cover);
+                }
+            }
+            self.do_resolve(&clean_title, &clean_artist, title, artist, album)
+                .await
+                .filter(|cover| {
+                    confirmed_track_match(title, &cover.title)
+                        && confirmed_artist_match(artist, &cover.artist)
+                        && (album.is_empty() || confirmed_album_match(album, &cover.album_title))
+                })
+        }).await
     }
 
     pub async fn remember_fallback_track(

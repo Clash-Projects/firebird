@@ -88,12 +88,21 @@
     if (url.protocol !== 'https:') return '';
     const host = url.hostname;
     const originalPath = url.pathname;
+    const target = 1600;
+    const enlarge = (width: string, height = width) => Math.min(Number(width), Number(height)) < target;
     if (/\.(?:googleusercontent|ggpht)\.com$/.test(host)) {
       url.pathname = originalPath.replace(/=w(\d+)-h(\d+)(?:-[^/]*)?$/, (size, width, height) =>
-        Math.min(Number(width), Number(height)) < 1024 ? '=w1024-h1024-l90-rj' : size);
+        enlarge(width, height) ? `=w${target}-h${target}-l90-rj` : size);
+      if (url.pathname === originalPath) {
+        url.pathname = originalPath
+          .replace(/=s(\d+)(?:-[^/]*)?$/, (size, dimension) =>
+            enlarge(dimension) ? `=s${target}` : size)
+          .replace(/\/w(\d+)-h(\d+)\//, (size, width, height) =>
+            enlarge(width, height) ? `/w${target}-h${target}/` : size);
+      }
     } else if (host.endsWith('.mzstatic.com')) {
-      url.pathname = originalPath.replace(/\/(\d+)x(\d+)bb(?=\.)/, (size, width, height) =>
-        Math.min(Number(width), Number(height)) < 1024 ? '/1024x1024bb' : size);
+      url.pathname = originalPath.replace(/\/(\d+)x(\d+)([a-z]*)(?=\.)/i, (size, width, height, format) =>
+        enlarge(width, height) ? `/${target}x${target}${format}` : size);
     } else if (host.endsWith('.ytimg.com')) {
       url.pathname = originalPath.replace(/\/(?:default|mqdefault|hqdefault|sddefault)(?=\.)/, '/maxresdefault');
     }
@@ -106,6 +115,7 @@
     const currentLabel = label || alt;
     const currentArtist = artist;
     const currentAlbum = album;
+    const verifiedCover = highResolution && currentKind === 'track' && Boolean(currentArtist);
     const seq = ++resolveSeq;
 
     failedPrimary = false;
@@ -114,12 +124,11 @@
     loaded = false;
     resolvedUrl = '';
 
-    if (!upgrade || !isTauriRuntime() || !currentLabel || isOfficialUrl(currentSrc)
-      || (highResolution && Boolean(largerUrl) && !currentSrc.includes('ytimg.com'))) {
+    if (!upgrade || !isTauriRuntime() || !currentLabel || (!verifiedCover && isOfficialUrl(currentSrc))) {
       return;
     }
 
-    const cacheKey = `${currentKind}|${currentLabel.toLowerCase()}|${currentArtist.toLowerCase()}|${currentAlbum.toLowerCase()}`;
+    const cacheKey = `${verifiedCover ? 'verified-track' : currentKind}|${currentLabel.toLowerCase()}|${currentArtist.toLowerCase()}|${currentAlbum.toLowerCase()}`;
     const cached = upgradedCache.get(cacheKey);
     if (cached !== undefined) {
       resolvedUrl = cached;
@@ -138,6 +147,7 @@
               title: currentLabel,
               artist: currentArtist,
               album: currentAlbum || null,
+              verified: verifiedCover || undefined,
             });
 
     req

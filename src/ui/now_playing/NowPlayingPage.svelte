@@ -28,9 +28,9 @@
   let spotifyMotion = $state<{ trackId: string; url?: string } | null>(null);
   let albumVideoUrls = $derived(albumMotion && albumMotion.trackId === track?.id ? albumMotion.urls : []);
   let fullBleedVideoUrls = $derived(
-    spotifyMotion && spotifyMotion.trackId === track?.id
-      ? spotifyMotion.url ? [spotifyMotion.url, ...albumVideoUrls] : albumVideoUrls
-      : [],
+    spotifyMotion?.url && spotifyMotion.trackId === track?.id
+      ? [spotifyMotion.url, ...albumVideoUrls]
+      : albumVideoUrls,
   );
 
   let effectiveLyricsVisible = $derived(lyricsVisible && !lyricsMissing);

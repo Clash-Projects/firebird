@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::integrations::artwork::{
-    confirmed_album_match, confirmed_artist_match, confirmed_track_match, normalize_canvas_match,
+    confirmed_album_match, confirmed_artist_match, confirmed_track_match, known_cover_album,
+    normalize_canvas_match,
 };
 use crate::storage::diagnostics_log::DiagnosticsLog;
 
@@ -761,7 +762,10 @@ impl SpotifyApi {
             );
         }
         let Some(matched) = self
-            .search_track(title, artist, duration_ms, Some(album.unwrap_or_default()))
+            .search_track(
+                title, artist, duration_ms,
+                Some(known_cover_album(title, album.unwrap_or_default()).unwrap_or_default()),
+            )
             .await
         else {
             DiagnosticsLog::info(&format!("{tag} stage=search ok=false"));

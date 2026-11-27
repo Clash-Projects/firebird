@@ -18,7 +18,7 @@ use serde_json::Value;
 use tokio::sync::Mutex;
 
 use super::{
-    canvas_get_text, canvas_titles_match, confirmed_album_match, confirmed_artist_match,
+    canvas_get_text, canvas_titles_match, canvas_track_title, confirmed_album_match, confirmed_artist_match,
     confirmed_track_match, normalize_canvas_match,
     primary_canvas_artist, AnimatedArtwork, CanvasSource, CANVAS_USER_AGENT,
 };
@@ -121,7 +121,8 @@ impl AppleMusicCanvas {
             term.push_str(&query_artist);
             term.push(' ');
         }
-        term.push_str(title);
+        let search_title = canvas_track_title(title);
+        term.push_str(&search_title);
         if let Some(alb) = album {
             if !alb.trim().is_empty() && !title.to_lowercase().contains(&alb.to_lowercase()) {
                 term.push(' ');

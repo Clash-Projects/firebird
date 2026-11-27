@@ -26,8 +26,8 @@
 >
   <Artwork
     src={posterUrl}
-    label={album || title}
-    kind={album ? 'album' : 'track'}
+    label={title || album}
+    kind={title ? 'track' : 'album'}
     {artist}
     {album}
     {size}

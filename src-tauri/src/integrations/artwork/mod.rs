@@ -91,8 +91,19 @@ fn normalize_confirmed_metadata(value: &str) -> String {
 }
 
 pub(super) fn confirmed_track_match(expected: &str, candidate: &str) -> bool {
-    let expected = normalize_confirmed_metadata(&TRACK_CREDIT_SUFFIX.replace(expected.trim(), ""));
-    !expected.is_empty() && expected == normalize_confirmed_metadata(&TRACK_CREDIT_SUFFIX.replace(candidate.trim(), ""))
+    let expected = normalize_confirmed_metadata(&canvas_track_title(expected));
+    !expected.is_empty() && expected == normalize_confirmed_metadata(&canvas_track_title(candidate))
+}
+
+pub(super) fn canvas_track_title(title: &str) -> std::borrow::Cow<'_, str> {
+    TRACK_CREDIT_SUFFIX.replace(title.trim(), "")
+}
+
+pub(crate) fn known_cover_album<'a>(title: &str, album: &'a str) -> Option<&'a str> {
+    let album = album.trim();
+    // Some sources repeat the track title when they have no separate release metadata.
+    (!album.is_empty() && normalize_confirmed_metadata(title) != normalize_confirmed_metadata(album))
+        .then_some(album)
 }
 
 pub(super) fn confirmed_album_match(expected: &str, candidate: &str) -> bool {
