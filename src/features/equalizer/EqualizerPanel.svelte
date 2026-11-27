@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { windowState } from '$src/app/window.svelte';
+  import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
   import { EQ_FREQUENCIES, EQ_PRESETS, featuresStore } from '$src/state/features.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import Select from '$src/ui/components/Select.svelte';
@@ -15,6 +17,34 @@
     { value: 'Sony WH-1000XM5', label: 'Sony WH-1000XM5' },
     { value: 'Apple AirPods Max', label: 'Apple AirPods Max' },
   ];
+
+  onMount(async () => {
+    if (!isTauriRuntime()) return;
+    const eq = await ipcInvoke<{ enabled?: boolean; studioClarityEnabled?: boolean; bandGains?: number[] }>(
+      'eq_get_state'
+    );
+    if (!eq) return;
+    if (typeof eq.enabled === 'boolean') featuresStore.eqEnabled = eq.enabled;
+    if (typeof eq.studioClarityEnabled === 'boolean') featuresStore.studioClarity = eq.studioClarityEnabled;
+    if (Array.isArray(eq.bandGains) && eq.bandGains.length === featuresStore.eqBands.length) {
+      featuresStore.eqBands = [...eq.bandGains];
+    }
+  });
+
+  function toggleEqEnabled(enabled: boolean) {
+    featuresStore.eqEnabled = enabled;
+    void ipcInvoke('eq_set_enabled', { enabled });
+  }
+
+  function toggleStudioClarity(enabled: boolean) {
+    featuresStore.studioClarity = enabled;
+    void ipcInvoke('eq_set_studio_clarity_enabled', { enabled });
+  }
+
+  function resetEq() {
+    featuresStore.applyEqPreset('Flat');
+    void ipcInvoke('eq_reset');
+  }
 
   function fmtFreq(hz: number): string {
     return hz >= 1000 ? `${hz / 1000}k` : String(hz);
@@ -32,7 +62,13 @@
       <p class="text-[11.5px] text-[var(--lw-text-tertiary)]">Studio DSP filter chain</p>
     </div>
     <div class="flex items-center gap-2">
-      <input type="checkbox" bind:checked={featuresStore.eqEnabled} aria-label="Enable EQ" class="h-4 w-4 accent-[var(--lw-accent)]" />
+      <input
+        type="checkbox"
+        checked={featuresStore.eqEnabled}
+        onchange={(e) => toggleEqEnabled(e.currentTarget.checked)}
+        aria-label="Enable EQ"
+        class="h-4 w-4 accent-[var(--lw-accent)]"
+      />
       <button
         type="button"
         onclick={() => windowState.closeRightPanel()}
@@ -50,7 +86,7 @@
         options={[...presetOptions, { value: 'Custom', label: 'Custom' }]}
         onchange={(v) => v !== 'Custom' && featuresStore.applyEqPreset(v)}
       />
-      <Buttons variant="secondary" size="sm" onclick={() => featuresStore.applyEqPreset('Flat')}>Reset Flat</Buttons>
+      <Buttons variant="secondary" size="sm" onclick={resetEq}>Reset Flat</Buttons>
     </div>
 
     <div class="rounded-[16px] border border-[var(--lw-outline)] bg-[var(--lw-surface)] p-3">
@@ -96,7 +132,12 @@
       <Select bind:value={featuresStore.headphoneProfile} options={headphoneOptions} class="w-full" />
       <label class="flex cursor-pointer items-center justify-between pt-1 text-[12px]">
         <span class="text-[var(--lw-text-secondary)]">Studio Master Clarity Filter</span>
-        <input type="checkbox" bind:checked={featuresStore.studioClarity} class="h-4 w-4 accent-[var(--lw-accent)]" />
+        <input
+          type="checkbox"
+          checked={featuresStore.studioClarity}
+          onchange={(e) => toggleStudioClarity(e.currentTarget.checked)}
+          class="h-4 w-4 accent-[var(--lw-accent)]"
+        />
       </label>
     </div>
   </div>

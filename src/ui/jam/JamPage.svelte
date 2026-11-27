@@ -1,6 +1,9 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
   import { featuresStore } from '$src/state/features.svelte';
   import { playerStore } from '$src/state/player.svelte';
+  import { settingsStore } from '$src/state/settings.svelte';
   import Artwork from '$src/ui/components/Artwork.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import CommandBar from '$src/ui/components/CommandBar.svelte';
@@ -9,6 +12,51 @@
 
   let chatInput = $state('');
   let joinCode = $state('');
+  let busy = $state(false);
+
+  interface BackendJamSnapshot {
+    phase?: string;
+    roomCode?: string;
+    isHost?: boolean;
+    people?: Array<{ id?: string; displayName?: string; name?: string; role?: string }>;
+    chat?: Array<{ id?: string; sender?: string; displayName?: string; text?: string; time?: string }>;
+  }
+
+  function applyJamSnapshot(snap: BackendJamSnapshot | null) {
+    if (!snap) return;
+    featuresStore.jamConnected = Boolean(snap.roomCode) && snap.phase !== 'idle' && snap.phase !== 'disconnected';
+    featuresStore.jamRoomCode = snap.roomCode || '';
+    featuresStore.jamIsHost = Boolean(snap.isHost);
+    if (Array.isArray(snap.people)) {
+      featuresStore.jamParticipants = snap.people.map((p, idx) => ({
+        id: p.id || `p-${idx}`,
+        name: p.displayName || p.name || 'Listener',
+        role: p.role || 'listener',
+      }));
+    }
+    if (Array.isArray(snap.chat)) {
+      featuresStore.jamChat = snap.chat.map((c, idx) => ({
+        id: c.id || `c-${idx}`,
+        sender: c.displayName || c.sender || 'Guest',
+        text: c.text || '',
+        time: c.time || '',
+      }));
+    }
+  }
+
+  async function refreshSnapshot() {
+    if (!isTauriRuntime()) return;
+    const snap = await ipcInvoke<BackendJamSnapshot>('jam_snapshot');
+    applyJamSnapshot(snap);
+  }
+
+  onMount(() => {
+    void refreshSnapshot();
+    const timer = setInterval(() => {
+      if (featuresStore.jamConnected) void refreshSnapshot();
+    }, 3000);
+    return () => clearInterval(timer);
+  });
 
   function sendChat(e: SubmitEvent) {
     e.preventDefault();
@@ -17,9 +65,46 @@
     chatInput = '';
   }
 
-  function startJam() {
-    featuresStore.jamConnected = true;
-    featuresStore.showToast({ title: 'Jam session started', subtitle: `Room ${featuresStore.jamRoomCode}`, severity: 'success' });
+  async function createRoom() {
+    if (busy) return;
+    busy = true;
+    try {
+      const displayName = settingsStore.ytAccountName || 'LastWave User';
+      await ipcInvoke('jam_create_room', {
+        displayName,
+        collaborative: true,
+        browserGuests: true,
+      });
+      await refreshSnapshot();
+      featuresStore.showToast({
+        title: 'Jam session started',
+        subtitle: featuresStore.jamRoomCode ? `Room ${featuresStore.jamRoomCode}` : undefined,
+        severity: 'success',
+      });
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function joinRoom() {
+    const code = joinCode.trim().toUpperCase();
+    if (!code || busy) return;
+    busy = true;
+    try {
+      const displayName = settingsStore.ytAccountName || 'LastWave User';
+      await ipcInvoke('jam_join_room', { roomCode: code, displayName });
+      await refreshSnapshot();
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function leaveRoom() {
+    await ipcInvoke('jam_leave');
+    featuresStore.jamConnected = false;
+    featuresStore.jamRoomCode = '';
+    featuresStore.jamParticipants = [];
+    featuresStore.jamChat = [];
   }
 </script>
 
@@ -27,9 +112,11 @@
   <CommandBar title="LastWave Jam" subtitle="Real-time synchronized listening rooms">
     {#snippet actions()}
       {#if featuresStore.jamConnected}
-        <Buttons variant="danger" size="sm" onclick={() => (featuresStore.jamConnected = false)}>Leave Room</Buttons>
+        <Buttons variant="danger" size="sm" onclick={() => void leaveRoom()}>Leave Room</Buttons>
       {:else}
-        <Buttons variant="primary" size="sm" onclick={startJam}>Start Room</Buttons>
+        <Buttons variant="primary" size="sm" disabled={busy} onclick={() => void createRoom()}>
+          {busy ? 'Starting...' : 'Start Room'}
+        </Buttons>
       {/if}
     {/snippet}
   </CommandBar>
@@ -41,21 +128,13 @@
         <p class="mt-1 text-[12.5px] text-[var(--lw-text-secondary)]">
           Share your live playback queue and sync timestamps with friends.
         </p>
-        <Buttons variant="primary" class="mt-4" onclick={startJam}>Create Room</Buttons>
+        <Buttons variant="primary" class="mt-4" disabled={busy} onclick={() => void createRoom()}>Create Room</Buttons>
       </div>
       <div class="rounded-[20px] border border-[var(--lw-outline)] bg-[var(--lw-surface)] p-6">
         <h2 class="text-[16px] font-bold">Join by Code</h2>
         <div class="mt-3 flex gap-2">
           <Input bind:value={joinCode} placeholder="Enter room code" />
-          <Buttons
-            variant="secondary"
-            onclick={() => {
-              if (joinCode.trim()) featuresStore.jamRoomCode = joinCode.trim().toUpperCase();
-              startJam();
-            }}
-          >
-            Join
-          </Buttons>
+          <Buttons variant="secondary" disabled={busy} onclick={() => void joinRoom()}>Join</Buttons>
         </div>
       </div>
     </div>

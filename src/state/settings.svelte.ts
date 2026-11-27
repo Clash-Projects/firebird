@@ -1,4 +1,5 @@
 import { detectHostPlatform, type HostPlatform } from '$src/features/audio_output/platformAudio';
+import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
 import type { NowPlayingStyle } from './types';
 
 export type ThemeMode = 'dark' | 'light' | 'amoled' | 'custom' | 'artwork';
@@ -71,6 +72,39 @@ class SettingsStore {
   toggleShelf(id: string) {
     const shelf = this.homeShelves.find((s) => s.id === id);
     if (shelf) shelf.visible = !shelf.visible;
+  }
+
+  async loadFromBackend() {
+    if (!isTauriRuntime()) return;
+    const [all, lastfm] = await Promise.all([
+      ipcInvoke<Record<string, unknown>>('prefs_get_all_settings'),
+      ipcInvoke<{ username?: string; authenticated?: boolean }>('lastfm_auth_state'),
+    ]);
+    if (all) {
+      if (typeof all.themeMode === 'string') {
+        const m = all.themeMode as ThemeMode;
+        if (m === 'dark' || m === 'light' || m === 'amoled' || m === 'custom' || m === 'artwork') {
+          this.themeMode = m;
+        }
+      }
+      if (typeof all.amoled === 'boolean') this.amoled = all.amoled;
+      if (typeof all.languageTag === 'string' && all.languageTag) this.language = all.languageTag;
+      if (typeof all.discordRpc === 'boolean') this.discordRpcEnabled = all.discordRpc;
+      if (typeof all.performanceMode === 'boolean') this.performanceMode = all.performanceMode;
+      if (typeof all.uiScale === 'number' && all.uiScale > 0) this.uiScale = all.uiScale;
+    }
+    if (lastfm) {
+      this.lastfmConnected = Boolean(lastfm.authenticated || lastfm.username);
+      this.lastfmUser = lastfm.username || '';
+    }
+  }
+
+  saveBoolPref(key: string, value: boolean) {
+    void ipcInvoke('prefs_set_bool', { key, value });
+  }
+
+  saveStringPref(key: string, value: string) {
+    void ipcInvoke('prefs_set_string', { key, value });
   }
 }
 

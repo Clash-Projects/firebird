@@ -55,6 +55,7 @@
     });
 
     if (isTauriRuntime()) {
+      void settingsStore.loadFromBackend();
       void ipcInvoke<BackendYtConnection>('yt_get_connection').then((conn) => {
         applyYtConnection(conn);
         void libraryStore.connectBackend();

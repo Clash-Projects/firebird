@@ -249,7 +249,7 @@ class FeaturesStore {
     const now = new Date();
     const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     this.jamChat = [...this.jamChat, { id: `m-${Date.now()}`, sender: 'You', text: clean, time }];
-    void ipcInvoke('jam_send_chat', { text: clean });
+    void ipcInvoke('jam_send_chat', { text: clean, replyToId: null });
   }
 
   showToast(toast: Omit<ToastMessage, 'id'>, durationMs = 3600) {

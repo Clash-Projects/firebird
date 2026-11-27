@@ -1,19 +1,18 @@
 <script lang="ts">
+  import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
   import { libraryStore } from '$src/state/library.svelte';
   import Artwork from '$src/ui/components/Artwork.svelte';
   import DesktopTable from '$src/ui/components/DesktopTable.svelte';
   import { goAlbum, goArtist, goGenre } from '$src/ui/navigation/waveNav';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
 
-  type Period = '7d' | '1m' | '3m' | '12m' | 'all';
+  type Period = '7d' | '1m' | 'all';
   type StatsTab = 'overview' | 'tracks' | 'artists' | 'albums' | 'history' | 'genres';
 
-  const PERIODS: ReadonlyArray<{ id: Period; label: string }> = [
-    { id: '7d', label: '7 Days' },
-    { id: '1m', label: '1 Month' },
-    { id: '3m', label: '3 Months' },
-    { id: '12m', label: '12 Months' },
-    { id: 'all', label: 'All Time' },
+  const PERIODS: ReadonlyArray<{ id: Period; label: string; backend: string }> = [
+    { id: '7d', label: '7 Days', backend: 'Week' },
+    { id: '1m', label: '30 Days', backend: 'Month' },
+    { id: 'all', label: 'All Time', backend: 'AllTime' },
   ];
 
   const TABS: ReadonlyArray<{ id: StatsTab; label: string }> = [
@@ -25,31 +24,38 @@
     { id: 'genres', label: 'Genres' },
   ];
 
+  interface BackendListeningStats {
+    totalPlays?: number;
+    totalMinutesListened?: number;
+    uniqueArtists?: number;
+    uniqueTracks?: number;
+    currentStreakDays?: number;
+  }
+
   let period = $state<Period>('1m');
   let tab = $state<StatsTab>('overview');
+  let stats = $state<BackendListeningStats | null>(null);
 
-  const weeklyBars = [
-    { day: 'Mon', hrs: 0 },
-    { day: 'Tue', hrs: 0 },
-    { day: 'Wed', hrs: 0 },
-    { day: 'Thu', hrs: 0 },
-    { day: 'Fri', hrs: 0 },
-    { day: 'Sat', hrs: 0 },
-    { day: 'Sun', hrs: 0 },
-  ];
+  $effect(() => {
+    const p = PERIODS.find((item) => item.id === period)?.backend ?? 'Month';
+    if (!isTauriRuntime()) return;
+    let cancelled = false;
+    void ipcInvoke<BackendListeningStats>('stats_compute_listening', { period: p }).then((res) => {
+      if (!cancelled && res) stats = res;
+    });
+    return () => {
+      cancelled = true;
+    };
+  });
 
   const rankColors = ['#E0A030', '#C0C4CC', '#CD7F32'];
 
-  let totalPlays = $derived(libraryStore.historyIds.length);
+  let totalPlays = $derived(stats?.totalPlays ?? libraryStore.historyIds.length);
   let totalMinutes = $derived(
-    Math.round(libraryStore.tracksByIds(libraryStore.historyIds).reduce((sum, t) => sum + t.durationSec, 0) / 60)
+    stats?.totalMinutesListened ??
+      Math.round(libraryStore.tracksByIds(libraryStore.historyIds).reduce((sum, t) => sum + t.durationSec, 0) / 60)
   );
-  let losslessPct = $derived.by(() => {
-    const played = libraryStore.tracksByIds(libraryStore.historyIds);
-    if (played.length === 0) return 0;
-    const hiRes = played.filter((t) => t.qualityTier !== 'high').length;
-    return Math.round((hiRes / played.length) * 100);
-  });
+  let uniqueArtists = $derived(stats?.uniqueArtists ?? libraryStore.artists.length);
 </script>
 
 <div class="w-full space-y-5 px-6 pt-[22px] pb-12">
@@ -97,20 +103,8 @@
         <div class="mt-2 text-[28px] font-bold tracking-[-0.6px] lw-tabular">{Math.floor(totalMinutes / 60)}h {totalMinutes % 60}m</div>
       </div>
       <div class="rounded-[18px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-5">
-        <div class="text-[11px] font-semibold text-[var(--lw-text-tertiary)] uppercase">Lossless / Hi-Res</div>
-        <div class="mt-2 text-[28px] font-bold tracking-[-0.6px] lw-tabular">{losslessPct}%</div>
-      </div>
-    </div>
-
-    <div class="rounded-[18px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-5">
-      <div class="text-[13px] font-bold">On-Device Activity</div>
-      <div class="mt-4 flex h-40 items-end gap-4">
-        {#each weeklyBars as bar (bar.day)}
-          <div class="flex flex-1 flex-col items-center gap-2">
-            <div class="w-full max-w-[42px] rounded-t-[8px] bg-[var(--lw-accent)]/85" style:height="{bar.hrs * 18}px"></div>
-            <span class="text-[11.5px] text-[var(--lw-text-secondary)]">{bar.day}</span>
-          </div>
-        {/each}
+        <div class="text-[11px] font-semibold text-[var(--lw-text-tertiary)] uppercase">Unique Artists</div>
+        <div class="mt-2 text-[28px] font-bold tracking-[-0.6px] lw-tabular">{uniqueArtists}</div>
       </div>
     </div>
 
@@ -142,7 +136,7 @@
           <button type="button" onclick={() => (tab = 'artists')} class="cursor-pointer text-[12px] font-semibold text-[var(--lw-accent)]">See all</button>
         </div>
         <div class="space-y-1.5">
-          {#each libraryStore.artists as artist, i (artist.id)}
+          {#each libraryStore.artists.slice(0, 5) as artist, i (artist.id)}
             <button type="button" onclick={() => goArtist(artist.id)} class="flex w-full cursor-pointer items-center gap-3 rounded-[10px] px-2 py-1.5 text-left hover:bg-white/[0.04]">
               <span class="w-6 text-center text-[13px] font-bold lw-tabular" style:color={rankColors[i] ?? 'var(--lw-text-tertiary)'}>
                 {i + 1}
