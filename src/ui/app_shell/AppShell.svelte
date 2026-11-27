@@ -46,9 +46,12 @@
   import CustomAppHost from './CustomAppHost.svelte';
   import TitleBar from './TitleBar.svelte';
   import WaveResizeArea from './WaveResizeArea.svelte';
+  import { WaveDensity } from '$src/ui/theme/tokens';
+  import { waveSlide } from '$src/ui/theme/motion';
 
   let customApp = $derived(uiSlots.customAppRoutes.find((a) => a.route === router.path) ?? null);
   let isNowPlaying = $derived(router.path === '/now-playing');
+  let openPanels = $derived(windowState.activeRightPanel === 'none' ? [] : [windowState.activeRightPanel]);
 </script>
 
 <GlassStage />
@@ -57,7 +60,11 @@
   <MiniPlayer />
 {:else}
   <WaveResizeArea>
-    <div data-lw="app-shell" class="flex h-full w-full flex-col bg-[var(--lw-bg)] text-[var(--lw-text-primary)]">
+    <div
+      data-lw="app-shell"
+      class="flex h-full w-full flex-col bg-[var(--lw-bg)] text-[var(--lw-text-primary)]"
+      style:--lw-shell-rail-width="{windowState.railExpanded ? WaveDensity.railExpanded : WaveDensity.railCollapsed}px"
+    >
       <TitleBar />
 
       <div class="relative flex min-h-0 flex-1 overflow-hidden">
@@ -70,7 +77,6 @@
             <AmbientStage intensity={0.14} />
           {/if}
 
-          <div class="lw-scroll relative z-10 h-full w-full scrollbar-gutter-stable">
             <BranchSwitcher routeKey={router.path}>
               {#if customApp}
                 <CustomAppHost app={customApp} />
@@ -78,8 +84,8 @@
                 <NowPlayingPage />
               {:else if router.path === '/home/layout'}
                 <HomeLayoutPage />
-              {:else if router.path === '/search'}
-                <SearchPage />
+              {:else if router.matches('/search')}
+                <SearchPage initialQuery={decodeURIComponent(router.segment(1))} />
               {:else if router.path === '/genres'}
                 <GenresPage />
               {:else if router.matches('/genre')}
@@ -126,20 +132,25 @@
                 <HomePage />
               {/if}
             </BranchSwitcher>
-          </div>
         </main>
 
-        {#if windowState.activeRightPanel === 'queue'}
-          <QueuePanel />
-        {:else if windowState.activeRightPanel === 'lyrics'}
-          <LyricsPanel />
-        {:else if windowState.activeRightPanel === 'canvas'}
-          <CanvasPanel />
-        {:else if windowState.activeRightPanel === 'eq'}
-          <EqualizerPanel />
-        {:else if windowState.activeRightPanel === 'output'}
-          <OutputPathSheet />
-        {/if}
+        <div class="shell-panels">
+          {#each openPanels as panel (panel)}
+            <div class="shell-panel" transition:waveSlide={{ x: 18 }}>
+              {#if panel === 'queue'}
+                <QueuePanel />
+              {:else if panel === 'lyrics'}
+                <LyricsPanel />
+              {:else if panel === 'canvas'}
+                <CanvasPanel />
+              {:else if panel === 'eq'}
+                <EqualizerPanel />
+              {:else if panel === 'output'}
+                <OutputPathSheet />
+              {/if}
+            </div>
+          {/each}
+        </div>
       </div>
 
       <WidgetSandboxHost />
@@ -152,3 +163,20 @@
 <ContextMenu />
 <InfobarHost />
 <UpdateDialog />
+
+<style>
+  .shell-panels {
+    position: relative;
+    z-index: 15;
+    display: grid;
+    flex: none;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .shell-panel { grid-area: 1 / 1; min-height: 0; }
+  .shell-panel :global(.lw-scroll) { overscroll-behavior: contain; }
+
+  @media (max-width: 1100px) {
+    .shell-panels { position: absolute; inset: 0 0 0 auto; }
+  }
+</style>

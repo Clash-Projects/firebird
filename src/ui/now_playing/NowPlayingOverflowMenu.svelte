@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dismissFlyout } from '$src/app/accessibility';
   import { windowState } from '$src/app/window.svelte';
   import { playerStore } from '$src/state/player.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
@@ -8,18 +9,19 @@
   let open = $state(false);
 </script>
 
-<div class="relative">
+<div class="relative" use:dismissFlyout={{ open, close: () => (open = false) }}>
   <button
     type="button"
     onclick={() => (open = !open)}
-    class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[8px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
+    class="lw-press flex h-8 w-8 cursor-pointer items-center justify-center rounded-[8px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
     title="Now Playing options"
+    aria-expanded={open}
+    aria-controls="lw-now-playing-options"
   >
     <WaveIcon name="more" size={16} />
   </button>
 
-  {#if open}
-    <div class="absolute right-0 top-10 z-30 w-[230px] rounded-[14px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] p-2 shadow-[var(--lw-shadow-flyout)]">
+    <div id="lw-now-playing-options" data-open={open} inert={!open} class="lw-popover absolute right-0 top-10 z-30 w-[230px] rounded-[14px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] p-2 shadow-[var(--lw-shadow-flyout)]">
       <div class="px-2 py-1 text-[10.5px] font-bold tracking-[1px] text-[var(--lw-text-tertiary)] uppercase">
         Layout Style
       </div>
@@ -69,5 +71,4 @@
         <WaveIcon name="layers" size={14} /> Open Canvas Panel
       </button>
     </div>
-  {/if}
 </div>

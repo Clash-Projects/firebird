@@ -1,18 +1,19 @@
 export const WaveColors = {
-  background: '#0E0E0E',
-  backgroundDeep: '#0A0A0A',
-  surface: '#161616',
-  surfaceRaised: '#1E1E1E',
-  surfaceOverlay: '#262626',
-  panelTranslucent: 'rgba(22, 22, 22, 0.90)',
-  dockTranslucent: 'rgba(20, 20, 20, 0.95)',
-  railTranslucent: 'rgba(14, 14, 14, 0.90)',
-  outline: '#2B2B2B',
-  outlineSoft: '#1F1F1F',
-  textPrimary: '#F5F4F0',
-  textSecondary: '#A8A6A0',
-  textTertiary: '#8A8880',
-  defaultAccent: '#F5F4F0',
+  background: '#111410',
+  backgroundDeep: '#0D100D',
+  surface: '#191E17',
+  surfaceRaised: '#222820',
+  surfaceOverlay: '#2B3328',
+  panelTranslucent: '#191E17',
+  dockTranslucent: '#191E17',
+  railTranslucent: '#151914',
+  outline: '#3B4536',
+  outlineSoft: '#2A3226',
+  textPrimary: '#F2F5ED',
+  textSecondary: '#B5BDAE',
+  textTertiary: '#929D8B',
+  defaultAccent: '#BFF30C',
+  lightAccent: '#486300',
   success: '#7BE3A8',
   warn: '#E0A030',
   danger: '#E0506A',
@@ -30,6 +31,7 @@ export const WaveColors = {
   lightTextTertiary: '#74726F',
 
   amoledBackground: '#000000',
+  amoledAccent: '#FFFFFF',
   amoledSurface: '#0A0A0A',
   amoledSurfaceRaised: '#111111',
   amoledSurfaceOverlay: '#1A1A1A',
@@ -129,7 +131,7 @@ export function isLightBase(hex: string): boolean {
 }
 
 export function onAccentFor(hex: string): string {
-  return relativeLuminance(hex) > 0.5 ? '#000000' : '#FFFFFF';
+  return contrastRatio(hex, '#000000') >= contrastRatio(hex, '#FFFFFF') ? '#000000' : '#FFFFFF';
 }
 
 function withAlpha(hex: string, alpha: number): string {
@@ -205,10 +207,10 @@ export const WaveRadius = {
 } as const;
 
 export const WaveDensity = {
-  railCollapsed: 60,
-  railExpanded: 200,
-  titleBar: 44,
-  dock: 68,
+  railCollapsed: 64,
+  railExpanded: 190,
+  titleBar: 58,
+  dock: 84,
   trackRow: 54,
   trackArt: 40,
   contextPanel: 360,
@@ -224,7 +226,7 @@ export const WaveMotion = {
   fastMs: 110,
   normalMs: 180,
   slowMs: 260,
-  easing: 'cubic-bezier(0.33, 1, 0.68, 1)',
+  easing: 'cubic-bezier(0.23, 1, 0.32, 1)',
 } as const;
 
 export const WaveState = {

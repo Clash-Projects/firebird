@@ -27,7 +27,6 @@
 
   $effect(() => {
     void settingsStore.themeMode;
-    void settingsStore.amoled;
     void settingsStore.customThemeBase;
     void settingsStore.accentColor;
     void settingsStore.accentSource;
@@ -36,6 +35,10 @@
     void settingsStore.uiScale;
     void playerStore.currentTrack?.accentColor;
     syncThemeDocument();
+  });
+
+  $effect(() => {
+    document.documentElement.toggleAttribute('data-reduced-motion', settingsStore.reduceMotion);
   });
 
   $effect(() => {

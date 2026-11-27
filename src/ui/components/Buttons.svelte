@@ -37,7 +37,7 @@
   const sizeClasses: Record<string, string> = {
     sm: 'h-8 px-3 text-[12px]',
     md: 'h-9 px-4 text-[13px]',
-    icon: 'h-9 w-9 p-0 hover:scale-[1.05] active:scale-[0.93]',
+    icon: 'h-9 w-9 p-0',
   };
 </script>
 
@@ -46,7 +46,8 @@
   {disabled}
   {title}
   {onclick}
-  class="inline-flex cursor-pointer items-center justify-center gap-2 transition-all duration-[160ms] ease-[var(--ease-native)] disabled:cursor-not-allowed disabled:opacity-45 {variant === 'chip' ? 'rounded-full' : 'rounded-[10px]'} {sizeClasses[size]} {variantClasses[variant]} {active ? '!bg-[var(--lw-accent)] !text-[var(--lw-on-accent)] !border-transparent' : ''} {className}"
+  aria-pressed={variant === 'chip' || active ? active : undefined}
+  class="lw-press inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 text-center leading-none whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-45 {variant === 'chip' ? 'rounded-full' : 'rounded-[10px]'} {sizeClasses[size]} {variantClasses[variant]} {active ? '!bg-[var(--lw-accent)] !text-[var(--lw-on-accent)] !border-transparent' : ''} {className}"
 >
   {@render children()}
 </button>

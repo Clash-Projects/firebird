@@ -8,7 +8,6 @@ export function syncThemeDocument() {
   const accent = resolveAccent();
   applyWaveThemeToDocument({
     mode: settingsStore.themeMode,
-    amoled: settingsStore.amoled,
     customBase: settingsStore.customThemeBase,
     accent: accent.color || WaveColors.defaultAccent,
     glass: settingsStore.glassmorphism,
@@ -19,14 +18,11 @@ export function syncThemeDocument() {
 }
 
 export function setThemeMode(mode: ThemeMode) {
-  settingsStore.themeMode = mode;
-  settingsStore.amoled = mode === 'amoled';
+  settingsStore.selectTheme(mode);
   syncThemeDocument();
 }
 
 export function setCustomBase(hex: string) {
-  settingsStore.customThemeBase = hex;
-  settingsStore.themeMode = 'custom';
-  settingsStore.amoled = false;
+  settingsStore.selectTheme('custom', hex);
   syncThemeDocument();
 }

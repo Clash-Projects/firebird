@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Switch from '$src/ui/components/Switch.svelte';
   import { windowState } from '$src/app/window.svelte';
   import { getPlatformAudioCopy } from '$src/features/audio_output/platformAudio';
   import { ipcInvoke } from '$src/lib/ipc';
@@ -104,16 +105,14 @@
       {/if}
     </div>
 
-    <label class="flex cursor-pointer items-center justify-between rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] px-3 py-2.5">
+    <label class="flex cursor-pointer items-center justify-between gap-3 rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] px-3 py-2.5">
       <div>
         <div class="text-[12.5px] font-semibold">{audioCopy.exclusiveTitle}</div>
         <div class="text-[11px] text-[var(--lw-text-tertiary)]">{audioCopy.exclusiveDescription}</div>
       </div>
-      <input
-        type="checkbox"
+      <Switch
         checked={settingsStore.bitPerfectEnabled && settingsStore.exclusiveMode}
-        onchange={(e) => toggleBitPerfect(e.currentTarget.checked)}
-        class="h-4 w-4 accent-[var(--lw-accent)]"
+        onchange={toggleBitPerfect}
       />
     </label>
   </div>

@@ -313,6 +313,7 @@
         {/if}
 
         <Select
+          label="Sort plugins"
           bind:value={sortOrder}
           options={[
             { value: 'featured', label: 'Sort: Featured' },

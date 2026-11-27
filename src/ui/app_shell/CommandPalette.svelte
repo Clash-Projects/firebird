@@ -9,11 +9,13 @@
 
   let dialogEl = $state<HTMLDialogElement | null>(null);
   let query = $state('');
+  let backdropPressed = false;
 
   $effect(() => {
     if (!dialogEl) return;
     if (windowState.commandPaletteOpen && !dialogEl.open) {
       query = '';
+      backdropPressed = false;
       dialogEl.showModal();
     } else if (!windowState.commandPaletteOpen && dialogEl.open) {
       dialogEl.close();
@@ -25,7 +27,7 @@
     { label: 'Open Now Playing', action: () => router.navigate('/now-playing') },
     { label: 'Open Equalizer', action: () => windowState.toggleRightPanel('eq') },
     { label: 'Open Audio Output', action: () => windowState.toggleRightPanel('output') },
-    { label: 'Open Plugins & Themes', action: () => router.navigate('/settings/plugins') },
+    { label: 'Open Plugins & Themes', action: () => router.navigate('/store') },
     { label: 'Toggle Play / Pause', action: () => playerStore.togglePlay() },
     { label: 'Toggle Mini Player', action: () => windowState.toggleMiniPlayer() },
   ];
@@ -50,6 +52,12 @@
     windowState.commandPaletteOpen = false;
   }
 
+  function isBackdrop(event: MouseEvent) {
+    if (!dialogEl || event.target !== dialogEl) return false;
+    const { left, right, top, bottom } = dialogEl.getBoundingClientRect();
+    return event.clientX < left || event.clientX >= right || event.clientY < top || event.clientY >= bottom;
+  }
+
   function run(fn: () => void) {
     fn();
     close();
@@ -59,19 +67,29 @@
 <dialog
   bind:this={dialogEl}
   data-lw="command-palette"
-  onclose={close}
+  oncancel={(event) => {
+    event.preventDefault();
+    close();
+  }}
+  onpointerdown={(event) => (backdropPressed = event.button === 0 && isBackdrop(event))}
+  onpointercancel={() => (backdropPressed = false)}
+  onclick={(event) => {
+    if (backdropPressed && isBackdrop(event)) close();
+    backdropPressed = false;
+  }}
   aria-label="Command palette"
-  class="w-full max-w-[540px] overflow-hidden"
+  class="command-palette"
 >
-  <div class="flex items-center gap-2.5 border-b border-[var(--lw-divider)] px-4 py-3">
+  <div class="palette-search flex shrink-0 items-center gap-2.5 border-b border-[var(--lw-divider)] px-4 py-3">
     <WaveIcon name="search" size={16} class="text-[var(--lw-text-tertiary)]" />
     <!-- svelte-ignore a11y_autofocus -->
     <input
       type="text"
       autofocus
       bind:value={query}
+      aria-label="Search commands and tracks"
       placeholder="Jump to track, page, or command..."
-      class="flex-1 bg-transparent text-[13.5px] text-[var(--lw-text-primary)] placeholder:text-[var(--lw-text-tertiary)] focus:outline-none"
+      class="palette-input min-w-0 flex-1 bg-transparent text-[13.5px] text-[var(--lw-text-primary)] placeholder:text-[var(--lw-text-tertiary)]"
     />
     <button
       type="button"
@@ -82,7 +100,7 @@
     </button>
   </div>
 
-  <div class="lw-scroll max-h-[380px] p-2">
+  <div class="lw-scroll min-h-0 max-h-[380px] p-2">
     {#if matchedActions.length > 0}
       <div class="px-2 py-1 text-[10.5px] font-bold tracking-[1px] text-[var(--lw-text-tertiary)] uppercase">
         Commands
@@ -120,3 +138,20 @@
     {/if}
   </div>
 </dialog>
+
+<style>
+  .command-palette {
+    --lw-dialog-entry-transform: scale(calc(1 - 0.04 * var(--lw-motion-factor)));
+    position: fixed;
+    inset: 0;
+    width: min(540px, calc(100% - 32px));
+    height: fit-content;
+    margin: auto;
+    overflow: hidden;
+    flex-direction: column;
+  }
+
+  .command-palette[open] { display: flex; }
+  .palette-input:focus { outline: none; }
+  .palette-search:has(.palette-input:focus) { background: var(--lw-wash-hover); }
+</style>

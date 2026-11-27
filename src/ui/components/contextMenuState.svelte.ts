@@ -10,8 +10,11 @@ class ContextMenuState {
     e.preventDefault();
     e.stopPropagation();
     this.track = track;
-    this.x = Math.min(e.clientX, window.innerWidth - 230);
-    this.y = Math.min(e.clientY, window.innerHeight - 320);
+    const anchor = e.clientX === 0 && e.clientY === 0 && e.currentTarget instanceof HTMLElement
+      ? e.currentTarget.getBoundingClientRect()
+      : null;
+    this.x = Math.max(8, Math.min(anchor?.left ?? e.clientX, window.innerWidth - 232));
+    this.y = Math.max(8, Math.min(anchor?.bottom ?? e.clientY, window.innerHeight - 320));
     this.open = true;
   }
 

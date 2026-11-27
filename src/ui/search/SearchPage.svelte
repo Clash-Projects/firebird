@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
   import { libraryStore, mapYtAlbum, mapYtArtist, mapYtTrack } from '$src/state/library.svelte';
   import type { Album, Artist, Track } from '$src/state/types';
@@ -29,7 +30,8 @@
     { name: 'Workout', tint: '#C43A3A', query: 'workout' },
   ];
 
-  let query = $state('');
+  let { initialQuery = '' }: { initialQuery?: string } = $props();
+  let query = $state(untrack(() => initialQuery));
   let filter = $state<'all' | 'tracks' | 'albums' | 'artists'>('all');
   let searching = $state(false);
   let remoteTracks = $state<Track[]>([]);
@@ -41,18 +43,18 @@
 
   $effect(() => {
     const trimmed = query.trim();
+    const seq = ++searchSeq;
+    remoteTracks = [];
+    remoteAlbums = [];
+    remoteArtists = [];
     if (!trimmed) {
-      remoteTracks = [];
-      remoteAlbums = [];
-      remoteArtists = [];
       searching = false;
       return;
     }
     if (!isTauriRuntime()) return;
 
-    const seq = ++searchSeq;
+    searching = true;
     const timer = setTimeout(async () => {
-      searching = true;
       try {
         const [songsRes, albumsRes, artistsRes] = await Promise.all([
           ipcInvoke<any[]>('yt_search_songs', { query: trimmed, limit: 25 }),
@@ -113,10 +115,11 @@
   }
 </script>
 
-<div class="w-full space-y-7 px-6 py-5 pb-12">
+<div class="mx-auto w-full max-w-[1440px] space-y-6 px-6 py-6 pb-12 md:px-8">
+  <h1 class="lw-display text-[34px] font-bold leading-tight">Search</h1>
   <form onsubmit={submitSearch} class="flex flex-wrap items-center gap-3">
     <div class="w-full max-w-[460px]">
-      <Input bind:value={query} placeholder="Search songs, albums, artists..." autofocus />
+      <Input bind:value={query} ariaLabel="Search songs, albums, and artists" placeholder="Search songs, albums, artists…" autofocus />
     </div>
     {#if q}
       <div class="flex items-center gap-1.5">
@@ -140,6 +143,7 @@
               </button>
               <button
                 type="button"
+                aria-label={`Remove ${item} from recent searches`}
                 onclick={() => libraryStore.removeSearchHistory(item)}
                 class="cursor-pointer text-[var(--lw-text-tertiary)] hover:text-[var(--lw-text-primary)]"
               >
@@ -151,30 +155,34 @@
       </Shelf>
     {/if}
 
-    <Shelf title="Browse Categories">
-      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+    <Shelf title="Browse genres & moods">
+      <div class="genre-grid">
         {#each BROWSE_CATEGORIES as cat (cat.name)}
           <button
             type="button"
             onclick={() => (query = cat.query)}
-            class="h-[78px] cursor-pointer rounded-[14px] border border-white/10 px-4 py-3 text-left transition-transform duration-[110ms] hover:-translate-y-0.5"
-            style:background="linear-gradient(135deg, {cat.tint}, color-mix(in srgb, {cat.tint} 32%, #0e0e0e))"
+            class="genre-tile"
+            style:--genre-tint={cat.tint}
           >
-            <div class="text-[14px] font-bold text-white">{cat.name}</div>
+            <span class="relative z-10">{cat.name}</span>
+            <span class="genre-cue"><WaveIcon name="arrowRight" size={15} /></span>
           </button>
         {/each}
       </div>
     </Shelf>
   {:else if searching && tracks.length === 0 && albums.length === 0 && artists.length === 0}
-    <div class="rounded-[18px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] px-6 py-10 text-center text-[13px] text-[var(--lw-text-secondary)]">
-      Searching YouTube Music for "{query}"...
+    <div class="space-y-2 text-[13px] text-[var(--lw-text-secondary)]" role="status">
+      <p>Searching YouTube Music for “{query}”…</p>
+      {#each Array(3) as _}
+        <div class="lw-skeleton h-10 rounded-[9px]" aria-hidden="true"></div>
+      {/each}
     </div>
   {:else if tracks.length === 0 && albums.length === 0 && artists.length === 0}
     <States icon="search" title="No matches found" description={`No results for "${query}". Try another track or artist name.`} />
   {:else}
     {#if (filter === 'all' || filter === 'tracks') && tracks.length > 0}
       <Shelf title="Songs">
-        <DesktopTable {tracks} />
+        <DesktopTable {tracks} showQuality={false} />
       </Shelf>
     {/if}
 
@@ -207,3 +215,43 @@
     {/if}
   {/if}
 </div>
+
+<style>
+  .genre-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(141px, 1fr)); gap: 10px; }
+  .genre-tile {
+    position: relative;
+    display: flex;
+    min-height: 81px;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    overflow: hidden;
+    padding: 13px;
+    border: 1px solid color-mix(in srgb, var(--genre-tint) 30%, var(--lw-outline));
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--genre-tint) 13%, var(--lw-surface));
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 700;
+    text-align: left;
+    transition: border-color var(--lw-motion-fast), transform var(--lw-motion-fast) var(--ease-wave);
+  }
+  .genre-tile::after {
+    position: absolute;
+    right: -13px;
+    bottom: -30px;
+    width: 98px;
+    aspect-ratio: 1;
+    border: 1px solid color-mix(in srgb, var(--genre-tint) 49%, transparent);
+    border-radius: 50%;
+    background: repeating-radial-gradient(circle, transparent 0 6px, color-mix(in srgb, var(--genre-tint) 32%, transparent) 7px 8px);
+    content: '';
+    transition: transform var(--lw-motion-normal) var(--ease-wave);
+  }
+  .genre-tile:active { transform: scale(calc(1 - 0.02 * var(--lw-motion-factor))); }
+  .genre-cue { display: flex; flex: none; color: var(--lw-text-secondary); }
+  @media (hover: hover) and (pointer: fine) {
+    .genre-tile:hover { border-color: color-mix(in srgb, var(--genre-tint) 65%, var(--lw-outline)); }
+    .genre-tile:hover::after { transform: translate(calc(-4px * var(--lw-motion-factor)), calc(-3px * var(--lw-motion-factor))); }
+  }
+</style>

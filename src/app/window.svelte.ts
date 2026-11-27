@@ -3,7 +3,7 @@ class WindowState {
   isFullscreen = $state(false);
   isAlwaysOnTop = $state(false);
   isMiniPlayer = $state(false);
-  railExpanded = $state(false);
+  railExpanded = $state(true);
   activeRightPanel = $state<'none' | 'queue' | 'lyrics' | 'canvas' | 'eq' | 'output'>('none');
   commandPaletteOpen = $state(false);
   updateDialogOpen = $state(false);

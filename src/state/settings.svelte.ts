@@ -2,7 +2,16 @@ import { detectHostPlatform, type HostPlatform } from '$src/features/audio_outpu
 import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
 import type { NowPlayingStyle } from './types';
 
-export type ThemeMode = 'dark' | 'light' | 'amoled' | 'custom' | 'artwork';
+export const THEME_MODES = [
+  { value: 'dark', label: 'Midnight' },
+  { value: 'amoled', label: 'AMOLED' },
+  { value: 'volt', label: 'LastWave Volt' },
+  { value: 'light', label: 'Pearl' },
+  { value: 'custom', label: 'Custom' },
+  { value: 'artwork', label: 'Artwork' },
+] as const;
+
+export type ThemeMode = (typeof THEME_MODES)[number]['value'];
 export type AccentSource = 'custom' | 'lastwave' | 'system' | 'artwork';
 export type HazeMaterial = 'automatic' | 'haze' | 'solid';
 export type HazeIntensity = 'low' | 'medium' | 'high';
@@ -10,7 +19,6 @@ export type AmbientStyle = 'aurora' | 'wash' | 'mesh' | 'off';
 
 class SettingsStore {
   themeMode = $state<ThemeMode>('dark');
-  amoled = $state(false);
   customThemeBase = $state('#1A2A44');
   accentColor = $state('#F5F4F0');
   accentSource = $state<AccentSource>('lastwave');
@@ -26,6 +34,7 @@ class SettingsStore {
   uiScale = $state(1.0);
   language = $state('en');
   reduceMotion = $state(false);
+  private themeSave: Promise<void> | null = null;
 
   platform = $state<HostPlatform>(detectHostPlatform());
   qualityTier = $state<'auto' | 'high' | 'cdFlac' | 'hiRes96' | 'hiRes192' | 'atmos'>('hiRes192');
@@ -73,20 +82,35 @@ class SettingsStore {
     if (shelf) shelf.visible = !shelf.visible;
   }
 
+  selectTheme(mode: ThemeMode, customBase?: string) {
+    this.themeMode = mode;
+    if (customBase) this.customThemeBase = customBase;
+
+    this.themeSave = (this.themeSave ?? Promise.resolve()).then(async () => {
+      if (customBase) {
+        const value = 0xff000000 + Number.parseInt(customBase.slice(1), 16);
+        await ipcInvoke('prefs_set_int', { key: 'lw_custom_theme_base', value });
+      }
+      await ipcInvoke('prefs_set_string', { key: 'lw_theme_mode', value: mode });
+      await ipcInvoke('prefs_set_bool', { key: 'lw_amoled', value: mode === 'amoled' });
+    });
+  }
+
   async loadFromBackend() {
     if (!isTauriRuntime()) return;
-    const [all, lastfm] = await Promise.all([
+    const [all, lastfm, customBase] = await Promise.all([
       ipcInvoke<Record<string, unknown>>('prefs_get_all_settings'),
       ipcInvoke<{ status?: string; username?: string }>('lastfm_auth_state'),
+      ipcInvoke<number>('prefs_get', { key: 'lw_custom_theme_base' }),
     ]);
     if (all) {
-      if (typeof all.themeMode === 'string') {
-        const m = all.themeMode as ThemeMode;
-        if (m === 'dark' || m === 'light' || m === 'amoled' || m === 'custom' || m === 'artwork') {
-          this.themeMode = m;
+      if (!this.themeSave) {
+        const mode = THEME_MODES.find((theme) => theme.value === all.themeMode)?.value ?? 'dark';
+        this.themeMode = mode === 'dark' && all.amoled === true ? 'amoled' : mode;
+        if (typeof customBase === 'number' && Number.isInteger(customBase)) {
+          this.customThemeBase = `#${(customBase & 0xffffff).toString(16).padStart(6, '0')}`;
         }
       }
-      if (typeof all.amoled === 'boolean') this.amoled = all.amoled;
       if (typeof all.languageTag === 'string' && all.languageTag) this.language = all.languageTag;
       if (typeof all.uiScale === 'number' && all.uiScale > 0) this.uiScale = all.uiScale;
       if (typeof all.loudnessMode === 'string') {

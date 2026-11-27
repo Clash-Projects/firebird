@@ -8,11 +8,12 @@
   import { ipcInvoke } from '$src/lib/ipc';
   import { featuresStore, LYRICS_PROVIDERS } from '$src/state/features.svelte';
   import { playerStore } from '$src/state/player.svelte';
-  import { settingsStore } from '$src/state/settings.svelte';
+  import { settingsStore, THEME_MODES } from '$src/state/settings.svelte';
   import LastfmKeyGuide from '$src/ui/auth/LastfmKeyGuide.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import Input from '$src/ui/components/Input.svelte';
   import Select from '$src/ui/components/Select.svelte';
+  import Switch from '$src/ui/components/Switch.svelte';
   import { CUSTOM_THEME_PRESETS } from '$src/ui/theme/tokens';
   import WaveIcon, { type WaveIconName } from '$src/ui/theme/WaveIcon.svelte';
   import BackupSettings from './BackupSettings.svelte';
@@ -187,21 +188,23 @@
       </nav>
     </aside>
 
-    <div class="lw-scroll max-w-[780px] flex-1 space-y-5 pb-12 pr-2">
+    <div class="settings-section lw-scroll min-w-0 max-w-[780px] flex-1 space-y-5 pb-12 pr-2">
       <h2 class="text-[20px] font-bold tracking-[-0.3px]">
         {sections.find((s) => s.id === activeSection)?.label ?? 'Settings'}
       </h2>
 
       {#if activeSection === 'general'}
         <div class="space-y-3">
-          <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+          <div class="settings-select-row rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
             <div>
               <div class="text-[13.5px] font-semibold">Language</div>
               <div class="text-[12px] text-[var(--lw-text-secondary)]">Interface display language</div>
             </div>
             <Select
+              label="Language"
               value={settingsStore.language}
               options={[
+                { value: 'system', label: 'System default' },
                 { value: 'en', label: 'English' },
                 { value: 'es', label: 'Español' },
                 { value: 'ja', label: '日本語' },
@@ -213,12 +216,13 @@
             />
           </div>
 
-          <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+          <div class="settings-select-row rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
             <div>
               <div class="text-[13.5px] font-semibold">UI Scale</div>
               <div class="text-[12px] text-[var(--lw-text-secondary)]">Adjust desktop interface density</div>
             </div>
             <Select
+              label="UI Scale"
               value={String(settingsStore.uiScale)}
               options={UI_SCALE_OPTIONS.map((v) => ({ value: String(v), label: `${Math.round(v * 100)}%` }))}
               onchange={(v) => {
@@ -236,14 +240,12 @@
             </div>
             <div class="flex items-center gap-3">
               <label class="flex cursor-pointer items-center gap-1.5 text-[12px] text-[var(--lw-text-secondary)]">
-                <input
-                  type="checkbox"
+                <Switch
                   checked={verboseLogs}
-                  onchange={(e) => {
-                    verboseLogs = e.currentTarget.checked;
+                  onchange={(checked) => {
+                    verboseLogs = checked;
                     void ipcInvoke('diagnostics_set_verbose', { verbose: verboseLogs });
                   }}
-                  class="h-4 w-4 accent-[var(--lw-accent)]"
                 />
                 Verbose
               </label>
@@ -258,18 +260,14 @@
           <div class="space-y-2.5 rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
             <div class="text-[13.5px] font-semibold">Theme Mode</div>
             <div class="flex flex-wrap gap-2">
-              {#each (['dark', 'amoled', 'light', 'custom', 'artwork'] as const) as mode (mode)}
+              {#each THEME_MODES as mode (mode.value)}
                 <Buttons
                   variant="chip"
                   size="sm"
-                  active={settingsStore.themeMode === mode}
-                  onclick={() => {
-                    setThemeMode(mode);
-                    settingsStore.saveStringPref('lw_theme_mode', mode);
-                    settingsStore.saveBoolPref('lw_amoled', mode === 'amoled');
-                  }}
+                  active={settingsStore.themeMode === mode.value}
+                  onclick={() => setThemeMode(mode.value)}
                 >
-                  {mode === 'dark' ? 'Midnight' : mode === 'amoled' ? 'AMOLED' : mode === 'light' ? 'Pearl' : mode === 'custom' ? 'Custom' : 'Artwork'}
+                  {mode.label}
                 </Buttons>
               {/each}
             </div>
@@ -288,15 +286,16 @@
             </div>
           </div>
 
-          <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+          <div class="settings-select-row rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
             <div>
               <div class="text-[13.5px] font-semibold">Accent Source</div>
-              <div class="text-[12px] text-[var(--lw-text-secondary)]">Monochrome off-white, system, artwork, or custom</div>
+              <div class="text-[12px] text-[var(--lw-text-secondary)]">Theme default, system, artwork, or custom</div>
             </div>
             <Select
+              label="Accent Source"
               value={settingsStore.accentSource}
               options={[
-                { value: 'lastwave', label: 'LastWave Neutral' },
+                { value: 'lastwave', label: 'Theme Default' },
                 { value: 'artwork', label: 'Artwork Tint' },
                 { value: 'system', label: 'System Accent' },
                 { value: 'custom', label: 'Custom Colour' },
@@ -314,15 +313,13 @@
               <div class="text-[13.5px] font-semibold">Glassmorphism</div>
               <div class="text-[12px] text-[var(--lw-text-secondary)]">Translucent surfaces over an app-wide artwork aura</div>
             </div>
-            <input
-              type="checkbox"
+            <Switch
               checked={settingsStore.glassmorphism}
-              onchange={(e) => {
-                settingsStore.glassmorphism = e.currentTarget.checked;
+              onchange={(checked) => {
+                settingsStore.glassmorphism = checked;
                 settingsStore.saveBoolPref('lw_glassmorphism', settingsStore.glassmorphism);
                 syncThemeDocument();
               }}
-              class="h-4 w-4 accent-[var(--lw-accent)]"
             />
           </label>
 
@@ -331,15 +328,13 @@
               <div class="text-[13.5px] font-semibold">Liquid Glass</div>
               <div class="text-[12px] text-[var(--lw-text-secondary)]">Thinner surface fill with wider blur sigma</div>
             </div>
-            <input
-              type="checkbox"
+            <Switch
               checked={settingsStore.liquidGlass}
-              onchange={(e) => {
-                settingsStore.liquidGlass = e.currentTarget.checked;
+              onchange={(checked) => {
+                settingsStore.liquidGlass = checked;
                 settingsStore.saveBoolPref('lw_liquid_glass', settingsStore.liquidGlass);
                 syncThemeDocument();
               }}
-              class="h-4 w-4 accent-[var(--lw-accent)]"
             />
           </label>
 
@@ -348,23 +343,22 @@
               <div class="text-[13.5px] font-semibold">Wavy Seekbar</div>
               <div class="text-[12px] text-[var(--lw-text-secondary)]">Draw dock playback timeline as a styled progress bar</div>
             </div>
-            <input
-              type="checkbox"
+            <Switch
               checked={settingsStore.wavySeekbar}
-              onchange={(e) => {
-                settingsStore.wavySeekbar = e.currentTarget.checked;
+              onchange={(checked) => {
+                settingsStore.wavySeekbar = checked;
                 settingsStore.saveBoolPref('lw_wavy_seekbar', settingsStore.wavySeekbar);
               }}
-              class="h-4 w-4 accent-[var(--lw-accent)]"
             />
           </label>
 
-          <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+          <div class="settings-select-row rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
             <div>
               <div class="text-[13.5px] font-semibold">App Font</div>
               <div class="text-[12px] text-[var(--lw-text-secondary)]">System default or typography preset</div>
             </div>
             <Select
+              label="App Font"
               value={settingsStore.appFont}
               options={APP_FONTS.map((f) => ({ value: f.id, label: f.label }))}
               onchange={(v) => {
@@ -382,12 +376,13 @@
         </div>
       {:else if activeSection === 'audio'}
         <div class="space-y-3">
-          <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+          <div class="settings-select-row rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
             <div>
               <div class="text-[13.5px] font-semibold">Preferred Quality Waterfall</div>
               <div class="text-[12px] text-[var(--lw-text-secondary)]">Stepping down cleanly when unavailable</div>
             </div>
             <Select
+              label="Stream quality"
               value={settingsStore.qualityTier}
               options={[
                 { value: 'atmos', label: 'Dolby Atmos (Tier 28)' },
@@ -401,12 +396,13 @@
             />
           </div>
 
-          <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+          <div class="settings-select-row rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
             <div>
               <div class="text-[13.5px] font-semibold">Loudness Normalization</div>
               <div class="text-[12px] text-[var(--lw-text-secondary)]">ReplayGain / EBU R128 LUFS target</div>
             </div>
             <Select
+              label="Loudness normalization"
               value={settingsStore.loudnessMode}
               options={[
                 { value: 'off', label: 'Off (Bit-Perfect)' },
@@ -423,11 +419,9 @@
               <div class="text-[13.5px] font-semibold">{audioCopy.exclusiveTitle}</div>
               <div class="text-[12px] text-[var(--lw-text-secondary)]">{audioCopy.exclusiveDescription}</div>
             </div>
-            <input
-              type="checkbox"
+            <Switch
               checked={settingsStore.bitPerfectEnabled && settingsStore.exclusiveMode}
-              onchange={(e) => toggleBitPerfect(e.currentTarget.checked)}
-              class="h-4 w-4 accent-[var(--lw-accent)]"
+              onchange={(checked) => toggleBitPerfect(checked)}
             />
           </label>
 
@@ -436,11 +430,9 @@
               <div class="text-[13.5px] font-semibold">Beat-Aware AutoMix</div>
               <div class="text-[12px] text-[var(--lw-text-secondary)]">Phase-lock beat grids during transitions</div>
             </div>
-            <input
-              type="checkbox"
+            <Switch
               checked={playerStore.automixEnabled}
-              onchange={(e) => updateAutoMix(e.currentTarget.checked)}
-              class="h-4 w-4 accent-[var(--lw-accent)]"
+              onchange={(checked) => updateAutoMix(checked)}
             />
           </label>
 
@@ -462,12 +454,13 @@
         </div>
       {:else if activeSection === 'lyrics'}
         <div class="space-y-3">
-          <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+          <div class="settings-select-row rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
             <div>
               <div class="text-[13.5px] font-semibold">Lyrics Provider</div>
               <div class="text-[12px] text-[var(--lw-text-secondary)]">Auto races all 16 providers and prioritizes word-synced karaoke</div>
             </div>
             <Select
+              label="Lyrics provider"
               value={featuresStore.lyricsProviderId}
               options={LYRICS_PROVIDERS.map((p) => ({ value: p.id, label: p.label }))}
               onchange={(v) => {
@@ -485,14 +478,12 @@
               <div class="text-[13.5px] font-semibold">Word-by-Word Karaoke Sync</div>
               <div class="text-[12px] text-[var(--lw-text-secondary)]">Progressive left-to-right syllable sweep animation</div>
             </div>
-            <input
-              type="checkbox"
+            <Switch
               checked={featuresStore.wordByWord}
-              onchange={(e) => {
-                featuresStore.wordByWord = e.currentTarget.checked;
+              onchange={(checked) => {
+                featuresStore.wordByWord = checked;
                 settingsStore.saveBoolPref('lw_word_by_word', featuresStore.wordByWord);
               }}
-              class="h-4 w-4 accent-[var(--lw-accent)]"
             />
           </label>
 
@@ -501,14 +492,12 @@
               <div class="text-[13.5px] font-semibold">Show Romanization / Transliteration</div>
               <div class="text-[12px] text-[var(--lw-text-secondary)]">Display phonetic reading under non-Latin lyrics</div>
             </div>
-            <input
-              type="checkbox"
+            <Switch
               checked={featuresStore.showRomanized}
-              onchange={(e) => {
-                featuresStore.showRomanized = e.currentTarget.checked;
+              onchange={(checked) => {
+                featuresStore.showRomanized = checked;
                 settingsStore.saveBoolPref('lw_lyrics_transliteration', featuresStore.showRomanized);
               }}
-              class="h-4 w-4 accent-[var(--lw-accent)]"
             />
           </label>
 
@@ -552,11 +541,9 @@
                 <div class="text-[13.5px] font-semibold">Discord Rich Presence</div>
                 <div class="text-[12px] text-[var(--lw-text-secondary)]">Show active track on your Discord profile</div>
               </div>
-              <input
-                type="checkbox"
+              <Switch
                 checked={settingsStore.discordRpcEnabled}
-                onchange={(e) => toggleDiscordRpc(e.currentTarget.checked)}
-                class="h-4 w-4 accent-[var(--lw-accent)]"
+                onchange={(checked) => toggleDiscordRpc(checked)}
               />
             </label>
             <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
@@ -564,14 +551,12 @@
                 <div class="text-[13.5px] font-semibold">{audioCopy.mediaControlsTitle}</div>
                 <div class="text-[12px] text-[var(--lw-text-secondary)]">Expose transport controls and timeline to the OS</div>
               </div>
-              <input
-                type="checkbox"
+              <Switch
                 checked={settingsStore.smtcEnabled}
-                onchange={(e) => {
-                  settingsStore.smtcEnabled = e.currentTarget.checked;
+                onchange={(checked) => {
+                  settingsStore.smtcEnabled = checked;
                   settingsStore.saveBoolPref('lw_macos_now_playing', settingsStore.smtcEnabled);
                 }}
-                class="h-4 w-4 accent-[var(--lw-accent)]"
               />
             </label>
           </div>
@@ -589,6 +574,11 @@
             <div>
               <div class="text-[15px] font-bold">LastWave Desktop</div>
               <div class="mt-1 text-[12.5px] text-[var(--lw-text-secondary)]">Version 2.6.0</div>
+              <div class="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-[var(--lw-text-secondary)]">
+                <span>Lyrics renderer · am-lyrics 1.9.2 by binimum</span>
+                <a class="underline hover:text-[var(--lw-accent)]" href="/licenses/am-lyrics.txt" target="_blank" rel="noopener noreferrer">MPL-2.0 license</a>
+                <a class="underline hover:text-[var(--lw-accent)]" href="https://registry.npmjs.org/@uimaxbai/am-lyrics/-/am-lyrics-1.9.2.tgz" target="_blank" rel="noopener noreferrer">am-lyrics source archive</a>
+              </div>
             </div>
             <Buttons variant="secondary" size="sm" onclick={() => (windowState.updateDialogOpen = true)}>
               Check for Updates
@@ -601,3 +591,17 @@
 </div>
 
 <LastfmKeyGuide open={keyGuideOpen} onClose={() => (keyGuideOpen = false)} />
+
+<style>
+  .settings-section { container-type: inline-size; }
+  .settings-select-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) min(47%, 248px);
+    align-items: center;
+    gap: 14px;
+  }
+  .settings-select-row > :global(.lw-select) { inline-size: 100%; }
+  @container (max-width: 390px) {
+    .settings-select-row { grid-template-columns: minmax(0, 1fr); gap: 9px; }
+  }
+</style>

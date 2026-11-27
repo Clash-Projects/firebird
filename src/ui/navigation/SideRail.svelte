@@ -7,128 +7,130 @@
   import WaveIcon, { type WaveIconName } from '$src/ui/theme/WaveIcon.svelte';
   import { NAV_DESTINATIONS, type NavDestination } from './destinations';
 
-  let listen = $derived(NAV_DESTINATIONS.filter((d) => d.group === 'listen'));
-  let collection = $derived(NAV_DESTINATIONS.filter((d) => d.group === 'collection'));
-  let offline = $derived(NAV_DESTINATIONS.filter((d) => d.group === 'offline'));
-  let system = $derived(NAV_DESTINATIONS.filter((d) => d.group === 'system'));
+  const browse = NAV_DESTINATIONS.filter((item) => item.group === 'listen');
+  const collection = NAV_DESTINATIONS.filter((item) => item.group === 'collection' || item.group === 'offline');
+  const system = NAV_DESTINATIONS.filter((item) => item.group === 'system');
 
-  function activePath(): string {
-    const p = router.path;
-    if (p.startsWith('/downloads')) return '/library';
-    if (p.startsWith('/liked') || p.startsWith('/playlist') || p.startsWith('/yt-playlist') || p.startsWith('/spotify-playlist')) return '/playlists';
-    if (p.startsWith('/history')) return '/stats';
-    if (p.startsWith('/home')) return '/home';
-    return p;
-  }
-
-  function isActive(route: string): boolean {
-    const cur = activePath();
-    return cur === route || cur.startsWith(`${route}/`);
-  }
-
-  function navIcon(name?: string): WaveIconName {
-    return (name as WaveIconName) || 'plugin';
-  }
+  let activePath = $derived.by(() => {
+    const path = router.path;
+    if (['/downloads', '/albums', '/album', '/artists', '/artist'].some((route) => router.matches(route))) return '/library';
+    if (['/liked', '/playlist', '/yt-playlist', '/spotify-playlist'].some((route) => router.matches(route))) return '/playlists';
+    if (router.matches('/history')) return '/stats';
+    if (router.matches('/genres') || router.matches('/genre')) return '/search';
+    return path;
+  });
 </script>
 
-<WaveHaze
-  level="l1"
-  enableBlur={false}
-  dataLw="sidebar"
-  class="flex h-full shrink-0 flex-col border-r border-[var(--lw-divider)] bg-[var(--lw-rail-translucent)] transition-[width] duration-[180ms] ease-[var(--ease-wave)]"
->
-  <aside
-    class="flex h-full flex-col pt-1.5 pb-2"
-    style:width="{windowState.railExpanded ? 200 : 60}px"
-    aria-label="Primary navigation"
-  >
-    {#snippet navItem(item: NavDestination)}
-      {@const active = isActive(item.route)}
-      {@const label = t(item.labelKey, item.fallbackLabel)}
+<WaveHaze level="l1" enableBlur={false} dataLw="sidebar" class="rail">
+  <nav class="rail-nav" class:expanded={windowState.railExpanded} aria-label="Primary navigation">
+    {#snippet navItem(route: string, label: string, icon: WaveIconName, active: boolean)}
       <button
         type="button"
         data-lw="sidebar-item"
         data-active={active}
-        onclick={() => router.navigate(item.route)}
+        aria-current={active ? 'page' : undefined}
+        aria-label={label}
         title={windowState.railExpanded ? undefined : label}
-        class="group relative my-[1.5px] flex h-[40px] w-full cursor-pointer items-center overflow-hidden rounded-[10px] transition-all duration-[160ms] ease-[var(--ease-native)] {active
-          ? 'bg-white/[0.08] text-[var(--lw-text-primary)]'
-          : 'text-[var(--lw-text-secondary)] hover:bg-white/[0.04] hover:text-[var(--lw-text-primary)]'}"
+        onclick={() => router.navigate(route)}
+        class="rail-item"
       >
-        <span
-          class="absolute top-1/2 left-0 h-4 w-[3px] -translate-y-1/2 rounded-[6px] bg-[var(--lw-accent)] transition-all duration-[160ms] ease-[var(--ease-native)]"
-          style:opacity={active ? 1 : 0}
-          style:transform={active ? 'translateY(-50%) translateX(0)' : 'translateY(-50%) translateX(-4px)'}
-        ></span>
-
-        <span
-          class="flex h-full w-[46px] shrink-0 items-center justify-center transition-transform duration-[160ms] ease-[var(--ease-native)] {active
-            ? 'text-[var(--lw-accent)]'
-            : ''}"
-        >
-          <WaveIcon name={item.icon} size={18} />
-        </span>
-
-        {#if windowState.railExpanded}
-          <span class="truncate pr-2 text-[13px] {active ? 'font-semibold' : 'font-normal'}">
-            {label}
-          </span>
-        {/if}
+        <span class="rail-icon"><WaveIcon name={icon} size={18} /></span>
+        {#if windowState.railExpanded}<span class="rail-label">{label}</span>{/if}
       </button>
     {/snippet}
 
-    <div class="lw-scroll flex-1 px-[6px]">
-      {#each listen as item (item.id)}
-        {@render navItem(item)}
-      {/each}
+    {#snippet destination(item: NavDestination)}
+      {@render navItem(item.route, t(item.labelKey, item.fallbackLabel), item.icon, activePath === item.route || activePath.startsWith(`${item.route}/`))}
+    {/snippet}
 
-      <div class="mx-[10px] my-[7px] h-px bg-[var(--lw-divider)]"></div>
-
-      {#each collection as item (item.id)}
-        {@render navItem(item)}
-      {/each}
-
-      <div class="mx-[10px] my-[7px] h-px bg-[var(--lw-divider)]"></div>
-
-      {#each offline as item (item.id)}
-        {@render navItem(item)}
-      {/each}
-
-      {#if uiSlots.sidebarItems.length > 0}
-        <div class="mx-[10px] my-[7px] h-px bg-[var(--lw-divider)]"></div>
-        {#each uiSlots.sidebarItems as slot (slot.id)}
-          {@const active = router.path === slot.route}
-          <button
-            type="button"
-            data-lw="sidebar-item"
-            data-active={active}
-            onclick={() => router.navigate(slot.route)}
-            title={windowState.railExpanded ? undefined : slot.label}
-            class="group relative my-[1.5px] flex h-[40px] w-full cursor-pointer items-center overflow-hidden rounded-[10px] transition-colors duration-[110ms] {active
-              ? 'bg-white/[0.08] text-[var(--lw-text-primary)]'
-              : 'text-[var(--lw-text-secondary)] hover:bg-white/[0.04] hover:text-[var(--lw-text-primary)]'}"
-          >
-            <span
-              class="absolute top-1/2 left-0 h-4 w-[3px] -translate-y-1/2 rounded-[6px] bg-[var(--lw-accent)] transition-all duration-[110ms]"
-              style:opacity={active ? 1 : 0}
-            ></span>
-            <span class="flex h-full w-[46px] shrink-0 items-center justify-center {active ? 'text-[var(--lw-accent)]' : ''}">
-              <WaveIcon name={navIcon(slot.icon)} size={18} />
-            </span>
-            {#if windowState.railExpanded}
-              <span class="truncate pr-2 text-[13px] {active ? 'font-semibold' : 'font-normal'}">{slot.label}</span>
-            {/if}
-          </button>
-        {/each}
+    <div class="lw-scroll rail-main">
+      <div class="rail-group">
+        {#if windowState.railExpanded}<div class="rail-heading">Browse</div>{/if}
+        {#each browse as item (item.id)}{@render destination(item)}{/each}
+      </div>
+      <div class="rail-group">
+        {#if windowState.railExpanded}<div class="rail-heading">Collection</div>{/if}
+        {#each collection as item (item.id)}{@render destination(item)}{/each}
+      </div>
+      {#if uiSlots.sidebarItems.length}
+        <div class="rail-group">
+          {#each uiSlots.sidebarItems as slot (slot.id)}
+            {@render navItem(slot.route, slot.label, (slot.icon as WaveIconName) || 'plugin', router.path === slot.route)}
+          {/each}
+        </div>
       {/if}
     </div>
 
-    <div class="mx-[12px] my-[6px] h-px bg-[var(--lw-divider)]"></div>
-
-    <div class="px-[6px]">
-      {#each system as item (item.id)}
-        {@render navItem(item)}
-      {/each}
+    <div class="rail-group rail-system">
+      {#each system as item (item.id)}{@render destination(item)}{/each}
     </div>
-  </aside>
+  </nav>
 </WaveHaze>
+
+<style>
+  :global([data-lw="sidebar"].rail) {
+    flex: 0 0 var(--lw-shell-rail-width);
+    min-width: 0;
+    border-right: 1px solid var(--lw-divider);
+    background: var(--lw-rail-translucent);
+  }
+
+  .rail-nav { display: flex; height: 100%; flex-direction: column; padding: 14px 9px 10px; }
+  .rail-nav.expanded { padding-inline: 13px; }
+  .rail-main { flex: 1; }
+  .rail-group { display: grid; gap: 3px; }
+  .rail-group + .rail-group { margin-top: 18px; }
+  .rail-system { border-top: 1px solid var(--lw-divider); padding-top: 10px; }
+
+  .rail-heading {
+    padding: 0 10px 5px;
+    color: var(--lw-text-tertiary);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+  }
+
+  .rail-item {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    height: 41px;
+    align-items: center;
+    padding-right: 9px;
+    border-radius: 9px;
+    cursor: pointer;
+    color: var(--lw-text-secondary);
+    text-align: left;
+    transition: background-color var(--lw-motion-fast), color var(--lw-motion-fast);
+  }
+
+  .rail-item::before {
+    position: absolute;
+    left: 0;
+    width: 2px;
+    height: 17px;
+    border-radius: 2px;
+    background: var(--lw-accent);
+    opacity: 0;
+    content: '';
+    transform: scaleY(0.65);
+    transition: opacity var(--lw-motion-fast), transform var(--lw-motion-fast) var(--ease-wave);
+  }
+
+  .rail-item[data-active="true"] {
+    background: color-mix(in srgb, var(--lw-accent) 13%, transparent);
+    color: var(--lw-text-primary);
+  }
+
+  .rail-item[data-active="true"]::before { opacity: 1; transform: scaleY(1); }
+  .rail-item[data-active="true"] .rail-icon { color: var(--lw-accent); }
+  .rail-item:focus-visible { outline-offset: -2px; }
+  .rail-icon { display: grid; width: 43px; flex: none; place-items: center; }
+  .rail-label { overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+
+  @media (hover: hover) and (pointer: fine) {
+    .rail-item:hover { color: var(--lw-text-primary); }
+    .rail-item[data-active="false"]:hover { background: var(--lw-wash-hover); }
+  }
+</style>
