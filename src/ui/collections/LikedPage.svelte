@@ -11,7 +11,7 @@
   let likedArt = $derived(libraryStore.playlists.find((p) => p.id === 'pl-liked')?.artworkUrl ?? '');
 </script>
 
-<div class="mx-auto max-w-[1280px] px-6 py-4 pb-10">
+<div class="px-8 py-8 pb-10">
   <HeroHeader
     overline="Collection"
     title="Liked Songs"

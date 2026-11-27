@@ -15,7 +15,7 @@
   let tracks = $derived(genre ? libraryStore.tracksByIds(genre.trackIds) : []);
 </script>
 
-<div class="mx-auto max-w-[1280px] px-6 py-4 pb-10">
+<div class="px-8 py-8 pb-10">
   {#if genre}
     <HeroHeader overline="Genre Radio" title={genre.name} subtitle={genre.subtitle} meta="{tracks.length} tracks">
       {#snippet actions()}

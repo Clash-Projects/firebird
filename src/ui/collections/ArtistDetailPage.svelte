@@ -21,7 +21,7 @@
   );
 </script>
 
-<div class="mx-auto max-w-[1280px] space-y-8 px-6 py-4 pb-10">
+<div class="space-y-8 px-8 py-4 pb-10">
   {#if artist}
     <HeroHeader
       overline="Artist"

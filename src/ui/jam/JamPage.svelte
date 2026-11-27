@@ -23,7 +23,7 @@
   }
 </script>
 
-<div class="mx-auto max-w-[1160px] space-y-6 px-6 py-4 pb-10">
+<div class="space-y-6 px-8 py-8 pb-10">
   <CommandBar title="LastWave Jam" subtitle="Real-time synchronized listening rooms">
     {#snippet actions()}
       {#if featuresStore.jamConnected}

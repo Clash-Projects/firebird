@@ -5,7 +5,7 @@
   import { goAlbum } from '$src/ui/navigation/waveNav';
 </script>
 
-<div class="mx-auto max-w-[1280px] space-y-5 px-6 py-4 pb-10">
+<div class="space-y-5 px-8 py-8 pb-10">
   <CommandBar title="Albums" subtitle="{libraryStore.albums.length} albums in your library" />
   <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
     {#each libraryStore.albums as album (album.id)}

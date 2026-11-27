@@ -10,7 +10,7 @@
   let activeShow = $derived(featuresStore.podcasts.find((s) => s.id === activeShowId) ?? featuresStore.podcasts[0]);
 </script>
 
-<div class="mx-auto max-w-[1280px] space-y-6 px-6 py-4 pb-10">
+<div class="space-y-6 px-8 py-8 pb-10">
   <CommandBar title="Podcasts" subtitle="Resume episodes across devices" />
 
   <div class="grid grid-cols-1 gap-4 md:grid-cols-2">

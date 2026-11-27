@@ -11,7 +11,7 @@
   let { title, subtitle, actions, class: className = '' }: Props = $props();
 </script>
 
-<div class="flex flex-wrap items-center justify-between gap-3 py-3 {className}">
+<div class="flex flex-wrap items-center justify-between gap-3 {className}">
   <div class="min-w-0">
     {#if title}
       <h1 class="truncate text-[22px] font-bold tracking-[-0.4px] leading-[1.15]">{title}</h1>

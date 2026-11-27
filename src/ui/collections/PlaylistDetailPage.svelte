@@ -16,7 +16,7 @@
   let tracks = $derived(playlist ? libraryStore.tracksByIds(playlist.trackIds) : []);
 </script>
 
-<div class="mx-auto max-w-[1280px] px-6 py-4 pb-10">
+<div class="px-8 py-8 pb-10">
   {#if playlist}
     <HeroHeader
       overline="Playlist"
