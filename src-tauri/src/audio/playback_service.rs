@@ -4380,6 +4380,31 @@ impl PlaybackService {
         }
     }
 
+    /// Synchronously stops and drops both audio decks during application exit
+    /// so audio cuts off immediately without leaving background threads alive.
+    pub fn shutdown_sync(&self) {
+        self.cancel_crossfade();
+        let (player, standby) = {
+            let Ok(mut d) = self.data.lock() else {
+                return;
+            };
+            d.resolve_generation += 1;
+            d.resolving = false;
+            d.snapshot.is_playing = false;
+            (d.player.take(), d.standby_player.take())
+        };
+        if let Some(p) = player {
+            let _ = p.pause();
+            let _ = p.stop();
+            drop(p);
+        }
+        if let Some(sb) = standby {
+            let _ = sb.pause();
+            let _ = sb.stop();
+            drop(sb);
+        }
+    }
+
     // ---- Resolution Fast Path & Prefetch ----------------------------------
 
     fn resolve_and_open<'a>(

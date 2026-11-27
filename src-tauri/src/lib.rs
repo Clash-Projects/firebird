@@ -5,16 +5,52 @@ pub mod integrations;
 pub use firebird_models as models;
 pub mod storage;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tauri::{Emitter, Manager};
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{Emitter, Manager, RunEvent, WebviewWindowBuilder};
 
 use crate::commands::state::AppState;
+
+static ALLOW_EXIT: AtomicBool = AtomicBool::new(false);
+static TRAY_READY: AtomicBool = AtomicBool::new(false);
+
+fn show_or_recreate_main_window(app: &tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.show();
+        let _ = win.unminimize();
+        let _ = win.set_focus();
+        return;
+    }
+    if let Some(cfg) = app.config().app.windows.first() {
+        if let Ok(builder) = WebviewWindowBuilder::from_config(app, cfg) {
+            if let Ok(win) = builder.build() {
+                let _ = win.show();
+                let _ = win.set_focus();
+            }
+        }
+    }
+}
+
+fn shutdown_audio_and_resources(app: &tauri::AppHandle) {
+    let state = app.state::<AppState>();
+    state.spectrum.unsubscribe(None);
+    state.playback.shutdown_sync();
+    state.audio_output.dispose();
+}
+
+fn quit_application(app: &tauri::AppHandle) {
+    ALLOW_EXIT.store(true, Ordering::SeqCst);
+    shutdown_audio_and_resources(app);
+    app.exit(0);
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app_state = AppState::new(AppState::default_app_support_dir());
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .manage(app_state)
         .setup(|app| {
             let handle = app.handle().clone();
@@ -27,6 +63,41 @@ pub fn run() {
                 spectrum.update_playback(snap);
                 let _ = emit_handle.emit("player:snapshot", snap);
             }));
+
+            let tray_result = (|| -> tauri::Result<()> {
+                let open_item = MenuItem::with_id(app, "open", "Open LastWave", true, None::<&str>)?;
+                let quit_item = MenuItem::with_id(app, "quit", "Quit LastWave", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&open_item, &quit_item])?;
+
+                let mut builder = TrayIconBuilder::with_id("main-tray")
+                    .tooltip("LastWave")
+                    .menu(&menu)
+                    .show_menu_on_left_click(false)
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "open" => show_or_recreate_main_window(app),
+                        "quit" => quit_application(app),
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            show_or_recreate_main_window(tray.app_handle());
+                        }
+                    });
+
+                if let Some(icon) = app.default_window_icon().cloned() {
+                    builder = builder.icon(icon);
+                }
+
+                let _tray = builder.build(app)?;
+                Ok(())
+            })();
+
+            TRAY_READY.store(tray_result.is_ok(), Ordering::SeqCst);
 
             Ok(())
         })
@@ -317,6 +388,20 @@ pub fn run() {
             commands::integrations::stats_compute_listening,
             commands::integrations::updates_check,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| match event {
+        RunEvent::ExitRequested { api, .. } => {
+            if !ALLOW_EXIT.load(Ordering::SeqCst) && TRAY_READY.load(Ordering::SeqCst) {
+                api.prevent_exit();
+            } else {
+                shutdown_audio_and_resources(app_handle);
+            }
+        }
+        RunEvent::Exit => {
+            shutdown_audio_and_resources(app_handle);
+        }
+        _ => {}
+    });
 }

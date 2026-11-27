@@ -14,7 +14,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 firebird-models = { path = "../crates/firebird-models" }
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 
 # Async & HTTP
 tokio = { version = "1", features = ["full"] }
