@@ -4,6 +4,7 @@
   import OutputPathSheet from '$src/features/audio_output/OutputPathSheet.svelte';
   import EqualizerPanel from '$src/features/equalizer/EqualizerPanel.svelte';
   import { uiSlots } from '$src/lib/plugins/uiSlots.svelte';
+  import WidgetSandboxHost from '$src/lib/plugins/WidgetSandboxHost.svelte';
   import CanvasPanel from '$src/ui/canvas/CanvasPanel.svelte';
   import AlbumDetailPage from '$src/ui/collections/AlbumDetailPage.svelte';
   import AlbumsPage from '$src/ui/collections/AlbumsPage.svelte';
@@ -141,6 +142,7 @@
         {/if}
       </div>
 
+      <WidgetSandboxHost />
       <PlayerDock />
     </div>
   </WaveResizeArea>

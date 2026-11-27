@@ -43,8 +43,10 @@
 
   --lw-bg: #0e0e0e;
   --lw-bg-deep: #0a0a0a;
+  --lw-bg-base: var(--lw-bg);
   --lw-surface: #161616;
   --lw-surface-raised: #1e1e1e;
+  --lw-bg-elevated: var(--lw-surface-raised);
   --lw-surface-overlay: #262626;
   --lw-panel-translucent: rgba(22, 22, 22, 0.9);
   --lw-dock-translucent: rgba(20, 20, 20, 0.95);

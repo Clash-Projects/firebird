@@ -7,14 +7,17 @@ export interface PluginManifest {
   id: string;
   name: string;
   version: string;
+  apiVersion: number;
+  minAppVersion?: string;
   author: string;
   description: string;
   type: PluginType;
-  entry?: string;
+  entry: string;
   css?: string;
   icon?: string;
   route?: string;
   swatch?: [string, string, string];
+  sourceUrl?: string;
 }
 
 export interface PluginRecord {
@@ -24,6 +27,38 @@ export interface PluginRecord {
   sourceCode?: string;
   cssCode?: string;
   error?: string | null;
+}
+
+export interface MarketplacePluginEntry {
+  id: string;
+  name: string;
+  type: PluginType;
+  version: string;
+  apiVersion: number;
+  minAppVersion?: string;
+  author: string;
+  description: string;
+  path: string;
+  entry: string;
+  swatch?: [string, string, string];
+}
+
+export interface WidgetPlaybackSnapshot {
+  currentTrack: {
+    id: string;
+    title: string;
+    artist: string;
+    album: string;
+    artworkUrl: string;
+    accentColor: string;
+    codec: string;
+    bitDepth: number;
+    sampleRateHz: number;
+    durationSec: number;
+  } | null;
+  isPlaying: boolean;
+  positionMs: number;
+  durationMs: number;
 }
 
 export interface SidebarSlotItem {

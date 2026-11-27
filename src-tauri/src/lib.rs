@@ -387,6 +387,15 @@ pub fn run() {
             commands::integrations::search_remove_history,
             commands::integrations::stats_compute_listening,
             commands::integrations::updates_check,
+            // commands::plugins
+            commands::plugins::plugins_is_safe_mode,
+            commands::plugins::plugins_state,
+            commands::plugins::plugins_install,
+            commands::plugins::plugins_set_enabled,
+            commands::plugins::plugins_set_all_disabled,
+            commands::plugins::plugins_uninstall,
+            commands::plugins::plugins_fetch_registry,
+            commands::plugins::plugins_fetch_remote_text,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
