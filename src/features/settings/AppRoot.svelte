@@ -64,11 +64,14 @@
       });
       void ipcInvoke<BackendYtConnection>('yt_get_connection').then((conn) => {
         applyYtConnection(conn);
-        if (conn?.connected && !conn.accountName) {
-          void ipcInvoke<{ accountName?: string }>('yt_fetch_account_info', {
-            forceRefresh: false,
-          }).then((acc) => {
-            if (acc?.accountName) settingsStore.ytAccountName = acc.accountName;
+        if (conn?.connected) {
+          void ipcInvoke<{ name?: string; handle?: string; email?: string; photoUrl?: string }>(
+            'yt_fetch_account_info',
+            { forceRefresh: false }
+          ).then((acc) => {
+            if (acc?.name) settingsStore.ytAccountName = acc.name;
+            if (acc?.email && !settingsStore.ytAccountEmail) settingsStore.ytAccountEmail = acc.email;
+            if (acc?.photoUrl) settingsStore.ytAccountAvatar = acc.photoUrl;
           });
         }
         void libraryStore.loadLocalStorage();

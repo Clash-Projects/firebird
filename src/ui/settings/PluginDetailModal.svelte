@@ -269,15 +269,6 @@
           <span class="rounded-[6px] bg-white/8 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.5px] text-[var(--lw-text-primary)]">
             {type}
           </span>
-          {#if official}
-            <span class="inline-flex items-center gap-1 rounded-[6px] bg-[var(--lw-accent)]/15 px-2 py-0.5 text-[10.5px] font-semibold text-[var(--lw-accent)]">
-              <WaveIcon name="check" size={11} /> Official
-            </span>
-          {:else}
-            <span class="rounded-[6px] bg-white/6 px-2 py-0.5 text-[10.5px] font-medium text-[var(--lw-text-secondary)]">
-              Community
-            </span>
-          {/if}
           <span class="rounded-[6px] bg-[var(--lw-success)]/12 px-2 py-0.5 text-[10.5px] font-medium text-[var(--lw-success)]">
             Compatible · API v1
           </span>

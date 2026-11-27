@@ -104,6 +104,9 @@ function normalizeMarketplaceEntry(raw: Partial<MarketplacePluginEntry> & Record
     tags: Array.isArray(raw.tags) ? raw.tags.map((t) => String(t).trim()).filter(Boolean) : [],
     previews: normalizePreviews(raw),
     updatedAt: typeof raw.updatedAt === 'string' && raw.updatedAt ? raw.updatedAt : '2026-11-27',
+    featured: Boolean(raw.featured),
+    staffPick: Boolean(raw.staffPick),
+    stars: typeof raw.stars === 'number' && Number.isFinite(raw.stars) ? Math.max(0, Math.floor(raw.stars)) : 0,
     path: typeof raw.path === 'string' ? raw.path : undefined,
     entry: typeof raw.entry === 'string' ? raw.entry : undefined,
     repo: typeof raw.repo === 'string' ? raw.repo : undefined,
@@ -659,6 +662,130 @@ class PluginManager {
       severity: 'success',
     });
   }
+
+  async installFromLocalFiles(
+    inputFiles: FileList | File[],
+    overrides?: { name?: string; type?: PluginType }
+  ) {
+    const files = Array.from(inputFiles);
+    if (files.length === 0) throw new Error('Select a plugin folder or file');
+
+    const byName = new Map<string, File>();
+    for (const file of files) {
+      const rel = ((file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name)
+        .replace(/\\/g, '/');
+      byName.set(file.name.toLowerCase(), file);
+      byName.set(rel.toLowerCase(), file);
+      const parts = rel.split('/');
+      if (parts.length > 1) {
+        byName.set(parts.slice(1).join('/').toLowerCase(), file);
+      }
+    }
+
+    const manifestFile = byName.get('manifest.json');
+    if (manifestFile) {
+      const rawManifest = JSON.parse(await manifestFile.text()) as Partial<PluginManifest>;
+      const provisionalType: PluginType = VALID_TYPES.has(rawManifest.type as PluginType)
+        ? (rawManifest.type as PluginType)
+        : (overrides?.type ?? 'theme');
+      const entryName = (rawManifest.entry || rawManifest.css || defaultEntryFor(provisionalType))
+        .replace(/^\.\//, '')
+        .toLowerCase();
+      const entryFile =
+        byName.get(entryName) ??
+        byName.get(entryName.split('/').pop() || '') ??
+        files.find((f) => f.name.toLowerCase() !== 'manifest.json');
+
+      if (!entryFile) {
+        throw new Error(`Missing entry file "${entryName}" beside manifest.json`);
+      }
+
+      const content = await entryFile.text();
+      const manifest = normalizeManifest({
+        ...rawManifest,
+        name: overrides?.name?.trim() || rawManifest.name,
+        source: undefined,
+        sourceUrl: 'Local Install',
+      });
+      if (!manifest) throw new Error('Invalid local manifest.json');
+
+      await this.installPlugin(
+        manifest,
+        manifest.type === 'widget' ? { sourceCode: content } : { cssCode: content }
+      );
+      featuresStore.showToast({
+        title: `Installed ${manifest.name}`,
+        subtitle: 'Loaded from local disk',
+        severity: 'success',
+      });
+      return;
+    }
+
+    const primaryFile =
+      files.find((f) => /\.(css|json|js)$/i.test(f.name)) ?? files[0];
+    const ext = primaryFile.name.split('.').pop()?.toLowerCase() || '';
+    const inferredType: PluginType =
+      overrides?.type ??
+      (ext === 'js'
+        ? 'widget'
+        : ext === 'json'
+          ? 'palette'
+          : 'theme');
+
+    const baseSlug = primaryFile.name
+      .replace(/\.[^.]+$/, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || `local-${inferredType}`;
+
+    const displayName =
+      overrides?.name?.trim() ||
+      primaryFile.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ');
+
+    const content = await primaryFile.text();
+    if (inferredType === 'palette') {
+      JSON.parse(content);
+    }
+
+    const manifest: PluginManifest = {
+      id: `local-${baseSlug}`,
+      name: displayName,
+      version: '1.0.0',
+      apiVersion: SUPPORTED_API_VERSION,
+      author: { name: 'Local', github: 'local' },
+      description: `Local ${inferredType} loaded from ${primaryFile.name}`,
+      type: inferredType,
+      entry: primaryFile.name,
+      updatedAt: new Date().toISOString().slice(0, 10),
+      sourceUrl: 'Local Install',
+    };
+
+    await this.installPlugin(
+      manifest,
+      manifest.type === 'widget' ? { sourceCode: content } : { cssCode: content }
+    );
+    featuresStore.showToast({
+      title: `Installed ${manifest.name}`,
+      subtitle: 'Loaded from local disk',
+      severity: 'success',
+    });
+  }
+}
+
+export function computePluginRank(
+  plugin: Pick<MarketplacePluginEntry, 'staffPick' | 'updatedAt' | 'source' | 'previews' | 'stars'>
+): number {
+  let score = 0;
+  if (plugin.staffPick) score += 50;
+  if (plugin.updatedAt) {
+    const parsed = Date.parse(plugin.updatedAt);
+    const daysSince = Number.isFinite(parsed) ? Math.max(0, (Date.now() - parsed) / 86_400_000) : 999;
+    score += Math.max(0, 30 - daysSince);
+  }
+  if (plugin.source === 'official') score += 10;
+  if ((plugin.previews?.length ?? 0) >= 3) score += 8;
+  score += Math.min(25, (plugin.stars ?? 0) * 0.5);
+  return score;
 }
 
 export const pluginManager = new PluginManager();

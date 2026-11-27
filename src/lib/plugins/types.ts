@@ -59,6 +59,9 @@ export interface MarketplacePluginEntry {
   tags: string[];
   previews: string[];
   updatedAt: string;
+  featured?: boolean;
+  staffPick?: boolean;
+  stars?: number;
   path?: string;
   entry?: string;
   repo?: string;

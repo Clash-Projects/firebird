@@ -16,6 +16,7 @@ export type AccentSource = 'custom' | 'lastwave' | 'system' | 'artwork';
 export type HazeMaterial = 'automatic' | 'haze' | 'solid';
 export type HazeIntensity = 'low' | 'medium' | 'high';
 export type AmbientStyle = 'aurora' | 'wash' | 'mesh' | 'off';
+export type MiniPlayerStyle = 'classic' | 'compact' | 'card' | 'ambient' | 'lyrics';
 
 function argbIntToHex(v: unknown): string | null {
   if (typeof v !== 'number' || !Number.isFinite(v)) return null;
@@ -36,6 +37,7 @@ class SettingsStore {
   ambientStyle = $state<AmbientStyle>('aurora');
   nowPlayingStyle = $state<NowPlayingStyle>('standard');
   nowPlayingAutoHideSec = $state(0);
+  miniPlayerStyle = $state<MiniPlayerStyle>('classic');
   appFont = $state('');
   uiScale = $state(1.0);
   language = $state('en');
@@ -57,6 +59,10 @@ class SettingsStore {
   ytConnected = $state(false);
   ytAccountName = $state('');
   ytAccountEmail = $state('');
+  ytAccountAvatar = $state('');
+  displayName = $state('');
+  profilePicturePath = $state('');
+  profilePictureUrl = $state('');
   spotifyConnected = $state(false);
   spotifyUser = $state('');
   lastfmConnected = $state(false);
@@ -109,6 +115,13 @@ class SettingsStore {
       ipcInvoke<{ status?: string; username?: string }>('lastfm_auth_state'),
     ]);
     if (all) {
+      if (typeof all.displayName === 'string') this.displayName = all.displayName;
+      if (typeof all.profilePicturePath === 'string') {
+        this.profilePicturePath = all.profilePicturePath;
+      }
+      if (typeof all.profilePictureDataUrl === 'string' && all.profilePictureDataUrl) {
+        this.profilePictureUrl = all.profilePictureDataUrl;
+      }
       if (!this.themeSave) {
         const mode = THEME_MODES.find((theme) => theme.value === all.themeMode)?.value ?? 'dark';
         this.themeMode = mode === 'dark' && all.amoled === true ? 'amoled' : mode;
@@ -137,6 +150,12 @@ class SettingsStore {
       }
       if (typeof all.nowPlayingAutoHideSec === 'number') {
         this.nowPlayingAutoHideSec = all.nowPlayingAutoHideSec;
+      }
+      if (typeof all.miniPlayerStyle === 'string') {
+        const ms = all.miniPlayerStyle as MiniPlayerStyle;
+        if (ms === 'classic' || ms === 'compact' || ms === 'card' || ms === 'ambient' || ms === 'lyrics') {
+          this.miniPlayerStyle = ms;
+        }
       }
       if (typeof all.loudnessMode === 'string') {
         const lm = all.loudnessMode as 'off' | 'track' | 'album' | 'lufs';

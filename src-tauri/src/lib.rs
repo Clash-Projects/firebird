@@ -153,6 +153,8 @@ fn show_or_recreate_main_window(app: &tauri::AppHandle) {
     if let Some(cfg) = app.config().app.windows.first() {
         match WebviewWindowBuilder::from_config(app, cfg).and_then(|b| b.build()) {
             Ok(win) => {
+                let _ = win.set_always_on_top(false);
+                let _ = win.set_min_size(Some(tauri::Size::Logical(tauri::LogicalSize::new(900.0, 600.0))));
                 let _ = win.unminimize();
                 let _ = win.show();
                 let _ = win.set_focus();
@@ -386,6 +388,7 @@ pub fn run() {
             commands::settings::diagnostics_build_bundle_bytes,
             commands::settings::diagnostics_play_diag,
             commands::settings::diagnostics_export_logs,
+            commands::settings::window_set_mini_mode,
             // commands::extractor
             commands::extractor::yt_search_songs,
             commands::extractor::yt_search_mixed,

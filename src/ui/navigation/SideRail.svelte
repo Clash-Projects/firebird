@@ -7,8 +7,9 @@
   import WaveIcon, { type WaveIconName } from '$src/ui/theme/WaveIcon.svelte';
   import { NAV_DESTINATIONS, type NavDestination } from './destinations';
 
-  const browse = NAV_DESTINATIONS.filter((item) => item.group === 'listen');
-  const collection = NAV_DESTINATIONS.filter((item) => item.group === 'collection' || item.group === 'offline');
+  const listen = NAV_DESTINATIONS.filter((item) => item.group === 'listen');
+  const collection = NAV_DESTINATIONS.filter((item) => item.group === 'collection');
+  const offline = NAV_DESTINATIONS.filter((item) => item.group === 'offline');
   const system = NAV_DESTINATIONS.filter((item) => item.group === 'system');
 
   let activePath = $derived.by(() => {
@@ -22,7 +23,7 @@
 </script>
 
 <WaveHaze level="l1" enableBlur={false} dataLw="sidebar" class="rail">
-  <nav class="rail-nav" class:expanded={windowState.railExpanded} aria-label="Primary navigation">
+  <nav class="rail-nav" aria-label="Primary navigation">
     {#snippet navItem(route: string, label: string, icon: WaveIconName, active: boolean)}
       <button
         type="button"
@@ -43,16 +44,25 @@
       {@render navItem(item.route, t(item.labelKey, item.fallbackLabel), item.icon, activePath === item.route || activePath.startsWith(`${item.route}/`))}
     {/snippet}
 
-    <div class="lw-scroll rail-main">
+    <div class="lw-scroll flex-1 overflow-x-hidden">
       <div class="rail-group">
-        {#if windowState.railExpanded}<div class="rail-heading">Browse</div>{/if}
-        {#each browse as item (item.id)}{@render destination(item)}{/each}
+        {#each listen as item (item.id)}{@render destination(item)}{/each}
       </div>
+
+      <div class="rail-sep" aria-hidden="true"></div>
+
       <div class="rail-group">
-        {#if windowState.railExpanded}<div class="rail-heading">Collection</div>{/if}
         {#each collection as item (item.id)}{@render destination(item)}{/each}
       </div>
+
+      <div class="rail-sep" aria-hidden="true"></div>
+
+      <div class="rail-group">
+        {#each offline as item (item.id)}{@render destination(item)}{/each}
+      </div>
+
       {#if uiSlots.sidebarItems.length}
+        <div class="rail-sep" aria-hidden="true"></div>
         <div class="rail-group">
           {#each uiSlots.sidebarItems as slot (slot.id)}
             {@render navItem(slot.route, slot.label, (slot.icon as WaveIconName) || 'plugin', router.path === slot.route)}
@@ -61,7 +71,9 @@
       {/if}
     </div>
 
-    <div class="rail-group rail-system">
+    <div class="rail-bottom-sep" aria-hidden="true"></div>
+
+    <div class="rail-group">
       {#each system as item (item.id)}{@render destination(item)}{/each}
     </div>
   </nav>
@@ -70,67 +82,117 @@
 <style>
   :global([data-lw="sidebar"].rail) {
     flex: 0 0 var(--lw-shell-rail-width);
+    width: var(--lw-shell-rail-width);
     min-width: 0;
     border-right: 1px solid var(--lw-divider);
     background: var(--lw-rail-translucent);
+    transition: flex-basis 180ms cubic-bezier(0.23, 1, 0.32, 1), width 180ms cubic-bezier(0.23, 1, 0.32, 1);
   }
 
-  .rail-nav { display: flex; height: 100%; flex-direction: column; padding: 14px 9px 10px; }
-  .rail-nav.expanded { padding-inline: 13px; }
-  .rail-main { flex: 1; }
-  .rail-group { display: grid; gap: 3px; }
-  .rail-group + .rail-group { margin-top: 18px; }
-  .rail-system { border-top: 1px solid var(--lw-divider); padding-top: 10px; }
+  .rail-nav {
+    display: flex;
+    height: 100%;
+    flex-direction: column;
+    padding: 6px 6px 8px;
+  }
 
-  .rail-heading {
-    padding: 0 10px 5px;
-    color: var(--lw-text-tertiary);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.13em;
-    text-transform: uppercase;
+  .rail-group {
+    display: grid;
+    gap: 3px;
+  }
+
+  .rail-sep {
+    height: 1px;
+    margin: 7px 10px;
+    background: var(--lw-divider);
+  }
+
+  .rail-bottom-sep {
+    height: 1px;
+    margin: 6px 6px 8px;
+    background: var(--lw-divider);
   }
 
   .rail-item {
     position: relative;
     display: flex;
+    width: 100%;
     min-width: 0;
-    height: 41px;
+    height: 40px;
     align-items: center;
-    padding-right: 9px;
-    border-radius: 9px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 10px;
     cursor: pointer;
     color: var(--lw-text-secondary);
     text-align: left;
-    transition: background-color var(--lw-motion-fast), color var(--lw-motion-fast);
+    transition: background-color 110ms ease, border-color 110ms ease, color 110ms ease;
   }
 
   .rail-item::before {
     position: absolute;
     left: 0;
-    width: 2px;
-    height: 17px;
-    border-radius: 2px;
+    width: 3px;
+    height: 16px;
+    border-radius: 999px;
     background: var(--lw-accent);
     opacity: 0;
     content: '';
     transform: scaleY(0.65);
-    transition: opacity var(--lw-motion-fast), transform var(--lw-motion-fast) var(--ease-wave);
+    transition: opacity 110ms ease, transform 110ms cubic-bezier(0.23, 1, 0.32, 1);
   }
 
   .rail-item[data-active="true"] {
-    background: color-mix(in srgb, var(--lw-accent) 13%, transparent);
+    border-color: color-mix(in srgb, var(--lw-accent) 42%, transparent);
+    background: color-mix(in srgb, var(--lw-accent) 11%, transparent);
     color: var(--lw-text-primary);
   }
 
-  .rail-item[data-active="true"]::before { opacity: 1; transform: scaleY(1); }
-  .rail-item[data-active="true"] .rail-icon { color: var(--lw-accent); }
-  .rail-item:focus-visible { outline-offset: -2px; }
-  .rail-icon { display: grid; width: 43px; flex: none; place-items: center; }
-  .rail-label { overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  .rail-item[data-active="true"]::before {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+
+  .rail-item[data-active="true"] .rail-icon {
+    color: var(--lw-accent);
+  }
+
+  .rail-item:focus-visible {
+    outline: none;
+    border-color: color-mix(in srgb, var(--lw-accent) 60%, transparent);
+  }
+
+  .rail-icon {
+    display: grid;
+    width: 46px;
+    flex: none;
+    place-items: center;
+    transition: transform 110ms ease, color 110ms ease;
+  }
+
+  .rail-item[data-active="true"] .rail-icon {
+    transform: scale(1.04);
+  }
+
+  .rail-label {
+    overflow: hidden;
+    padding-right: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rail-item[data-active="true"] .rail-label {
+    font-weight: 600;
+  }
 
   @media (hover: hover) and (pointer: fine) {
-    .rail-item:hover { color: var(--lw-text-primary); }
-    .rail-item[data-active="false"]:hover { background: var(--lw-wash-hover); }
+    .rail-item:hover {
+      color: var(--lw-text-primary);
+    }
+    .rail-item[data-active="false"]:hover {
+      background: var(--lw-wash-hover);
+    }
   }
 </style>

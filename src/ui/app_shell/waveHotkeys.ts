@@ -18,7 +18,13 @@ export function attachWaveHotkeys(): () => void {
 
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
       e.preventDefault();
-      router.navigate('/search');
+      const input = document.querySelector<HTMLInputElement>('[data-lw="title-search"]');
+      if (input) {
+        input.focus();
+        input.select();
+      } else {
+        router.navigate('/search');
+      }
       return;
     }
 

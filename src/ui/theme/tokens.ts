@@ -207,9 +207,9 @@ export const WaveRadius = {
 } as const;
 
 export const WaveDensity = {
-  railCollapsed: 64,
-  railExpanded: 190,
-  titleBar: 58,
+  railCollapsed: 60,
+  railExpanded: 200,
+  titleBar: 44,
   dock: 84,
   trackRow: 54,
   trackArt: 40,

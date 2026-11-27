@@ -7,11 +7,11 @@
   <WaveEntrance index={0}>
     <header>
       <div class="text-[10px] font-bold tracking-[1px] text-[var(--lw-text-tertiary)] uppercase">
-        HYBRID MARKETPLACE
+        PLUGIN STOREFRONT
       </div>
       <h1 class="mt-0.5 text-[24px] font-bold tracking-[-0.025em]">Plugins & Themes</h1>
       <p class="mt-0.5 text-[12.5px] text-[var(--lw-text-secondary)]">
-        Discover Official & Community Palettes, Themes, Snippets, and Sandboxed Widgets from Clash-Projects/lastwave-plugins.
+        Discover Palettes, Themes, Snippets, and Sandboxed Widgets from Clash-Projects/lastwave-plugins or install from local disk.
       </p>
     </header>
   </WaveEntrance>
