@@ -6,7 +6,7 @@
   import type { Track } from '$src/state/types';
   import Artwork from '$src/ui/components/Artwork.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
-  import { goGenre } from '$src/ui/navigation/waveNav';
+  import { goAlbum, goArtist, goGenre } from '$src/ui/navigation/waveNav';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
 
   type Period = '7d' | '1m' | 'all';
@@ -141,11 +141,37 @@
     if (days < 7) return `${days}d ago`;
     return new Date(ms).toLocaleDateString();
   }
+  function openArtistByName(name: string) {
+    const clean = name.trim();
+    const match = libraryStore.artists.find((a) => a.name.toLowerCase() === clean.toLowerCase())
+      ?? libraryStore.artists.find((a) => a.name.toLowerCase().includes(clean.toLowerCase()));
+    goArtist(match?.id ?? encodeURIComponent(clean));
+  }
+
+  function openAlbumByName(name: string, artist: string) {
+    const match = libraryStore.albums.find(
+      (a) =>
+        a.title.toLowerCase() === name.toLowerCase() &&
+        (!artist || a.artist.toLowerCase().includes(artist.toLowerCase()))
+    );
+    if (match) goAlbum(match.id);
+    else playTrackNow(asPlayableTrack(name, artist, '', name));
+  }
+
+  let activityBars = $derived.by(() => {
+    const counts = topTracks.slice(0, 7).map((t) => t.playCount);
+    const max = Math.max(1, ...counts);
+    return counts.map((c, idx) => ({
+      label: topTracks[idx]?.name ?? `#${idx + 1}`,
+      value: c,
+      pct: Math.max(8, Math.round((c / max) * 100)),
+    }));
+  });
 </script>
 
 <div class="w-full space-y-5 px-6 pt-[22px] pb-12">
   <header class="flex flex-wrap items-center justify-between gap-3">
-    <h1 class="text-[27px] font-bold tracking-[-0.5px] leading-[1.15]">Statistics</h1>
+    <h1 class="text-[22px] font-bold tracking-[-0.4px] leading-[1.15]">Statistics</h1>
 
     <div class="flex flex-wrap items-center gap-2">
       <div class="flex flex-wrap items-center gap-1 rounded-full border border-[var(--lw-outline)] bg-[var(--lw-surface)] p-1">
@@ -207,11 +233,34 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <div class="rounded-[18px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+    {#if activityBars.length > 0}
+      <div class="rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
         <div class="mb-3 flex items-center justify-between">
-          <span class="text-[14px] font-bold">Top Tracks</span>
-          <button type="button" onclick={() => (tab = 'tracks')} class="cursor-pointer text-[12px] font-semibold text-[var(--lw-accent)]">See all</button>
+          <span class="text-[14px] font-semibold">Top Track Play Distribution</span>
+          <span class="text-[11px] text-[var(--lw-text-tertiary)] lw-tabular">Peak: {activityBars[0].value} plays</span>
+        </div>
+        <div class="grid h-[96px] grid-cols-7 items-end gap-2.5 pt-2">
+          {#each activityBars as bar, idx (idx)}
+            <div class="flex h-full flex-col items-center justify-end gap-1.5">
+              <div
+                class="w-full max-w-[38px] rounded-t-[5px] bg-[var(--lw-accent)] transition-all duration-[200ms]"
+                style:height="{bar.pct}%"
+                style:opacity={Math.max(0.38, 1 - idx * 0.08)}
+              ></div>
+              <span class="w-full truncate text-center text-[10px] text-[var(--lw-text-tertiary)] lw-tabular">
+                {bar.value}
+              </span>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
+    <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div class="rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+        <div class="mb-3 flex items-center justify-between">
+          <span class="text-[14px] font-semibold">Top Tracks</span>
+          <button type="button" onclick={() => (tab = 'tracks')} class="cursor-pointer text-[12px] font-medium text-[var(--lw-accent)] hover:underline">See all</button>
         </div>
         {#if topTracks.length === 0}
           <div class="py-8 text-center text-[12.5px] text-[var(--lw-text-tertiary)]">Play songs to build local track statistics.</div>
@@ -221,12 +270,12 @@
               <button
                 type="button"
                 onclick={() => playTrackNow(asPlayableTrack(track.name, track.artist, track.artworkUrl))}
-                class="flex w-full cursor-pointer items-center gap-3 rounded-[10px] px-2 py-1.5 text-left hover:bg-white/[0.04]"
+                class="flex w-full cursor-pointer items-center gap-3 rounded-[10px] px-2 py-1.5 text-left transition-colors hover:bg-[var(--lw-wash-hover)]"
               >
                 <span class="w-6 text-center text-[13px] font-bold lw-tabular" style:color={rankColors[i] ?? 'var(--lw-text-tertiary)'}>
                   {i + 1}
                 </span>
-                <Artwork src={track.artworkUrl} size={36} radius={8} />
+                <Artwork src={track.artworkUrl} label={track.name} artist={track.artist} kind="track" size={36} radius={8} />
                 <div class="min-w-0 flex-1">
                   <div class="truncate text-[13px] font-semibold">{track.name}</div>
                   <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{track.artist}</div>
@@ -238,26 +287,30 @@
         {/if}
       </div>
 
-      <div class="rounded-[18px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+      <div class="rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
         <div class="mb-3 flex items-center justify-between">
-          <span class="text-[14px] font-bold">Top Artists</span>
-          <button type="button" onclick={() => (tab = 'artists')} class="cursor-pointer text-[12px] font-semibold text-[var(--lw-accent)]">See all</button>
+          <span class="text-[14px] font-semibold">Top Artists</span>
+          <button type="button" onclick={() => (tab = 'artists')} class="cursor-pointer text-[12px] font-medium text-[var(--lw-accent)] hover:underline">See all</button>
         </div>
         {#if topArtists.length === 0}
           <div class="py-8 text-center text-[12.5px] text-[var(--lw-text-tertiary)]">No artist play counts recorded yet.</div>
         {:else}
           <div class="space-y-1.5">
             {#each topArtists.slice(0, 5) as artist, i (`${artist.name}-${i}`)}
-              <div class="flex items-center gap-3 rounded-[10px] px-2 py-1.5 hover:bg-white/[0.04]">
+              <button
+                type="button"
+                onclick={() => openArtistByName(artist.name)}
+                class="flex w-full cursor-pointer items-center gap-3 rounded-[10px] px-2 py-1.5 text-left transition-colors hover:bg-[var(--lw-wash-hover)]"
+              >
                 <span class="w-6 text-center text-[13px] font-bold lw-tabular" style:color={rankColors[i] ?? 'var(--lw-text-tertiary)'}>
                   {i + 1}
                 </span>
-                <Artwork src={artist.artworkUrl} size={36} circle />
+                <Artwork src={artist.artworkUrl} label={artist.name} kind="artist" size={36} circle />
                 <div class="min-w-0 flex-1">
                   <div class="truncate text-[13px] font-semibold">{artist.name}</div>
                 </div>
                 <span class="text-[11.5px] text-[var(--lw-text-tertiary)] lw-tabular">{artist.playCount} plays</span>
-              </div>
+              </button>
             {/each}
           </div>
         {/if}
@@ -301,22 +354,30 @@
   {:else if tab === 'artists'}
     <div class="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-6">
       {#each topArtists as artist, i (`a-${artist.name}-${i}`)}
-        <div class="rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-3 text-center">
-          <Artwork src={artist.artworkUrl} circle class="mx-auto aspect-square w-full max-w-[130px]" />
+        <button
+          type="button"
+          onclick={() => openArtistByName(artist.name)}
+          class="cursor-pointer rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-3 text-center transition-colors hover:bg-[var(--lw-wash-hover)]"
+        >
+          <Artwork src={artist.artworkUrl} label={artist.name} kind="artist" circle class="mx-auto aspect-square w-full max-w-[130px]" />
           <div class="mt-2 truncate text-[13px] font-semibold">{artist.name}</div>
           <div class="text-[11.5px] text-[var(--lw-text-tertiary)] lw-tabular">{artist.playCount} plays</div>
-        </div>
+        </button>
       {/each}
     </div>
   {:else if tab === 'albums'}
     <div class="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-6">
       {#each topAlbums as album, i (`al-${album.name}-${album.artist}-${i}`)}
-        <div class="rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-2.5 text-left">
-          <Artwork src={album.artworkUrl} radius={10} class="aspect-square w-full" />
+        <button
+          type="button"
+          onclick={() => openAlbumByName(album.name, album.artist)}
+          class="cursor-pointer rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-2.5 text-left transition-colors hover:bg-[var(--lw-wash-hover)]"
+        >
+          <Artwork src={album.artworkUrl} label={album.name} artist={album.artist} kind="album" radius={10} class="aspect-square w-full" />
           <div class="mt-2 truncate text-[13px] font-semibold">{album.name}</div>
           <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{album.artist}</div>
           <div class="mt-0.5 text-[11px] text-[var(--lw-text-tertiary)] lw-tabular">{album.playCount} plays</div>
-        </div>
+        </button>
       {/each}
     </div>
   {:else}

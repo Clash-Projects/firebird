@@ -34,6 +34,7 @@ class SettingsStore {
   liquidGlass = $state(false);
   glassmorphism = $state(false);
   wavySeekbar = $state(false);
+  performanceMode = $state(false);
   ambientStyle = $state<AmbientStyle>('aurora');
   nowPlayingStyle = $state<NowPlayingStyle>('standard');
   nowPlayingAutoHideSec = $state(0);
@@ -192,6 +193,24 @@ class SettingsStore {
       this.lastfmConnected = Boolean(lastfm.username) && lastfm.status === 'signedIn';
       this.lastfmUser = lastfm.username || '';
     }
+    const [hazeMat, hazeInt, ambStyle, perfMode, reduceMot] = await Promise.all([
+      ipcInvoke<string | null>('prefs_get', { key: 'lw_haze_material' }).catch(() => null),
+      ipcInvoke<string | null>('prefs_get', { key: 'lw_haze_intensity' }).catch(() => null),
+      ipcInvoke<string | null>('prefs_get', { key: 'lw_ambient_style' }).catch(() => null),
+      ipcInvoke<boolean | null>('prefs_get', { key: 'lw_performance_mode' }).catch(() => null),
+      ipcInvoke<boolean | null>('prefs_get', { key: 'lw_reduce_motion' }).catch(() => null),
+    ]);
+    if (hazeMat === 'automatic' || hazeMat === 'haze' || hazeMat === 'solid') {
+      this.hazeMaterial = hazeMat;
+    }
+    if (hazeInt === 'low' || hazeInt === 'medium' || hazeInt === 'high') {
+      this.hazeIntensity = hazeInt;
+    }
+    if (ambStyle === 'aurora' || ambStyle === 'wash' || ambStyle === 'mesh' || ambStyle === 'off') {
+      this.ambientStyle = ambStyle;
+    }
+    if (typeof perfMode === 'boolean') this.performanceMode = perfMode;
+    if (typeof reduceMot === 'boolean') this.reduceMotion = reduceMot;
     return all ?? null;
   }
 

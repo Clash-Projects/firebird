@@ -35,3 +35,64 @@ export const APP_FONTS: AppFont[] = [
   { id: 'Roboto', label: 'Roboto', web: true },
   { id: 'Lato', label: 'Lato', web: true },
 ];
+
+const WEIGHTS = [400, 500, 600, 700] as const;
+const loadedFonts = new Map<string, Promise<string | null>>();
+
+export function fontSlugFor(idOrName: string): string {
+  return idOrName.trim().toLowerCase().replace(/\s+/g, '-');
+}
+
+export function fontFamilyFor(idOrName: string): string {
+  const trimmed = idOrName.trim();
+  if (!trimmed) return '';
+  const match = APP_FONTS.find(
+    (f) => f.id.toLowerCase() === trimmed.toLowerCase() || fontSlugFor(f.id) === trimmed.toLowerCase()
+  );
+  return match?.id ?? trimmed;
+}
+
+export function isWebFont(idOrName: string): boolean {
+  const canonical = fontFamilyFor(idOrName);
+  const entry = APP_FONTS.find((f) => f.id.toLowerCase() === canonical.toLowerCase());
+  return Boolean(entry?.web);
+}
+
+/**
+ * Loads real 400-700 font faces from jsDelivr Fontsource CDN into `document.fonts`
+ * so selecting a typography preset actually renders in that font (matching OG app_fonts.dart).
+ */
+export function ensureWebFontLoaded(idOrName: string): Promise<string | null> {
+  if (typeof document === 'undefined' || !idOrName.trim()) {
+    return Promise.resolve(null);
+  }
+  const family = fontFamilyFor(idOrName);
+  if (!isWebFont(family)) return Promise.resolve(family);
+
+  const existing = loadedFonts.get(family);
+  if (existing) return existing;
+
+  const slug = fontSlugFor(family);
+  const promise = (async () => {
+    const loads = WEIGHTS.map(async (weight) => {
+      const woff2Url = `https://cdn.jsdelivr.net/fontsource/fonts/${slug}@latest/latin-${weight}-normal.woff2`;
+      const face = new FontFace(family, `url(${woff2Url}) format("woff2")`, {
+        weight: String(weight),
+        style: 'normal',
+        display: 'swap',
+      });
+      try {
+        const loaded = await face.load();
+        document.fonts.add(loaded);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    const results = await Promise.all(loads);
+    return results.some(Boolean) ? family : null;
+  })();
+
+  loadedFonts.set(family, promise);
+  return promise;
+}

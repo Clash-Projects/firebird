@@ -3,6 +3,7 @@
   import { featuresStore } from '$src/state/features.svelte';
   import { playerStore } from '$src/state/player.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
+  import { waveTooltip } from '$src/ui/components/tooltip';
   import { activeLineIndex, toTimedText, wordProgress } from './lyricAdapter';
 
   interface Props {
@@ -190,9 +191,9 @@
         {/if}
         {#if showHeaderControls}
           <div class="lyrics-meta">
-            <span title={doc.provider}>Source: {doc.provider}</span>
+            <span>Source: {doc.provider}</span>
             {#if onShareLine && activeLine?.text}
-              <button type="button" onclick={shareActiveLine} title="Share lyric card">Share line</button>
+              <button type="button" onclick={shareActiveLine} use:waveTooltip={'Share lyric card'}>Share line</button>
             {/if}
           </div>
         {/if}
@@ -254,7 +255,7 @@
           <button
             type="button"
             onclick={() => onShareLine(line.text)}
-            title="Share lyric card"
+            use:waveTooltip={'Share lyric card'}
             class="mt-1 shrink-0 cursor-pointer rounded-[6px] px-2 py-1 text-[11px] text-[var(--lw-text-tertiary)] opacity-0 group-hover:opacity-100 hover:bg-[var(--lw-wash-pressed)] hover:text-[var(--lw-text-primary)]"
           >
             Share

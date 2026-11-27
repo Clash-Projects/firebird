@@ -1,23 +1,27 @@
 export const WaveColors = {
-  background: '#111410',
-  backgroundDeep: '#0D100D',
-  surface: '#191E17',
-  surfaceRaised: '#222820',
-  surfaceOverlay: '#2B3328',
-  panelTranslucent: '#191E17',
-  dockTranslucent: '#191E17',
-  railTranslucent: '#151914',
-  outline: '#3B4536',
-  outlineSoft: '#2A3226',
-  textPrimary: '#F2F5ED',
-  textSecondary: '#B5BDAE',
-  textTertiary: '#929D8B',
-  defaultAccent: '#BFF30C',
-  lightAccent: '#486300',
+  // Neutral graphite dark — matches LastWave Desktop (tokens.dart).
+  background: '#0E0E0E',
+  backgroundDeep: '#0A0A0A',
+  surface: '#161616',
+  surfaceRaised: '#1E1E1E',
+  surfaceOverlay: '#262626',
+  panelTranslucent: 'rgba(22, 22, 22, 0.88)',
+  dockTranslucent: 'rgba(20, 20, 20, 0.94)',
+  railTranslucent: 'rgba(14, 14, 14, 0.90)',
+  outline: '#2B2B2B',
+  outlineSoft: '#1F1F1F',
+  textPrimary: '#F5F4F0',
+  textSecondary: '#A8A6A0',
+  textTertiary: '#8A8880',
+  defaultAccent: '#F5F4F0',
+  lightAccent: '#1B1A19',
+  voltBackground: '#111410',
+  voltAccent: '#BFF30C',
   success: '#7BE3A8',
   warn: '#E0A030',
   danger: '#E0506A',
 
+  // Light — Pearl (Windows 11 neutral).
   lightBackground: '#F3F3F3',
   lightNavBackground: '#ECECEC',
   lightContent: '#F9F9F9',
@@ -30,6 +34,7 @@ export const WaveColors = {
   lightTextSecondary: '#605E5C',
   lightTextTertiary: '#74726F',
 
+  // AMOLED — pure-black Midnight variant.
   amoledBackground: '#000000',
   amoledAccent: '#FFFFFF',
   amoledSurface: '#0A0A0A',
@@ -134,7 +139,7 @@ export function onAccentFor(hex: string): string {
   return contrastRatio(hex, '#000000') >= contrastRatio(hex, '#FFFFFF') ? '#000000' : '#FFFFFF';
 }
 
-function withAlpha(hex: string, alpha: number): string {
+export function withAlpha(hex: string, alpha: number): string {
   const [r, g, b] = hexToRgb(hex);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
@@ -150,14 +155,15 @@ export function surfacesFromCustomBase(baseHex: string): WaveSurfaces {
       l += 0.005;
     }
     const card = hslToHex(h, sat, Math.min(l + 0.035, 0.99));
+    const rail = hslToHex(h, sat, l - 0.025);
     return {
       background: hslToHex(h, sat, l),
       surface: card,
       surfaceRaised: card,
       surfaceOverlay: hslToHex(h, sat, l - 0.04),
-      panelTranslucent: card,
-      dockTranslucent: card,
-      railTranslucent: hslToHex(h, sat, l - 0.025),
+      panelTranslucent: withAlpha(card, 0.9),
+      dockTranslucent: withAlpha(card, 0.94),
+      railTranslucent: withAlpha(rail, 0.92),
       outline: hslToHex(h, sat * 0.7, l - 0.1),
       outlineSoft: hslToHex(h, sat * 0.7, l - 0.06),
       isCustom: true,
@@ -210,7 +216,7 @@ export const WaveDensity = {
   railCollapsed: 60,
   railExpanded: 200,
   titleBar: 44,
-  dock: 84,
+  dock: 68,
   trackRow: 54,
   trackArt: 40,
   contextPanel: 360,

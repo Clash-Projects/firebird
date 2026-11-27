@@ -5,6 +5,8 @@
   import { playerStore } from '$src/state/player.svelte';
   import AmbientStage from '$src/ui/components/AmbientStage.svelte';
   import AnimatedArtworkVideo from '$src/ui/components/AnimatedArtworkVideo.svelte';
+  import { waveTooltip } from '$src/ui/components/tooltip';
+  import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import { immersiveState } from './immersive.svelte';
   import NowPlayingOverflowMenu from './NowPlayingOverflowMenu.svelte';
@@ -101,7 +103,7 @@
           style:opacity={showLyrics ? 1 : 0}
           class:pointer-events-none={!showLyrics}
         >
-          <div class="lw-scroll h-full min-w-[320px] overflow-y-auto">
+          <div use:waveSmoothScroll class="lw-scroll h-full min-w-[320px] overflow-y-auto">
             <KaraokeLyricsView fontSize={34} showHeaderControls={false} />
           </div>
         </div>
@@ -117,12 +119,13 @@
       >
         <button
           type="button"
-          title="Exit fullscreen (F11)"
+          use:waveTooltip={'Exit fullscreen (F11)'}
+          aria-label="Exit fullscreen"
           onclick={() => {
             immersiveState.ping();
             onClose?.();
           }}
-          class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[6px] bg-white/10 text-[var(--lw-text-primary)] transition hover:bg-white/20"
+          class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[6px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] text-[var(--lw-text-primary)] transition hover:bg-[var(--lw-wash-hover)]"
         >
           <WaveIcon name="chevronLeft" size={15} />
         </button>

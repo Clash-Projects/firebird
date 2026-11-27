@@ -6,6 +6,8 @@
   import { formatDuration, playerStore } from '$src/state/player.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
   import Artwork from '$src/ui/components/Artwork.svelte';
+  import WaveSlider from '$src/ui/components/WaveSlider.svelte';
+  import { waveTooltip } from '$src/ui/components/tooltip';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
 
   const appWindow = isTauriRuntime() ? getCurrentWindow() : null;
@@ -62,9 +64,9 @@
   onmouseleave={() => (hover = false)}
   ondblclick={onSurfaceDblClick}
   data-tauri-drag-region
-  class="relative flex h-full w-full flex-col overflow-hidden border border-white/10 select-none {track && (style === 'card' || style === 'ambient' || style === 'lyrics')
-    ? 'bg-black text-white'
-    : 'bg-[var(--lw-surface-raised)] text-[var(--lw-text-primary)]'}"
+  class="relative flex h-full w-full flex-col overflow-hidden border select-none {track && (style === 'card' || style === 'ambient' || style === 'lyrics')
+    ? 'border-white/10 bg-black text-white'
+    : 'border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] text-[var(--lw-text-primary)]'}"
 >
   {#if !track}
     <div class="flex h-full items-center gap-2 px-2.5" data-tauri-drag-region>
@@ -77,13 +79,13 @@
         No track playing
       </button>
       <div class="flex items-center">
-        <button type="button" onclick={() => appWindow?.minimize()} title="Minimize" class="mini-glyph">
+        <button type="button" onclick={() => appWindow?.minimize()} use:waveTooltip={'Minimize'} aria-label="Minimize" class="mini-glyph">
           <span class="h-[1px] w-2 bg-current"></span>
         </button>
-        <button type="button" onclick={expand} title="Expand to window" class="mini-glyph">
+        <button type="button" onclick={expand} use:waveTooltip={'Expand to window'} aria-label="Expand" class="mini-glyph">
           <WaveIcon name="maximize" size={12} />
         </button>
-        <button type="button" onclick={closeMini} title="Close mini player" class="mini-glyph danger">
+        <button type="button" onclick={closeMini} use:waveTooltip={'Close mini player'} aria-label="Close" class="mini-glyph danger">
           <WaveIcon name="close" size={12} />
         </button>
       </div>
@@ -97,13 +99,13 @@
       ></div>
 
       <div class="absolute top-1.5 right-1.5 flex items-center gap-0.5 transition-opacity duration-150 {hover ? 'opacity-100' : 'pointer-events-none opacity-0'}">
-        <button type="button" onclick={() => appWindow?.minimize()} title="Minimize" class="mini-glyph on-dark">
+        <button type="button" onclick={() => appWindow?.minimize()} use:waveTooltip={'Minimize'} aria-label="Minimize" class="mini-glyph on-dark">
           <span class="h-[1px] w-2 bg-current"></span>
         </button>
-        <button type="button" onclick={expand} title="Expand to window" class="mini-glyph on-dark">
+        <button type="button" onclick={expand} use:waveTooltip={'Expand to window'} aria-label="Expand" class="mini-glyph on-dark">
           <WaveIcon name="maximize" size={12} />
         </button>
-        <button type="button" onclick={closeMini} title="Close mini player" class="mini-glyph on-dark danger">
+        <button type="button" onclick={closeMini} use:waveTooltip={'Close mini player'} aria-label="Close" class="mini-glyph on-dark danger">
           <WaveIcon name="close" size={12} />
         </button>
       </div>
@@ -114,32 +116,35 @@
           <div class="truncate text-[11.5px] text-white/75">{track.artist}</div>
         </button>
 
-        <div class="flex items-center gap-1.5 text-[10px] text-white/75 lw-tabular">
+        <div class="mini-on-dark flex items-center gap-2 text-[10px] text-white/75 lw-tabular">
           <span>{formatDuration(playerStore.positionSec)}</span>
-          <input
-            type="range"
-            min="0"
-            max={playerStore.durationSec || 1}
-            value={playerStore.positionSec}
-            oninput={(e) => playerStore.seek(Number((e.currentTarget as HTMLInputElement).value))}
-            class="h-1 flex-1 cursor-pointer accent-white"
-          />
+          <div class="min-w-0 flex-1">
+            <WaveSlider
+              min={0}
+              max={playerStore.durationSec || 1}
+              step={1}
+              label="Seek"
+              value={playerStore.positionSec}
+              oninput={(v) => playerStore.seek(v)}
+            />
+          </div>
           <span>{formatDuration(playerStore.durationSec)}</span>
         </div>
 
         <div class="flex items-center justify-center gap-2">
-          <button type="button" onclick={() => playerStore.previous()} title="Previous" class="mini-glyph on-dark">
+          <button type="button" onclick={() => playerStore.previous()} use:waveTooltip={'Previous'} aria-label="Previous" class="mini-glyph on-dark">
             <WaveIcon name="prev" size={14} />
           </button>
           <button
             type="button"
             onclick={() => playerStore.togglePlay()}
-            title={playerStore.isPlaying ? 'Pause' : 'Play'}
+            use:waveTooltip={playerStore.isPlaying ? 'Pause' : 'Play'}
+            aria-label={playerStore.isPlaying ? 'Pause' : 'Play'}
             class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-white text-black transition-transform hover:scale-105 active:scale-95"
           >
             <WaveIcon name={playerStore.isPlaying ? 'pause' : 'play'} size={16} filled />
           </button>
-          <button type="button" onclick={() => playerStore.next()} title="Next" class="mini-glyph on-dark">
+          <button type="button" onclick={() => playerStore.next()} use:waveTooltip={'Next'} aria-label="Next" class="mini-glyph on-dark">
             <WaveIcon name="next" size={14} />
           </button>
         </div>
@@ -159,7 +164,7 @@
 
       <div class="relative z-10 flex flex-1 items-center gap-3 px-3 py-2.5" data-tauri-drag-region>
         <button type="button" onclick={expand} class="shrink-0 cursor-pointer">
-          <Artwork src={track.artworkUrl} alt={track.title} size={hasSyncedLyrics ? 96 : 86} radius={10} shadow="lift" />
+          <Artwork src={track.artworkUrl} label={track.title} artist={track.artist} kind="track" alt={track.title} size={hasSyncedLyrics ? 96 : 86} radius={10} shadow="lift" />
         </button>
 
         <div class="flex min-w-0 flex-1 flex-col justify-between self-stretch">
@@ -169,44 +174,47 @@
               <div class="truncate text-[11.5px] text-white/75">{track.artist}</div>
             </button>
             <div class="flex shrink-0 items-center transition-opacity duration-150 {hover ? 'opacity-100' : 'opacity-60'}">
-              <button type="button" onclick={() => appWindow?.minimize()} title="Minimize" class="mini-glyph on-dark">
+              <button type="button" onclick={() => appWindow?.minimize()} use:waveTooltip={'Minimize'} aria-label="Minimize" class="mini-glyph on-dark">
                 <span class="h-[1px] w-2 bg-current"></span>
               </button>
-              <button type="button" onclick={expand} title="Expand to window" class="mini-glyph on-dark">
+              <button type="button" onclick={expand} use:waveTooltip={'Expand to window'} aria-label="Expand" class="mini-glyph on-dark">
                 <WaveIcon name="maximize" size={12} />
               </button>
-              <button type="button" onclick={closeMini} title="Close mini player" class="mini-glyph on-dark danger">
+              <button type="button" onclick={closeMini} use:waveTooltip={'Close mini player'} aria-label="Close" class="mini-glyph on-dark danger">
                 <WaveIcon name="close" size={12} />
               </button>
             </div>
           </div>
 
           <div class="flex items-center gap-2">
-            <button type="button" onclick={() => playerStore.previous()} title="Previous" class="mini-glyph on-dark">
+            <button type="button" onclick={() => playerStore.previous()} use:waveTooltip={'Previous'} aria-label="Previous" class="mini-glyph on-dark">
               <WaveIcon name="prev" size={13} />
             </button>
             <button
               type="button"
               onclick={() => playerStore.togglePlay()}
-              title={playerStore.isPlaying ? 'Pause' : 'Play'}
+              use:waveTooltip={playerStore.isPlaying ? 'Pause' : 'Play'}
+              aria-label={playerStore.isPlaying ? 'Pause' : 'Play'}
               class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-black transition-transform hover:scale-105 active:scale-95"
             >
               <WaveIcon name={playerStore.isPlaying ? 'pause' : 'play'} size={15} filled />
             </button>
-            <button type="button" onclick={() => playerStore.next()} title="Next" class="mini-glyph on-dark">
+            <button type="button" onclick={() => playerStore.next()} use:waveTooltip={'Next'} aria-label="Next" class="mini-glyph on-dark">
               <WaveIcon name="next" size={13} />
             </button>
 
-            <div class="ml-1 flex min-w-0 flex-1 items-center gap-1.5 text-[10px] text-white/75 lw-tabular">
+            <div class="mini-on-dark ml-1 flex min-w-0 flex-1 items-center gap-1.5 text-[10px] text-white/75 lw-tabular">
               <span>{formatDuration(playerStore.positionSec)}</span>
-              <input
-                type="range"
-                min="0"
-                max={playerStore.durationSec || 1}
-                value={playerStore.positionSec}
-                oninput={(e) => playerStore.seek(Number((e.currentTarget as HTMLInputElement).value))}
-                class="h-1 min-w-0 flex-1 cursor-pointer accent-white"
-              />
+              <div class="min-w-0 flex-1">
+                <WaveSlider
+                  min={0}
+                  max={playerStore.durationSec || 1}
+                  step={1}
+                  label="Seek"
+                  value={playerStore.positionSec}
+                  oninput={(v) => playerStore.seek(v)}
+                />
+              </div>
               <span>{formatDuration(playerStore.durationSec)}</span>
             </div>
           </div>
@@ -222,7 +230,7 @@
   {:else if style === 'compact'}
     <div class="flex flex-1 items-center gap-2.5 px-2" data-tauri-drag-region>
       <button type="button" onclick={expand} class="shrink-0 cursor-pointer">
-        <Artwork src={track.artworkUrl} alt={track.title} size={36} radius={8} />
+        <Artwork src={track.artworkUrl} label={track.title} artist={track.artist} kind="track" alt={track.title} size={36} radius={8} />
       </button>
       <button type="button" onclick={expand} class="min-w-0 flex-1 cursor-pointer text-left">
         <div class="truncate text-[12px] font-semibold">{track.title}</div>
@@ -232,25 +240,26 @@
         <button
           type="button"
           onclick={() => playerStore.togglePlay()}
-          title={playerStore.isPlaying ? 'Pause' : 'Play'}
+          use:waveTooltip={playerStore.isPlaying ? 'Pause' : 'Play'}
+          aria-label={playerStore.isPlaying ? 'Pause' : 'Play'}
           class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-[var(--lw-accent)] text-[var(--lw-on-accent)]"
         >
           <WaveIcon name={playerStore.isPlaying ? 'pause' : 'play'} size={13} filled />
         </button>
-        <button type="button" onclick={() => playerStore.next()} title="Next" class="mini-glyph">
+        <button type="button" onclick={() => playerStore.next()} use:waveTooltip={'Next'} aria-label="Next" class="mini-glyph">
           <WaveIcon name="next" size={13} />
         </button>
       </div>
       <div class="flex shrink-0 items-center transition-opacity duration-150 {hover ? 'opacity-100' : 'opacity-45'}">
-        <button type="button" onclick={expand} title="Expand to window" class="mini-glyph">
+        <button type="button" onclick={expand} use:waveTooltip={'Expand to window'} aria-label="Expand" class="mini-glyph">
           <WaveIcon name="maximize" size={12} />
         </button>
-        <button type="button" onclick={closeMini} title="Close mini player" class="mini-glyph danger">
+        <button type="button" onclick={closeMini} use:waveTooltip={'Close mini player'} aria-label="Close" class="mini-glyph danger">
           <WaveIcon name="close" size={12} />
         </button>
       </div>
     </div>
-    <div class="h-[2px] w-full bg-white/10">
+    <div class="h-[2px] w-full bg-[var(--lw-wash-hover)]">
       <div class="h-full bg-[var(--lw-accent)] transition-[width] duration-150" style:width="{progressPct}%"></div>
     </div>
   {:else}
@@ -260,48 +269,54 @@
         ⋮
       </span>
       <button type="button" onclick={expand} class="shrink-0 cursor-pointer">
-        <Artwork src={track.artworkUrl} alt={track.title} size={46} radius={8} />
+        <Artwork src={track.artworkUrl} label={track.title} artist={track.artist} kind="track" alt={track.title} size={46} radius={8} />
       </button>
       <button type="button" onclick={expand} class="min-w-0 flex-1 cursor-pointer text-left">
         <div class="truncate text-[12px] font-semibold">{track.title}</div>
         <div class="truncate text-[11px] text-[var(--lw-text-secondary)]">{track.artist}</div>
       </button>
       <div class="flex shrink-0 items-center gap-0.5">
-        <button type="button" onclick={() => playerStore.previous()} title="Previous" class="mini-glyph">
+        <button type="button" onclick={() => playerStore.previous()} use:waveTooltip={'Previous'} aria-label="Previous" class="mini-glyph">
           <WaveIcon name="prev" size={13} />
         </button>
         <button
           type="button"
           onclick={() => playerStore.togglePlay()}
-          title={playerStore.isPlaying ? 'Pause' : 'Play'}
+          use:waveTooltip={playerStore.isPlaying ? 'Pause' : 'Play'}
+          aria-label={playerStore.isPlaying ? 'Pause' : 'Play'}
           class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-[var(--lw-accent)] text-[var(--lw-on-accent)] transition-transform hover:scale-105 active:scale-95"
         >
           <WaveIcon name={playerStore.isPlaying ? 'pause' : 'play'} size={14} filled />
         </button>
-        <button type="button" onclick={() => playerStore.next()} title="Next" class="mini-glyph">
+        <button type="button" onclick={() => playerStore.next()} use:waveTooltip={'Next'} aria-label="Next" class="mini-glyph">
           <WaveIcon name="next" size={13} />
         </button>
       </div>
       <div class="mx-0.5 h-4 w-px bg-[var(--lw-divider)]"></div>
       <div class="flex shrink-0 items-center">
-        <button type="button" onclick={() => appWindow?.minimize()} title="Minimize" class="mini-glyph">
+        <button type="button" onclick={() => appWindow?.minimize()} use:waveTooltip={'Minimize'} aria-label="Minimize" class="mini-glyph">
           <span class="h-[1px] w-2 bg-current"></span>
         </button>
-        <button type="button" onclick={expand} title="Expand to window" class="mini-glyph">
+        <button type="button" onclick={expand} use:waveTooltip={'Expand to window'} aria-label="Expand" class="mini-glyph">
           <WaveIcon name="maximize" size={12} />
         </button>
-        <button type="button" onclick={closeMini} title="Close mini player" class="mini-glyph danger">
+        <button type="button" onclick={closeMini} use:waveTooltip={'Close mini player'} aria-label="Close" class="mini-glyph danger">
           <WaveIcon name="close" size={12} />
         </button>
       </div>
     </div>
-    <div class="h-[3px] w-full bg-white/10">
+    <div class="h-[3px] w-full bg-[var(--lw-wash-hover)]">
       <div class="h-full bg-[var(--lw-accent)] transition-[width] duration-150" style:width="{progressPct}%"></div>
     </div>
   {/if}
 </div>
 
 <style>
+  .mini-on-dark {
+    --lw-accent: #ffffff;
+    --lw-outline-strong: rgba(255, 255, 255, 0.3);
+  }
+
   .mini-glyph {
     display: flex;
     width: 24px;

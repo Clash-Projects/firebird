@@ -5,6 +5,7 @@
   import Buttons from '$src/ui/components/Buttons.svelte';
   import Input from '$src/ui/components/Input.svelte';
   import Select from '$src/ui/components/Select.svelte';
+  import { waveTooltip } from '$src/ui/components/tooltip';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
 
   interface Props {
@@ -110,7 +111,8 @@
         <button
           type="button"
           onclick={onClose}
-          title="Close"
+          use:waveTooltip={'Close'}
+          aria-label="Close"
           class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[8px] text-[var(--lw-text-tertiary)] transition-colors hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
         >
           <WaveIcon name="close" size={16} />

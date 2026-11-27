@@ -3,12 +3,16 @@
   import { router } from '$src/app/router.svelte';
   import { playTrackNow } from '$src/app/trackActions';
   import { windowState } from '$src/app/window.svelte';
-  import { isTauriRuntime } from '$src/lib/ipc';
-  import { libraryStore } from '$src/state/library.svelte';
+  import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
+  import { libraryStore, mapYtAlbum, mapYtArtist, mapYtTrack } from '$src/state/library.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
+  import type { Album, Artist, Track } from '$src/state/types';
   import Artwork from '$src/ui/components/Artwork.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import Input from '$src/ui/components/Input.svelte';
+  import { contextMenu } from '$src/ui/components/contextMenuState.svelte';
+  import { waveTooltip } from '$src/ui/components/tooltip';
+  import { goAlbum, goArtist } from '$src/ui/navigation/waveNav';
   import WaveHaze from '$src/ui/theme/WaveHaze.svelte';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -18,12 +22,63 @@
   const DISCORD_URL = 'https://discord.com/invite/TMCEPSUNk2';
 
   let searchQuery = $state('');
+  let liveQuery = $state('');
   let searchFocused = $state(false);
+  let selectedIdx = $state(-1);
   let menuOpen = $state(false);
   let profileMenuOpen = $state(false);
   let nameModalOpen = $state(false);
   let nameDraft = $state('');
+  let nameDialogEl = $state<HTMLDialogElement | null>(null);
   let avatarFileInput: HTMLInputElement | undefined = $state();
+
+  let remoteSongs = $state<Track[]>([]);
+  let remoteAlbums = $state<Album[]>([]);
+  let remoteArtists = $state<Artist[]>([]);
+  let searchSeq = 0;
+
+  $effect(() => {
+    const q = searchQuery.trim();
+    selectedIdx = -1;
+    if (!q) {
+      liveQuery = '';
+      remoteSongs = [];
+      remoteAlbums = [];
+      remoteArtists = [];
+      return;
+    }
+    const seq = ++searchSeq;
+    const timer = setTimeout(async () => {
+      liveQuery = q;
+      if (!isTauriRuntime()) return;
+      try {
+        const [songsRes, albumsRes, artistsRes] = await Promise.all([
+          ipcInvoke<any[]>('yt_search_songs', { query: q, limit: 2 }).catch(() => []),
+          ipcInvoke<any[]>('yt_search_albums', { query: q, limit: 1 }).catch(() => []),
+          ipcInvoke<any[]>('yt_search_artists', { query: q, limit: 1 }).catch(() => []),
+        ]);
+        if (seq !== searchSeq) return;
+        const songs = Array.isArray(songsRes) ? songsRes.map(mapYtTrack) : [];
+        const albums = Array.isArray(albumsRes) ? albumsRes.map(mapYtAlbum) : [];
+        const artists = Array.isArray(artistsRes) ? artistsRes.map(mapYtArtist) : [];
+        remoteSongs = songs;
+        remoteAlbums = albums;
+        remoteArtists = artists;
+        libraryStore.upsertTracks(songs);
+        libraryStore.upsertAlbums(albums);
+        libraryStore.upsertArtists(artists);
+      } catch {
+        // Fallback to local matches cleanly
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  });
+
+  $effect(() => {
+    if (!nameDialogEl) return;
+    if (nameModalOpen && !nameDialogEl.open) nameDialogEl.showModal();
+    else if (!nameModalOpen && nameDialogEl.open) nameDialogEl.close();
+  });
 
   let displayName = $derived(
     settingsStore.displayName.trim() ||
@@ -38,27 +93,139 @@
     searchFocused && Boolean(searchQuery.trim() || libraryStore.searchHistory.length)
   );
 
-  let liveTracks = $derived(
-    searchQuery.trim()
-      ? libraryStore.tracks
-          .filter(
-            (t) =>
-              t.title.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
-              t.artist.toLowerCase().includes(searchQuery.trim().toLowerCase())
-          )
-          .slice(0, 4)
-      : []
-  );
+  interface SearchHit {
+    kind: 'recent' | 'track' | 'album' | 'artist' | 'seeAll';
+    label: string;
+    sub: string;
+    art?: string;
+    circle?: boolean;
+    track?: Track;
+    onSelect: () => void;
+  }
+
+  let searchHits = $derived.by<SearchHit[]>(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      return libraryStore.searchHistory.slice(0, 4).map((item) => ({
+        kind: 'recent',
+        label: item,
+        sub: 'Recent',
+        onSelect: () => {
+          searchQuery = item;
+          openSearch(item);
+        },
+      }));
+    }
+
+    const ql = q.toLowerCase();
+    const songs =
+      liveQuery === q && remoteSongs.length > 0
+        ? remoteSongs
+        : libraryStore.tracks
+            .filter(
+              (t) =>
+                t.title.toLowerCase().includes(ql) ||
+                t.artist.toLowerCase().includes(ql)
+            )
+            .slice(0, 2);
+
+    const albums =
+      liveQuery === q && remoteAlbums.length > 0
+        ? remoteAlbums
+        : libraryStore.albums
+            .filter(
+              (a) =>
+                a.title.toLowerCase().includes(ql) ||
+                a.artist.toLowerCase().includes(ql)
+            )
+            .slice(0, 1);
+
+    const artists =
+      liveQuery === q && remoteArtists.length > 0
+        ? remoteArtists
+        : libraryStore.artists
+            .filter((a) => a.name.toLowerCase().includes(ql))
+            .slice(0, 1);
+
+    const out: SearchHit[] = [];
+    for (const s of songs.slice(0, 2)) {
+      out.push({
+        kind: 'track',
+        label: s.title,
+        sub: s.artist ? `Song · ${s.artist}` : 'Song',
+        art: s.artworkUrl,
+        track: s,
+        onSelect: () => {
+          searchFocused = false;
+          playTrackNow(s);
+        },
+      });
+    }
+    for (const a of albums.slice(0, 1)) {
+      out.push({
+        kind: 'album',
+        label: a.title,
+        sub: a.artist ? `Album · ${a.artist}` : 'Album',
+        art: a.artworkUrl,
+        onSelect: () => {
+          searchFocused = false;
+          goAlbum(a.id);
+        },
+      });
+    }
+    for (const ar of artists.slice(0, 1)) {
+      out.push({
+        kind: 'artist',
+        label: ar.name,
+        sub: 'Artist',
+        art: ar.artworkUrl,
+        circle: true,
+        onSelect: () => {
+          searchFocused = false;
+          goArtist(ar.id);
+        },
+      });
+    }
+    out.push({
+      kind: 'seeAll',
+      label: `See all results for “${q}”`,
+      sub: 'Open Search page',
+      onSelect: () => openSearch(q),
+    });
+    return out;
+  });
 
   function submitSearch(e: SubmitEvent) {
     e.preventDefault();
+    if (selectedIdx >= 0 && selectedIdx < searchHits.length) {
+      searchHits[selectedIdx].onSelect();
+      return;
+    }
     openSearch(searchQuery);
+  }
+
+  function onSearchKeyDown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      searchFocused = false;
+      selectedIdx = -1;
+      (event.currentTarget as HTMLInputElement).blur();
+      return;
+    }
+    if (event.key === 'ArrowDown' && searchHits.length > 0) {
+      event.preventDefault();
+      searchFocused = true;
+      selectedIdx = Math.min(searchHits.length - 1, selectedIdx + 1);
+    } else if (event.key === 'ArrowUp' && searchHits.length > 0) {
+      event.preventDefault();
+      selectedIdx = Math.max(-1, selectedIdx - 1);
+    }
   }
 
   function openSearch(query: string) {
     const trimmed = query.trim();
     if (trimmed) libraryStore.pushSearchHistory(trimmed);
     searchFocused = false;
+    selectedIdx = -1;
     router.navigate(trimmed ? `/search/${encodeURIComponent(trimmed)}` : '/search');
   }
 
@@ -139,19 +306,21 @@
       <button
         type="button"
         onclick={() => windowState.toggleRail()}
-        title="Toggle navigation"
+        use:waveTooltip={'Toggle navigation'}
+        aria-label="Toggle navigation"
         aria-expanded={windowState.railExpanded}
         class="bar-btn"
       >
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <path d="M2.5 4H13.5M2.5 8H13.5M2.5 12H13.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+          <path d="M2.5 4H13.5M2.5 8H13.5M2.5 12H13.5" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
         </svg>
       </button>
       <button
         type="button"
         disabled={!router.canGoBack}
         onclick={() => router.back()}
-        title="Back"
+        use:waveTooltip={'Back'}
+        aria-label="Back"
         class="bar-btn"
       >
         <WaveIcon name="chevronLeft" size={15} />
@@ -160,7 +329,8 @@
         type="button"
         disabled={!router.canGoForward}
         onclick={() => router.forward()}
-        title="Forward"
+        use:waveTooltip={'Forward'}
+        aria-label="Forward"
         class="bar-btn"
       >
         <WaveIcon name="chevronRight" size={15} />
@@ -168,11 +338,13 @@
     </div>
 
     <div
-      class="relative ml-2 w-[clamp(160px,28vw,310px)]"
+      class="relative ml-2 w-[clamp(140px,28vw,300px)]"
       role="search"
       onfocusin={() => (searchFocused = true)}
       onfocusout={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) searchFocused = false;
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          searchFocused = false;
+        }
       }}
     >
       <form onsubmit={submitSearch} class="relative flex items-center">
@@ -182,12 +354,7 @@
           data-lw="title-search"
           bind:value={searchQuery}
           oninput={() => (searchFocused = true)}
-          onkeydown={(event) => {
-            if (event.key === 'Escape') {
-              searchFocused = false;
-              (event.currentTarget as HTMLInputElement).blur();
-            }
-          }}
+          onkeydown={onSearchKeyDown}
           aria-label="Search songs, albums and artists"
           placeholder="Search"
           class="title-search-input"
@@ -212,59 +379,46 @@
       <div
         data-open={showSearchSuggestions}
         inert={!showSearchSuggestions}
-        class="lw-popover absolute top-9 left-0 z-50 w-full min-w-[300px] rounded-[10px] border border-[var(--lw-divider)] bg-[var(--lw-surface-raised)] p-1 shadow-[var(--lw-shadow-flyout)]"
+        class="lw-popover absolute top-9 left-0 z-50 w-full min-w-[320px] rounded-[10px] border border-[var(--lw-divider)] bg-[var(--lw-surface-raised)] p-1 shadow-[var(--lw-shadow-flyout)]"
         style:--lw-popover-origin="top left"
       >
         {#if !searchQuery.trim()}
           <div class="px-2 py-1 text-[10px] font-bold tracking-[0.8px] text-[var(--lw-text-tertiary)] uppercase">
             Recent
           </div>
-          {#each libraryStore.searchHistory.slice(0, 4) as item (item)}
-            <button
-              type="button"
-              onclick={() => {
-                searchQuery = item;
-                openSearch(item);
-              }}
-              class="flex w-full cursor-pointer items-center gap-2 rounded-[7px] px-2 py-1.5 text-left text-[12.5px] hover:bg-[var(--lw-wash-hover)]"
-            >
-              <WaveIcon name="clock" size={13} class="text-[var(--lw-text-tertiary)]" />
-              <span class="truncate">{item}</span>
-            </button>
-          {/each}
-        {:else}
-          {#each liveTracks as track (track.id)}
-            <button
-              type="button"
-              onclick={() => {
-                searchFocused = false;
-                playTrackNow(track);
-              }}
-              class="flex w-full cursor-pointer items-center gap-2.5 rounded-[7px] px-2 py-1.5 text-left hover:bg-[var(--lw-wash-hover)]"
-            >
-              <Artwork src={track.artworkUrl} size={30} radius={6} />
-              <div class="min-w-0 flex-1">
-                <div class="truncate text-[12.5px] font-semibold">{track.title}</div>
-                <div class="truncate text-[11px] text-[var(--lw-text-secondary)]">Song · {track.artist}</div>
-              </div>
-            </button>
-          {/each}
+        {/if}
+        {#each searchHits as hit, i (`${hit.kind}-${hit.label}-${i}`)}
           <button
             type="button"
-            onclick={() => openSearch(searchQuery)}
-            class="flex w-full cursor-pointer items-center gap-2 rounded-[7px] px-2 py-1.5 text-left text-[12.5px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
+            onclick={hit.onSelect}
+            oncontextmenu={(e) => hit.track && contextMenu.showForTrack(e, hit.track)}
+            class="flex w-full cursor-pointer items-center gap-2.5 rounded-[7px] px-2 py-1.5 text-left transition-colors {selectedIdx === i
+              ? 'bg-[var(--lw-wash-pressed)]'
+              : 'hover:bg-[var(--lw-wash-hover)]'}"
           >
-            <WaveIcon name="search" size={13} />
-            <span class="truncate">See all results for “{searchQuery.trim()}”</span>
+            {#if hit.kind === 'recent'}
+              <WaveIcon name="clock" size={14} class="text-[var(--lw-text-tertiary)]" />
+            {:else if hit.kind === 'seeAll'}
+              <WaveIcon name="search" size={14} class="text-[var(--lw-text-secondary)]" />
+            {:else}
+              <Artwork src={hit.art} label={hit.label} size={28} radius={6} circle={Boolean(hit.circle)} />
+            {/if}
+            <div class="min-w-0 flex-1">
+              <div class="truncate text-[12.5px] font-semibold text-[var(--lw-text-primary)]">{hit.label}</div>
+              {#if hit.kind !== 'recent'}
+                <div class="truncate text-[11px] text-[var(--lw-text-secondary)]">{hit.sub}</div>
+              {/if}
+            </div>
           </button>
-        {/if}
+        {/each}
       </div>
     </div>
 
     <button
       type="button"
       onclick={() => (windowState.commandPaletteOpen = true)}
-      title="Commands (Ctrl+K)"
+      use:waveTooltip={'Commands (Ctrl+K)'}
+      aria-label="Commands (Ctrl+K)"
       class="bar-btn command-trigger ml-1 hidden sm:flex"
     >
       <WaveIcon name="terminal" size={15} />
@@ -281,7 +435,8 @@
       <button
         type="button"
         onclick={() => openExternal(TELEGRAM_URL)}
-        title="Telegram community"
+        use:waveTooltip={'Telegram community'}
+        aria-label="Telegram community"
         class="bar-btn"
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -291,7 +446,8 @@
       <button
         type="button"
         onclick={() => openExternal(DISCORD_URL)}
-        title="Discord server"
+        use:waveTooltip={'Discord server'}
+        aria-label="Discord server"
         class="bar-btn"
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -311,9 +467,10 @@
         <button
           type="button"
           onclick={() => (profileMenuOpen = !profileMenuOpen)}
-          title={displayName || (settingsStore.ytConnected ? 'YouTube Music connected' : 'YouTube & profile')}
+          use:waveTooltip={displayName || (settingsStore.ytConnected ? 'YouTube Music connected' : 'YouTube & profile')}
+          aria-label={displayName ? `Profile, ${displayName}` : 'YouTube & profile'}
           aria-expanded={profileMenuOpen}
-          class="flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-full p-[2px] transition-transform hover:scale-105 hover:bg-[var(--lw-wash-hover)] active:scale-95"
+          class="flex h-[32px] w-[32px] cursor-pointer items-center justify-center rounded-full p-[2px] transition-transform hover:scale-105 hover:bg-[var(--lw-wash-hover)] active:scale-95"
         >
           <span class="flex h-[26px] w-[26px] items-center justify-center overflow-hidden rounded-full border border-[var(--lw-divider)] bg-[var(--lw-surface-raised)] text-[11px] font-semibold text-[var(--lw-text-primary)]">
             {#if avatarSrc}
@@ -382,7 +539,8 @@
         <button
           type="button"
           onclick={() => (menuOpen = !menuOpen)}
-          title="Menu"
+          use:waveTooltip={'Menu'}
+          aria-label="Menu"
           aria-expanded={menuOpen}
           aria-controls="lw-app-menu"
           class="bar-btn"
@@ -393,7 +551,7 @@
           id="lw-app-menu"
           data-open={menuOpen}
           inert={!menuOpen}
-          class="lw-popover absolute top-9 right-0 z-50 w-[190px] rounded-[12px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] p-1 text-[12.5px] shadow-[var(--lw-shadow-flyout)]"
+          class="lw-popover absolute top-9 right-0 z-50 w-[196px] rounded-[12px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] p-1 text-[12.5px] shadow-[var(--lw-shadow-flyout)]"
         >
           <button
             type="button"
@@ -446,26 +604,42 @@
           <button
             type="button"
             onclick={() => appWindow.minimize()}
-            title="Minimize"
+            use:waveTooltip={'Minimize'}
+            aria-label="Minimize"
             class="win-btn"
           >
-            <span class="h-[1px] w-2.5 bg-current"></span>
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+              <path d="M1.5 6H10.5" stroke="currentColor" stroke-width="1.15" />
+            </svg>
           </button>
           <button
             type="button"
             onclick={() => appWindow.toggleMaximize()}
-            title="Maximize"
+            use:waveTooltip={windowState.isMaximized ? 'Restore' : 'Maximize'}
+            aria-label={windowState.isMaximized ? 'Restore' : 'Maximize'}
             class="win-btn"
           >
-            <span class="h-[9px] w-[9px] rounded-[1.5px] border border-current"></span>
+            {#if windowState.isMaximized}
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                <rect x="1.5" y="3.5" width="7" height="7" rx="0.8" stroke="currentColor" stroke-width="1.1" />
+                <path d="M3.5 3.5V2C3.5 1.7 3.7 1.5 4 1.5H10C10.3 1.5 10.5 1.7 10.5 2V8C10.5 8.3 10.3 8.5 10 8.5H8.5" stroke="currentColor" stroke-width="1.1" />
+              </svg>
+            {:else}
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                <rect x="1.5" y="1.5" width="9" height="9" rx="1" stroke="currentColor" stroke-width="1.1" />
+              </svg>
+            {/if}
           </button>
           <button
             type="button"
             onclick={() => appWindow.close()}
-            title="Close"
+            use:waveTooltip={'Close'}
+            aria-label="Close"
             class="win-btn danger"
           >
-            <WaveIcon name="close" size={13} />
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+              <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" />
+            </svg>
           </button>
         </div>
       {/if}
@@ -473,41 +647,40 @@
   </div>
 </WaveHaze>
 
-{#if nameModalOpen}
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
-    role="dialog"
-    aria-modal="true"
-    aria-label="Your name"
+<dialog
+  bind:this={nameDialogEl}
+  onclose={() => (nameModalOpen = false)}
+  closedby="any"
+  aria-labelledby="lw-name-dialog-title"
+  class="w-full max-w-[380px]"
+>
+  <form
+    onsubmit={(e) => {
+      e.preventDefault();
+      saveDisplayName(nameDraft);
+    }}
+    class="space-y-4 p-5"
   >
-    <div class="w-full max-w-[360px] space-y-4 rounded-[14px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] p-5 shadow-[var(--lw-shadow-modal)]">
-      <div class="text-[16px] font-bold">Your name</div>
-      <form
-        onsubmit={(e) => {
-          e.preventDefault();
-          saveDisplayName(nameDraft);
-        }}
-      >
-        <Input
-          bind:value={nameDraft}
-          placeholder="e.g. Ajisth (leave empty to use YouTube)"
-        />
-      </form>
-      <div class="flex items-center justify-end gap-2">
-        {#if settingsStore.displayName}
-          <Buttons variant="ghost" size="sm" onclick={() => saveDisplayName('')}>Clear</Buttons>
-        {/if}
-        <Buttons variant="secondary" size="sm" onclick={() => (nameModalOpen = false)}>Cancel</Buttons>
-        <Buttons variant="primary" size="sm" onclick={() => saveDisplayName(nameDraft)}>Save</Buttons>
-      </div>
+    <h1 id="lw-name-dialog-title" class="text-[16px] font-bold">Your name</h1>
+    <Input
+      bind:value={nameDraft}
+      autofocus
+      placeholder="e.g. Ajisth (leave empty to use YouTube)"
+    />
+    <div class="flex items-center justify-end gap-2">
+      {#if settingsStore.displayName}
+        <Buttons variant="ghost" size="sm" onclick={() => saveDisplayName('')}>Clear</Buttons>
+      {/if}
+      <Buttons variant="secondary" size="sm" onclick={() => (nameModalOpen = false)}>Cancel</Buttons>
+      <Buttons variant="primary" size="sm" type="submit">Save</Buttons>
     </div>
-  </div>
-{/if}
+  </form>
+</dialog>
 
 <style>
   .title-bar {
     display: flex;
-    height: 44px;
+    height: var(--lw-titlebar-h, 44px);
     align-items: center;
     border-bottom: 1px solid var(--lw-divider);
     background: var(--lw-rail-translucent);
@@ -515,15 +688,18 @@
 
   .bar-btn {
     display: flex;
-    width: 30px;
-    height: 30px;
+    width: 36px;
+    height: 36px;
     flex: none;
     align-items: center;
     justify-content: center;
-    border-radius: 6px;
+    border-radius: 10px;
     color: var(--lw-text-secondary);
     cursor: pointer;
-    transition: background-color 110ms ease, color 110ms ease;
+    transition:
+      background-color var(--lw-motion-fast) ease,
+      color var(--lw-motion-fast) ease,
+      transform var(--lw-motion-fast) var(--ease-wave);
   }
 
   .bar-btn:disabled {
@@ -534,6 +710,11 @@
   .bar-btn:not(:disabled):hover {
     background: var(--lw-wash-hover);
     color: var(--lw-text-primary);
+  }
+
+  .bar-btn:not(:disabled):active {
+    background: var(--lw-wash-pressed);
+    transform: scale(0.93);
   }
 
   .title-search-input {
@@ -562,7 +743,7 @@
   .win-btn {
     display: flex;
     width: 44px;
-    height: 44px;
+    height: var(--lw-titlebar-h, 44px);
     align-items: center;
     justify-content: center;
     color: var(--lw-text-secondary);

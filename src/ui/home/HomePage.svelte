@@ -9,6 +9,7 @@
   import ShelfRail from '$src/ui/components/ShelfRail.svelte';
   import { contextMenu } from '$src/ui/components/contextMenuState.svelte';
   import { goAlbum, goArtist, goPlaylist } from '$src/ui/navigation/waveNav';
+  import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
   import WaveEntrance from '$src/ui/theme/WaveEntrance.svelte';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import HomeSpotlight from './HomeSpotlight.svelte';
@@ -67,7 +68,7 @@
   <WaveEntrance index={0}>
     <header class="flex items-center justify-between gap-4">
       <div class="min-w-0">
-        <h1 class="truncate text-[24px] leading-[1.2] font-bold tracking-[-0.02em]">
+        <h1 class="truncate text-[22px] leading-[1.2] font-bold tracking-[-0.4px]">
           {username ? `${greeting}, ${username}` : greeting}
         </h1>
         <p class="mt-0.5 text-[13px] text-[var(--lw-text-secondary)]">
@@ -142,7 +143,7 @@
                   {shelf.subtitle}
                 </div>
               {/if}
-              <h2 class="text-[20px] font-bold tracking-[-0.015em]">{shelf.title}</h2>
+              <h2 class="text-[15.5px] font-semibold tracking-[-0.1px]">{shelf.title}</h2>
             </div>
 
             {#if shelf.tracks.length > 0 || shelf.trackCards.length > 0}
@@ -150,7 +151,7 @@
               <button
                 type="button"
                 onclick={() => list[0] && playTrackNow(list[0], list)}
-                class="cursor-pointer rounded-[8px] px-2.5 py-1 text-[12px] font-semibold text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
+                class="cursor-pointer rounded-[6px] px-2 py-1 text-[12px] font-medium text-[var(--lw-accent)] hover:underline"
               >
                 Play all
               </button>
@@ -167,11 +168,11 @@
                   onclick={() => playTrackNow(track, shelf.tracks)}
                   oncontextmenu={(e) => contextMenu.showForTrack(e, track)}
                   class="group flex h-[56px] w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-1.5 py-1 text-left transition-colors {playing
-                    ? 'bg-[var(--lw-accent)]/12'
-                    : 'hover:bg-white/[0.05]'}"
+                    ? 'bg-[var(--lw-accent-subtle)]'
+                    : 'hover:bg-[var(--lw-wash-hover)]'}"
                 >
                   <div class="relative h-[44px] w-[44px] shrink-0 overflow-hidden rounded-[8px]">
-                    <Artwork src={track.artworkUrl} alt={track.title} size={44} radius={8} />
+                    <Artwork src={track.artworkUrl} label={track.title} artist={track.artist} kind="track" alt={track.title} size={44} radius={8} />
                     <div
                       class="absolute inset-0 flex items-center justify-center bg-black/55 text-white transition-opacity {playing
                         ? 'opacity-100'
@@ -197,7 +198,7 @@
           {/if}
 
           {#if shelf.trackCards.length > 0}
-            <div class="lw-scroll-x flex gap-3 py-1">
+            <div use:waveSmoothScroll={{ axis: 'x', drag: true }} class="lw-scroll-x flex gap-3 py-1">
               {#each shelf.trackCards as track (`card-${shelf.title}-${track.id}`)}
                 <button
                   type="button"
@@ -206,7 +207,7 @@
                   class="group w-[160px] shrink-0 cursor-pointer text-left"
                 >
                   <div class="relative overflow-hidden rounded-[12px] transition-all duration-[110ms] ease-[var(--ease-wave)] group-hover:scale-[1.03] group-hover:shadow-[var(--lw-shadow-lift)] group-active:scale-[0.97]">
-                    <Artwork src={track.artworkUrl} alt={track.title} size={160} radius={12} />
+                    <Artwork src={track.artworkUrl} label={track.title} artist={track.artist} kind="track" alt={track.title} size={160} radius={12} />
                     <div class="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-transparent to-black/55 opacity-0 transition-opacity duration-[110ms] group-hover:opacity-100">
                       <div class="flex h-11 w-11 scale-75 items-center justify-center rounded-full bg-[var(--lw-accent)] text-[var(--lw-on-accent)] shadow-[0_4px_12px_rgba(0,0,0,0.4)] transition-transform duration-[110ms] group-hover:scale-100">
                         <WaveIcon name="play" size={18} filled />
@@ -221,7 +222,7 @@
           {/if}
 
           {#if shelf.entities.length > 0}
-            <div class="lw-scroll-x flex gap-3.5 py-1">
+            <div use:waveSmoothScroll={{ axis: 'x', drag: true }} class="lw-scroll-x flex gap-3.5 py-1">
               {#each shelf.entities as entity (`ent-${shelf.title}-${entity.id}`)}
                 {#if entity.kind === 'artist'}
                   <button
@@ -230,7 +231,7 @@
                     class="group w-[144px] shrink-0 cursor-pointer text-center"
                   >
                     <div class="mx-auto w-[124px] transition-transform duration-[110ms] ease-[var(--ease-wave)] group-hover:scale-[1.03] group-active:scale-[0.97]">
-                      <Artwork src={entity.artworkUrl} alt={entity.name} size={124} circle shadow="lift" />
+                      <Artwork src={entity.artworkUrl} label={entity.name} kind="artist" alt={entity.name} size={124} circle shadow="lift" />
                     </div>
                     <div class="mt-2.5 truncate text-[13px] font-semibold">{entity.name}</div>
                     <div class="truncate text-[11.5px] text-[var(--lw-text-tertiary)]">{entity.subtitle || 'Artist'}</div>
@@ -242,7 +243,7 @@
                     class="group w-[160px] shrink-0 cursor-pointer text-left"
                   >
                     <div class="relative overflow-hidden rounded-[12px] transition-all duration-[110ms] ease-[var(--ease-wave)] group-hover:scale-[1.03] group-hover:shadow-[var(--lw-shadow-lift)] group-active:scale-[0.97]">
-                      <Artwork src={entity.artworkUrl} alt={entity.name} size={160} radius={12} />
+                      <Artwork src={entity.artworkUrl} label={entity.name} artist={entity.subtitle} kind="album" alt={entity.name} size={160} radius={12} />
                       <div class="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-transparent to-black/55 opacity-0 transition-opacity duration-[110ms] group-hover:opacity-100">
                         <div class="flex h-11 w-11 scale-75 items-center justify-center rounded-full bg-[var(--lw-accent)] text-[var(--lw-on-accent)] shadow-[0_4px_12px_rgba(0,0,0,0.4)] transition-transform duration-[110ms] group-hover:scale-100">
                           <WaveIcon name="play" size={18} filled />
@@ -265,11 +266,11 @@
     <WaveEntrance index={3}>
       <section class="space-y-2.5">
         <div class="flex items-end justify-between">
-          <h2 class="text-[20px] font-bold tracking-[-0.015em]">Quick Picks</h2>
+          <h2 class="text-[15.5px] font-semibold tracking-[-0.1px]">Quick Picks</h2>
           <button
             type="button"
             onclick={() => quickPicks[0] && playTrackNow(quickPicks[0], quickPicks)}
-            class="cursor-pointer rounded-[8px] px-2 py-1 text-[12px] font-semibold text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
+            class="cursor-pointer rounded-[6px] px-2 py-1 text-[12px] font-medium text-[var(--lw-accent)] hover:underline"
           >
             Play all
           </button>
@@ -283,11 +284,11 @@
               onclick={() => playTrackNow(track, quickPicks)}
               oncontextmenu={(e) => contextMenu.showForTrack(e, track)}
               class="group flex h-[56px] w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-1.5 py-1 text-left transition-colors {playing
-                ? 'bg-[var(--lw-accent)]/12'
+                ? 'bg-[var(--lw-accent-subtle)]'
                 : 'hover:bg-[var(--lw-wash-hover)]'}"
             >
               <div class="relative h-[44px] w-[44px] shrink-0 overflow-hidden rounded-[8px]">
-                <Artwork src={track.artworkUrl} alt={track.title} size={44} radius={8} />
+                <Artwork src={track.artworkUrl} label={track.title} artist={track.artist} kind="track" alt={track.title} size={44} radius={8} />
                 <div
                   class="absolute inset-0 flex items-center justify-center bg-black/55 text-white transition-opacity {playing
                     ? 'opacity-100'
@@ -364,7 +365,7 @@
       <section class="space-y-2">
         <div>
           <div class="text-[10px] font-bold tracking-[1px] text-[var(--lw-text-tertiary)] uppercase">CHARTS</div>
-          <h2 class="text-[20px] font-bold tracking-[-0.015em]">Trending Now</h2>
+          <h2 class="text-[15.5px] font-semibold tracking-[-0.1px]">Trending Now</h2>
         </div>
 
         <div class="space-y-0.5">

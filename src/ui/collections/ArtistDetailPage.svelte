@@ -8,6 +8,7 @@
   import DesktopTable from '$src/ui/components/DesktopTable.svelte';
   import HeroHeader from '$src/ui/components/HeroHeader.svelte';
   import Shelf from '$src/ui/components/Shelf.svelte';
+  import Skeletons from '$src/ui/components/Skeletons.svelte';
   import { goAlbum } from '$src/ui/navigation/waveNav';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
 
@@ -81,8 +82,11 @@
       circleArt
     >
       {#snippet actions()}
-        <Buttons variant="primary" onclick={() => topTracks[0] && playTrackNow(topTracks[0], topTracks)}>
+        <Buttons variant="primary" disabled={topTracks.length === 0} onclick={() => topTracks[0] && playTrackNow(topTracks[0], topTracks)}>
           <WaveIcon name="play" size={15} filled /> Play Top Tracks
+        </Buttons>
+        <Buttons variant="secondary" disabled={topTracks.length === 0} onclick={() => { const s = [...topTracks].sort(() => Math.random() - 0.5); s[0] && playTrackNow(s[0], s); }}>
+          <WaveIcon name="shuffle" size={14} /> Shuffle
         </Buttons>
         <Buttons variant="secondary" onclick={() => libraryStore.toggleFollowArtist(artist.id)}>
           {artist.isFollowing ? 'Following' : 'Follow'}
@@ -91,7 +95,7 @@
     </HeroHeader>
 
     {#if loading && topTracks.length === 0}
-      <div class="py-8 text-center text-[13px] text-[var(--lw-text-secondary)]">Loading artist tracks...</div>
+      <Skeletons variant="rows" rows={6} />
     {:else if topTracks.length > 0}
       <Shelf title="Popular">
         <DesktopTable tracks={topTracks} />
@@ -100,10 +104,10 @@
 
     {#if discography.length > 0}
       <Shelf title="Discography">
-        <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div class="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-6">
           {#each discography as album (album.id)}
-            <button type="button" onclick={() => goAlbum(album.id)} class="cursor-pointer rounded-[14px] p-2 text-left hover:bg-[var(--lw-wash-hover)]">
-              <Artwork src={album.artworkUrl} radius={12} class="aspect-square w-full" />
+            <button type="button" onclick={() => goAlbum(album.id)} class="cursor-pointer rounded-[12px] p-2 text-left transition-colors hover:bg-[var(--lw-wash-hover)]">
+              <Artwork src={album.artworkUrl} label={album.title} artist={album.artist} kind="album" radius={10} class="aspect-square w-full" />
               <div class="mt-2 truncate text-[13px] font-semibold">{album.title}</div>
               <div class="truncate text-[12px] text-[var(--lw-text-secondary)]">
                 {album.year ? `${album.year} · ` : ''}{album.type}
@@ -114,6 +118,9 @@
       </Shelf>
     {/if}
   {:else if loading}
-    <div class="py-12 text-center text-[13px] text-[var(--lw-text-secondary)]">Loading artist...</div>
+    <Skeletons variant="feature" />
+    <div class="mt-6">
+      <Skeletons variant="rows" rows={6} />
+    </div>
   {/if}
 </div>

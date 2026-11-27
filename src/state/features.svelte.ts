@@ -64,6 +64,40 @@ export const EQ_FREQUENCIES = [
   31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000,
 ];
 
+export interface ClarityPreset {
+  key: 'reference' | 'speaker' | 'headphone' | 'dac';
+  displayName: string;
+  description: string;
+  trimsDb: number[];
+}
+
+export const CLARITY_PRESETS: ReadonlyArray<ClarityPreset> = [
+  {
+    key: 'reference',
+    displayName: 'Reference',
+    description: 'Unmodified audiophile reference curve; all stage trims 0 dB.',
+    trimsDb: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+  },
+  {
+    key: 'speaker',
+    displayName: 'Speaker',
+    description: 'Reduced sub-bass (-1.5 dB) and gentler air (-0.5 dB) for small desktop drivers.',
+    trimsDb: [0.0, -1.5, 0.0, 0.0, 0.0, -0.5, 0.0, 0.0],
+  },
+  {
+    key: 'headphone',
+    displayName: 'Headphone',
+    description: 'Lighter bass (-0.5 dB) and softer presence (-1.0 dB) for close-coupled drivers.',
+    trimsDb: [0.0, -0.5, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0],
+  },
+  {
+    key: 'dac',
+    displayName: 'DAC',
+    description: 'Gentler air (-1.5 dB shelf, -1.0 dB exciter) for revealing external DAC chains.',
+    trimsDb: [0.0, 0.0, 0.0, 0.0, 0.0, -1.5, 0.0, -1.0],
+  },
+];
+
 export const EQ_PRESETS: Record<string, number[]> = {
   Default: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
   'Studio Master': [2.7, 2.2, 0.6, -2.6, -0.6, 1.2, 3.0, 4.0, 4.3, 4.8],
@@ -150,6 +184,7 @@ class FeaturesStore {
   eqBands = $state<number[]>([...EQ_PRESETS.Default]);
   eqPreampDb = $state(0);
   studioClarity = $state(false);
+  clarityPresetKey = $state<'reference' | 'speaker' | 'headphone' | 'dac'>('reference');
   headphoneProfile = $state('off');
 
   devices = $state<AudioDevice[]>([]);
@@ -201,10 +236,15 @@ class FeaturesStore {
       presetName?: string;
       gainsDb?: number[];
       studioClarityEnabled?: boolean;
+      clarityPresetKey?: string;
     }>('eq_get_state');
     if (!eq) return;
     if (typeof eq.enabled === 'boolean') this.eqEnabled = eq.enabled;
     if (typeof eq.studioClarityEnabled === 'boolean') this.studioClarity = eq.studioClarityEnabled;
+    if (typeof eq.clarityPresetKey === 'string') {
+      const matched = CLARITY_PRESETS.find((p) => p.key === eq.clarityPresetKey);
+      if (matched) this.clarityPresetKey = matched.key;
+    }
     if (typeof eq.presetName === 'string' && eq.presetName) this.eqPreset = eq.presetName;
     if (Array.isArray(eq.gainsDb) && eq.gainsDb.length === this.eqBands.length) {
       this.eqBands = [...eq.gainsDb];
@@ -434,6 +474,48 @@ class FeaturesStore {
       this.lyricsInFlight.delete(track.id);
       this.lyricsLoading = false;
     }
+  }
+
+  get combinedEqGainsDb(): number[] {
+    const clarity = CLARITY_PRESETS.find((p) => p.key === this.clarityPresetKey) ?? CLARITY_PRESETS[0];
+    const sm = EQ_PRESETS['Studio Master'];
+    return EQ_FREQUENCIES.map((_, i) => {
+      let gain = this.eqEnabled ? (this.eqBands[i] ?? 0) : 0;
+      if (this.studioClarity) {
+        let trim = 0;
+        if (i === 1) trim = clarity.trimsDb[1];
+        else if (i === 3) trim = clarity.trimsDb[2];
+        else if (i === 4) trim = clarity.trimsDb[3];
+        else if (i === 6 || i === 7) trim = clarity.trimsDb[4];
+        else if (i >= 8) {
+          trim = clarity.trimsDb[5];
+          if (i === 9) trim += clarity.trimsDb[7];
+        }
+        gain += (sm[i] ?? 0) + trim;
+      }
+      return Math.max(-8, Math.min(8, gain));
+    });
+  }
+
+  setEqEnabled(enabled: boolean) {
+    this.eqEnabled = enabled;
+    void ipcInvoke('eq_set_enabled', { enabled });
+  }
+
+  setStudioClarityEnabled(enabled: boolean) {
+    this.studioClarity = enabled;
+    void ipcInvoke('eq_set_studio_clarity_enabled', { enabled });
+  }
+
+  setClarityPreset(key: ClarityPreset['key']) {
+    this.clarityPresetKey = key;
+    void ipcInvoke('eq_set_clarity_preset', { key });
+  }
+
+  resetEq() {
+    this.eqPreset = 'Default';
+    this.eqBands = [...EQ_PRESETS.Default];
+    void ipcInvoke('eq_reset');
   }
 
   applyEqPreset(name: string) {

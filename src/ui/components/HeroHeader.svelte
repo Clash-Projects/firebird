@@ -25,7 +25,17 @@
 
 <header data-lw="hero-header" class="flex flex-col items-start gap-3 pb-5 sm:flex-row sm:items-end sm:gap-5">
   {#if artworkUrl !== undefined}
-    <Artwork src={artworkUrl} alt={title} size={168} radius={12} circle={circleArt} shadow="artwork" />
+    <Artwork
+      src={artworkUrl}
+      label={title}
+      kind={circleArt ? 'artist' : 'album'}
+      artist={circleArt ? title : subtitle ?? ''}
+      alt={title}
+      size={168}
+      radius={12}
+      circle={circleArt}
+      shadow="artwork"
+    />
   {/if}
   <div class="min-w-0 flex-1">
     {#if overline}

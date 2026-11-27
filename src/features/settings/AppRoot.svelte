@@ -31,6 +31,10 @@
     void settingsStore.accentColor;
     void settingsStore.accentSource;
     void settingsStore.glassmorphism;
+    void settingsStore.hazeMaterial;
+    void settingsStore.hazeIntensity;
+    void settingsStore.liquidGlass;
+    void settingsStore.performanceMode;
     void settingsStore.appFont;
     void settingsStore.uiScale;
     void playerStore.currentTrack?.accentColor;
@@ -38,7 +42,8 @@
   });
 
   $effect(() => {
-    document.documentElement.toggleAttribute('data-reduced-motion', settingsStore.reduceMotion);
+    const reduced = settingsStore.reduceMotion || settingsStore.performanceMode;
+    document.documentElement.toggleAttribute('data-reduced-motion', reduced);
   });
 
   $effect(() => {

@@ -28,7 +28,7 @@
   }
 </script>
 
-<dialog bind:this={dialogEl} onclose={onClose} aria-labelledby="share-lyric-title" class="w-full max-w-[420px]">
+<dialog bind:this={dialogEl} closedby="any" onclose={onClose} aria-labelledby="share-lyric-title" class="lw-dialog w-full max-w-[420px]">
   <div class="p-6">
     <h1 id="share-lyric-title" class="text-[16px] font-bold">Share Lyric Card</h1>
     <div

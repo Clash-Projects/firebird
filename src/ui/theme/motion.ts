@@ -4,10 +4,11 @@ import { fly } from 'svelte/transition';
 import { settingsStore } from '$src/state/settings.svelte';
 import { WaveMotion } from './tokens';
 
-export const WAVE_ENTRANCE_STEP_MS = 36;
-export const WAVE_ENTRANCE_ITEM_MS = 260;
+// Matches LastWave Desktop motion.dart (origin/HEAD smooth desktop transitions)
+export const WAVE_ENTRANCE_STEP_MS = 25;
+export const WAVE_ENTRANCE_ITEM_MS = 160;
 export const WAVE_ENTRANCE_MAX_STAGGER = 4;
-export const WAVE_ENTRANCE_RISE_PX = 9;
+export const WAVE_ENTRANCE_RISE_PX = 8;
 
 export function entranceDelayMs(index: number): number {
   return Math.min(Math.max(0, index), WAVE_ENTRANCE_MAX_STAGGER) * WAVE_ENTRANCE_STEP_MS;

@@ -3,6 +3,7 @@
   import { featuresStore } from '$src/state/features.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import Input from '$src/ui/components/Input.svelte';
+  import { waveTooltip } from '$src/ui/components/tooltip';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
 
   interface Props {
@@ -75,7 +76,8 @@
         <button
           type="button"
           onclick={onClose}
-          title="Close"
+          use:waveTooltip={'Close'}
+          aria-label="Close"
           class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[8px] text-[var(--lw-text-tertiary)] transition-colors duration-[160ms] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
         >
           <WaveIcon name="close" size={16} />
@@ -83,9 +85,9 @@
       </div>
 
       <p class="mt-2.5 text-[12.5px] leading-relaxed text-[var(--lw-text-secondary)]">
-        Enter <code class="rounded bg-white/8 px-1.5 py-0.5 text-[11.5px]">owner/repo</code>,
-        <code class="rounded bg-white/8 px-1.5 py-0.5 text-[11.5px]">owner/repo@commit</code>, or a raw
-        <code class="rounded bg-white/8 px-1.5 py-0.5 text-[11.5px]">manifest.json</code> URL. Repositories without a pinned commit resolve the latest SHA via the GitHub API.
+        Enter <code class="rounded bg-[var(--lw-wash)] px-1.5 py-0.5 text-[11.5px]">owner/repo</code>,
+        <code class="rounded bg-[var(--lw-wash)] px-1.5 py-0.5 text-[11.5px]">owner/repo@commit</code>, or a raw
+        <code class="rounded bg-[var(--lw-wash)] px-1.5 py-0.5 text-[11.5px]">manifest.json</code> URL. Repositories without a pinned commit resolve the latest SHA via the GitHub API.
       </p>
 
       <form onsubmit={handleSubmit} class="mt-4 space-y-3">

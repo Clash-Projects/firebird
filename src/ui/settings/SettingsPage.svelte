@@ -1,7 +1,7 @@
 <script lang="ts">
   import { windowState } from '$src/app/window.svelte';
   import { getPlatformAudioCopy } from '$src/features/audio_output/platformAudio';
-  import { APP_FONTS } from '$src/features/settings/appFonts.svelte';
+  import { APP_FONTS, ensureWebFontLoaded, fontFamilyFor } from '$src/features/settings/appFonts.svelte';
   import { setCustomBase, setThemeMode, syncThemeDocument } from '$src/features/settings/themeController.svelte';
   import { setUiScale, UI_SCALE_OPTIONS } from '$src/features/settings/uiScale.svelte';
   import NowPlayingStylePicker from '$src/features/settings/widgets/NowPlayingStylePicker.svelte';
@@ -9,12 +9,21 @@
   import { pluginManager } from '$src/lib/plugins/pluginManager.svelte';
   import { featuresStore, LYRICS_PROVIDERS } from '$src/state/features.svelte';
   import { playerStore } from '$src/state/player.svelte';
-  import { settingsStore, THEME_MODES } from '$src/state/settings.svelte';
+  import {
+    settingsStore,
+    THEME_MODES,
+    type AmbientStyle,
+    type HazeIntensity,
+    type HazeMaterial,
+  } from '$src/state/settings.svelte';
   import LastfmKeyGuide from '$src/ui/auth/LastfmKeyGuide.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import Input from '$src/ui/components/Input.svelte';
   import Select from '$src/ui/components/Select.svelte';
   import Switch from '$src/ui/components/Switch.svelte';
+  import WaveSlider from '$src/ui/components/WaveSlider.svelte';
+  import { waveTooltip } from '$src/ui/components/tooltip';
+  import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
   import { CUSTOM_THEME_PRESETS } from '$src/ui/theme/tokens';
   import WaveIcon, { type WaveIconName } from '$src/ui/theme/WaveIcon.svelte';
   import BackupSettings from './BackupSettings.svelte';
@@ -172,13 +181,13 @@
       <div class="text-[10.5px] font-bold tracking-[1px] text-[var(--lw-accent)] uppercase">SYSTEM</div>
       <h1 class="mb-3 text-[22px] font-bold tracking-[-0.4px]">Settings</h1>
 
-      <nav class="lw-scroll flex-1 space-y-0.5 pb-6">
+      <nav use:waveSmoothScroll class="lw-scroll flex-1 space-y-0.5 pb-6">
         {#each sections as sec (sec.id)}
           {@const active = activeSection === sec.id}
           <button
             type="button"
             onclick={() => (activeSection = sec.id)}
-            class="flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-3 text-[13px] transition-all duration-[160ms] ease-[var(--ease-native)] {active
+            class="flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-3 text-[13px] transition-all duration-[160ms] ease-[var(--ease-native)] {active
               ? 'bg-[var(--lw-wash-pressed)] font-semibold text-[var(--lw-text-primary)]'
               : 'text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]'}"
           >
@@ -189,16 +198,16 @@
       </nav>
     </aside>
 
-    <div class="settings-section lw-scroll min-w-0 max-w-[780px] flex-1 space-y-5 pb-12 pr-2">
-      <h2 class="text-[20px] font-bold tracking-[-0.3px]">
+    <div use:waveSmoothScroll class="settings-section lw-scroll min-w-0 max-w-[780px] flex-1 space-y-5 pb-12 pr-2">
+      <h2 class="text-[18px] font-bold tracking-[-0.2px]">
         {sections.find((s) => s.id === activeSection)?.label ?? 'Settings'}
       </h2>
 
       {#if activeSection === 'general'}
-        <div class="space-y-3">
-          <div class="settings-select-row rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+        <div class="divide-y divide-[var(--lw-divider)] rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)]">
+          <div class="settings-select-row px-4 py-3.5">
             <div>
-              <div class="text-[13.5px] font-semibold">Language</div>
+              <div class="text-[13px] font-semibold">Language</div>
               <div class="text-[12px] text-[var(--lw-text-secondary)]">Interface display language</div>
             </div>
             <Select
@@ -217,9 +226,9 @@
             />
           </div>
 
-          <div class="settings-select-row rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+          <div class="settings-select-row px-4 py-3.5">
             <div>
-              <div class="text-[13.5px] font-semibold">UI Scale</div>
+              <div class="text-[13px] font-semibold">UI Scale</div>
               <div class="text-[12px] text-[var(--lw-text-secondary)]">Adjust desktop interface density</div>
             </div>
             <Select
@@ -234,9 +243,9 @@
             />
           </div>
 
-          <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
+          <div class="flex items-center justify-between px-4 py-3.5">
             <div>
-              <div class="text-[13.5px] font-semibold">Diagnostic Logs</div>
+              <div class="text-[13px] font-semibold">Diagnostic Logs</div>
               <div class="text-[12px] text-[var(--lw-text-secondary)]">Export redacted playback, mpv, and network session logs (.zip)</div>
             </div>
             <div class="flex items-center gap-3">
@@ -284,9 +293,9 @@
           {/if}
 
           <div
-            class="space-y-2.5 rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4 transition-opacity {activePluginTheme || activePluginPalette ? 'pointer-events-none opacity-45' : ''}"
+            class="space-y-2.5 rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4 transition-opacity {activePluginTheme || activePluginPalette ? 'pointer-events-none opacity-45' : ''}"
           >
-            <div class="text-[13.5px] font-semibold">Theme Mode</div>
+            <div class="text-[13px] font-semibold">Theme Mode</div>
             <div class="flex flex-wrap gap-2">
               {#each THEME_MODES as mode (mode.value)}
                 <Buttons
@@ -306,100 +315,202 @@
                 <button
                   type="button"
                   onclick={() => setCustomBase(preset.color)}
-                  title={preset.name}
-                  class="h-7 w-7 cursor-pointer rounded-full border border-white/20 transition-transform hover:scale-110"
+                  use:waveTooltip={preset.name}
+                  aria-label={`Use ${preset.name} base color`}
+                  class="h-7 w-7 cursor-pointer rounded-full border border-[var(--lw-outline)] transition-transform hover:scale-110"
                   style:background={preset.color}
                 ></button>
               {/each}
             </div>
           </div>
 
-          <div class="settings-select-row rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-            <div>
-              <div class="text-[13.5px] font-semibold">Accent Source</div>
-              <div class="text-[12px] text-[var(--lw-text-secondary)]">Theme default, system, artwork, or custom</div>
+          <div class="divide-y divide-[var(--lw-divider)] rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)]">
+            <div class="settings-select-row px-4 py-3.5">
+              <div>
+                <div class="text-[13px] font-semibold">Accent Source</div>
+                <div class="text-[12px] text-[var(--lw-text-secondary)]">Theme default, system, artwork, or custom</div>
+              </div>
+              <Select
+                label="Accent Source"
+                value={settingsStore.accentSource}
+                options={[
+                  { value: 'lastwave', label: 'Theme Default' },
+                  { value: 'artwork', label: 'Artwork Tint' },
+                  { value: 'system', label: 'System Accent' },
+                  { value: 'custom', label: 'Custom Colour' },
+                ]}
+                onchange={(v) => {
+                  settingsStore.accentSource = v as typeof settingsStore.accentSource;
+                  settingsStore.saveStringPref('lw_accent_mode', v);
+                  settingsStore.saveStringPref('lw_accent_source', v);
+                  syncThemeDocument();
+                }}
+              />
             </div>
-            <Select
-              label="Accent Source"
-              value={settingsStore.accentSource}
-              options={[
-                { value: 'lastwave', label: 'Theme Default' },
-                { value: 'artwork', label: 'Artwork Tint' },
-                { value: 'system', label: 'System Accent' },
-                { value: 'custom', label: 'Custom Colour' },
-              ]}
-              onchange={(v) => {
-                settingsStore.accentSource = v as typeof settingsStore.accentSource;
-                settingsStore.saveStringPref('lw_accent_mode', v);
-                settingsStore.saveStringPref('lw_accent_source', v);
-                syncThemeDocument();
-              }}
-            />
-          </div>
 
-          <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-            <div>
-              <div class="text-[13.5px] font-semibold">Glassmorphism</div>
-              <div class="text-[12px] text-[var(--lw-text-secondary)]">Translucent surfaces over an app-wide artwork aura</div>
+            <div class="settings-select-row px-4 py-3.5">
+              <div>
+                <div class="text-[13px] font-semibold">App Font</div>
+                <div class="text-[12px] text-[var(--lw-text-secondary)]">System default or typography preset</div>
+              </div>
+              <Select
+                label="App Font"
+                value={settingsStore.appFont}
+                options={APP_FONTS.map((f) => ({
+                  value: f.id,
+                  label: f.label,
+                  fontFamily: fontFamilyFor(f.id) || undefined,
+                }))}
+                onchange={(v) => {
+                  settingsStore.appFont = v;
+                  settingsStore.saveStringPref('lw_app_font', v);
+                  void ensureWebFontLoaded(v);
+                  syncThemeDocument();
+                }}
+              />
             </div>
-            <Switch
-              checked={settingsStore.glassmorphism}
-              onchange={(checked) => {
-                settingsStore.glassmorphism = checked;
-                settingsStore.saveBoolPref('lw_glassmorphism', settingsStore.glassmorphism);
-                syncThemeDocument();
-              }}
-            />
-          </label>
 
-          <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-            <div>
-              <div class="text-[13.5px] font-semibold">Liquid Glass</div>
-              <div class="text-[12px] text-[var(--lw-text-secondary)]">Thinner surface fill with wider blur sigma</div>
+            <div class="settings-select-row px-4 py-3.5">
+              <div>
+                <div class="text-[13px] font-semibold">Surface Material</div>
+                <div class="text-[12px] text-[var(--lw-text-secondary)]">Automatic backdrop blur, translucent haze, or solid graphite</div>
+              </div>
+              <Select
+                label="Surface Material"
+                value={settingsStore.hazeMaterial}
+                options={[
+                  { value: 'automatic', label: 'Automatic' },
+                  { value: 'haze', label: 'Translucent Haze' },
+                  { value: 'solid', label: 'Solid Opaque' },
+                ]}
+                onchange={(v) => {
+                  settingsStore.hazeMaterial = v as HazeMaterial;
+                  settingsStore.saveStringPref('lw_haze_material', v);
+                  syncThemeDocument();
+                }}
+              />
             </div>
-            <Switch
-              checked={settingsStore.liquidGlass}
-              onchange={(checked) => {
-                settingsStore.liquidGlass = checked;
-                settingsStore.saveBoolPref('lw_liquid_glass', settingsStore.liquidGlass);
-                syncThemeDocument();
-              }}
-            />
-          </label>
 
-          <label class="flex cursor-pointer items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-            <div>
-              <div class="text-[13.5px] font-semibold">Wavy Seekbar</div>
-              <div class="text-[12px] text-[var(--lw-text-secondary)]">Draw dock playback timeline as a styled progress bar</div>
+            <div class="settings-select-row px-4 py-3.5">
+              <div>
+                <div class="text-[13px] font-semibold">Haze Intensity</div>
+                <div class="text-[12px] text-[var(--lw-text-secondary)]">Backdrop blur radius &amp; opacity strength</div>
+              </div>
+              <Select
+                label="Haze Intensity"
+                value={settingsStore.hazeIntensity}
+                options={[
+                  { value: 'low', label: 'Low' },
+                  { value: 'medium', label: 'Medium' },
+                  { value: 'high', label: 'High' },
+                ]}
+                onchange={(v) => {
+                  settingsStore.hazeIntensity = v as HazeIntensity;
+                  settingsStore.saveStringPref('lw_haze_intensity', v);
+                  syncThemeDocument();
+                }}
+              />
             </div>
-            <Switch
-              checked={settingsStore.wavySeekbar}
-              onchange={(checked) => {
-                settingsStore.wavySeekbar = checked;
-                settingsStore.saveBoolPref('lw_wavy_seekbar', settingsStore.wavySeekbar);
-              }}
-            />
-          </label>
 
-          <div class="settings-select-row rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-            <div>
-              <div class="text-[13.5px] font-semibold">App Font</div>
-              <div class="text-[12px] text-[var(--lw-text-secondary)]">System default or typography preset</div>
+            <div class="settings-select-row px-4 py-3.5">
+              <div>
+                <div class="text-[13px] font-semibold">Ambient Style</div>
+                <div class="text-[12px] text-[var(--lw-text-secondary)]">Background artwork wash behind Now Playing</div>
+              </div>
+              <Select
+                label="Ambient Style"
+                value={settingsStore.ambientStyle}
+                options={[
+                  { value: 'aurora', label: 'Aurora' },
+                  { value: 'mesh', label: 'Quad Mesh' },
+                  { value: 'wash', label: 'Subtle Wash' },
+                  { value: 'off', label: 'Off' },
+                ]}
+                onchange={(v) => {
+                  settingsStore.ambientStyle = v as AmbientStyle;
+                  settingsStore.saveStringPref('lw_ambient_style', v);
+                  syncThemeDocument();
+                }}
+              />
             </div>
-            <Select
-              label="App Font"
-              value={settingsStore.appFont}
-              options={APP_FONTS.map((f) => ({ value: f.id, label: f.label }))}
-              onchange={(v) => {
-                settingsStore.appFont = v;
-                settingsStore.saveStringPref('lw_app_font', v);
-                syncThemeDocument();
-              }}
-            />
+
+            <label class="flex cursor-pointer items-center justify-between px-4 py-3.5">
+              <div>
+                <div class="text-[13px] font-semibold">Glassmorphism</div>
+                <div class="text-[12px] text-[var(--lw-text-secondary)]">Translucent floating dock and panel backdrop</div>
+              </div>
+              <Switch
+                checked={settingsStore.glassmorphism}
+                onchange={(checked) => {
+                  settingsStore.glassmorphism = checked;
+                  settingsStore.saveBoolPref('lw_glassmorphism', settingsStore.glassmorphism);
+                  syncThemeDocument();
+                }}
+              />
+            </label>
+
+            <label class="flex cursor-pointer items-center justify-between px-4 py-3.5">
+              <div>
+                <div class="text-[13px] font-semibold">Liquid Glass</div>
+                <div class="text-[12px] text-[var(--lw-text-secondary)]">Thinner surface fill with wider blur sigma</div>
+              </div>
+              <Switch
+                checked={settingsStore.liquidGlass}
+                onchange={(checked) => {
+                  settingsStore.liquidGlass = checked;
+                  settingsStore.saveBoolPref('lw_liquid_glass', settingsStore.liquidGlass);
+                  syncThemeDocument();
+                }}
+              />
+            </label>
+
+            <label class="flex cursor-pointer items-center justify-between px-4 py-3.5">
+              <div>
+                <div class="text-[13px] font-semibold">Wavy Seekbar</div>
+                <div class="text-[12px] text-[var(--lw-text-secondary)]">Draw dock playback timeline as a styled progress bar</div>
+              </div>
+              <Switch
+                checked={settingsStore.wavySeekbar}
+                onchange={(checked) => {
+                  settingsStore.wavySeekbar = checked;
+                  settingsStore.saveBoolPref('lw_wavy_seekbar', settingsStore.wavySeekbar);
+                }}
+              />
+            </label>
+
+            <label class="flex cursor-pointer items-center justify-between px-4 py-3.5">
+              <div>
+                <div class="text-[13px] font-semibold">Reduce Motion</div>
+                <div class="text-[12px] text-[var(--lw-text-secondary)]">Minimize entrances, spring physics, and animated transitions</div>
+              </div>
+              <Switch
+                checked={settingsStore.reduceMotion}
+                onchange={(checked) => {
+                  settingsStore.reduceMotion = checked;
+                  settingsStore.saveBoolPref('lw_reduce_motion', settingsStore.reduceMotion);
+                  syncThemeDocument();
+                }}
+              />
+            </label>
+
+            <label class="flex cursor-pointer items-center justify-between px-4 py-3.5">
+              <div>
+                <div class="text-[13px] font-semibold">Performance Mode</div>
+                <div class="text-[12px] text-[var(--lw-text-secondary)]">Disable backdrop blur and heavy ambient effects on battery</div>
+              </div>
+              <Switch
+                checked={settingsStore.performanceMode}
+                onchange={(checked) => {
+                  settingsStore.performanceMode = checked;
+                  settingsStore.saveBoolPref('lw_performance_mode', settingsStore.performanceMode);
+                  syncThemeDocument();
+                }}
+              />
+            </label>
           </div>
 
           <div class="space-y-2">
-            <div class="text-[13.5px] font-semibold">Now Playing Style</div>
+            <div class="text-[13px] font-semibold">Now Playing Style</div>
             <NowPlayingStylePicker />
           </div>
         </div>
@@ -465,19 +576,19 @@
             />
           </label>
 
-          <div class="rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-            <div class="flex justify-between text-[13px]">
+          <div class="px-4 py-3.5 rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)]">
+            <div class="mb-2 flex justify-between text-[13px]">
               <span class="font-semibold">Perceptual Crossfade</span>
               <span class="lw-tabular">{playerStore.crossfadeSec}s</span>
             </div>
-            <input
-              type="range"
-              min="0"
-              max="12"
-              step="1"
+            <WaveSlider
+              min={0}
+              max={12}
+              step={1}
+              label="Perceptual Crossfade"
+              valuetext={`${playerStore.crossfadeSec} seconds`}
               value={playerStore.crossfadeSec}
-              onchange={(e) => updateCrossfade(Number(e.currentTarget.value))}
-              class="mt-2 h-1.5 w-full cursor-pointer accent-[var(--lw-accent)]"
+              oninput={(v) => updateCrossfade(v)}
             />
           </div>
         </div>
@@ -530,23 +641,22 @@
             />
           </label>
 
-          <div class="rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-            <div class="flex justify-between text-[13px]">
+          <div class="rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] px-4 py-3.5">
+            <div class="mb-2 flex justify-between text-[13px]">
               <span class="font-semibold">Lyrics Font Scale</span>
               <span class="lw-tabular">{Math.round(featuresStore.lyricsFontScale * 100)}%</span>
             </div>
-            <input
-              type="range"
-              min="0.85"
-              max="1.6"
-              step="0.05"
+            <WaveSlider
+              min={0.85}
+              max={1.6}
+              step={0.05}
+              label="Lyrics Font Scale"
+              valuetext={`${Math.round(featuresStore.lyricsFontScale * 100)}%`}
               value={featuresStore.lyricsFontScale}
-              onchange={(e) => {
-                const v = Number(e.currentTarget.value);
+              oninput={(v) => {
                 featuresStore.lyricsFontScale = v;
                 settingsStore.saveDoublePref('lw_lyrics_text_scale', v);
               }}
-              class="mt-2 h-1.5 w-full cursor-pointer accent-[var(--lw-accent)]"
             />
           </div>
         </div>

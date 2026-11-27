@@ -2,6 +2,8 @@
   export interface SelectOption<T extends string = string> {
     value: T;
     label: string;
+    hint?: string;
+    fontFamily?: string;
   }
 </script>
 
@@ -21,18 +23,36 @@
   bind:value
   aria-label={label}
   onchange={(e) => onchange?.((e.currentTarget as HTMLSelectElement).value as T)}
-  class="lw-select h-9 min-w-0 max-w-full cursor-pointer truncate rounded-[10px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] px-3 text-[13px] leading-tight text-[var(--lw-text-primary)] focus:border-[var(--lw-accent)] {className}"
+  class="lw-select h-9 min-w-[160px] max-w-full cursor-pointer truncate rounded-[8px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] px-3 text-[13px] leading-tight text-[var(--lw-text-primary)] focus:border-[var(--lw-accent)] {className}"
 >
+  <button type="button">
+    <selectedcontent></selectedcontent>
+  </button>
   {#each options as opt (opt.value)}
-    <option value={opt.value}>{opt.label}</option>
+    <option value={opt.value} style:font-family={opt.fontFamily || undefined}>
+      <span class="select-opt-row">
+        <span class="select-opt-label">{opt.label}</span>
+        {#if opt.hint}
+          <span class="select-opt-hint">{opt.hint}</span>
+        {/if}
+      </span>
+    </option>
   {/each}
 </select>
 
 <style>
   @supports (appearance: base-select) and selector(::picker(select)) {
-    select, select::picker(select) { appearance: base-select; }
+    select,
+    select::picker(select) {
+      appearance: base-select;
+    }
 
-    select { align-items: center; gap: 10px; }
+    select {
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
     select::picker-icon {
       align-self: center;
       flex-shrink: 0;
@@ -47,13 +67,13 @@
 
     select::picker(select) {
       box-sizing: border-box;
-      inline-size: anchor-size(self-inline);
-      min-inline-size: 0;
+      min-inline-size: anchor-size(self-inline);
+      max-inline-size: min(360px, 90vw);
       max-block-size: var(--lw-select-picker-max-height, min(360px, 60dvh));
       margin-block: 4px;
-      padding: 5px;
+      padding: 4px;
       border: 1px solid var(--lw-outline);
-      border-radius: 12px;
+      border-radius: 14px;
       background: var(--lw-surface-raised);
       color: var(--lw-text-primary);
       box-shadow: var(--lw-shadow-flyout);
@@ -61,9 +81,12 @@
       scrollbar-width: thin;
       opacity: 0;
       transform: scale(calc(1 - 0.025 * var(--lw-motion-factor)));
-      transform-origin: top right;
-      transition: opacity var(--lw-motion-fast) var(--ease-wave), transform var(--lw-motion-fast) var(--ease-wave),
-        display var(--lw-motion-fast), overlay var(--lw-motion-fast);
+      transform-origin: top left;
+      transition:
+        opacity var(--lw-motion-fast) var(--ease-wave),
+        transform var(--lw-motion-fast) var(--ease-wave),
+        display var(--lw-motion-fast),
+        overlay var(--lw-motion-fast);
       transition-behavior: allow-discrete;
     }
 
@@ -83,18 +106,41 @@
     option {
       min-height: 32px;
       padding: 6px 10px;
-      border-radius: 7px;
-      white-space: normal;
-      overflow-wrap: anywhere;
+      border-radius: 6px;
+      white-space: nowrap;
       transition: background-color var(--lw-motion-fast);
     }
 
-    option:checked { background: color-mix(in srgb, var(--lw-accent) 12%, transparent); font-weight: 650; }
-    option:focus-visible { outline-offset: -2px; }
+    .select-opt-row {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .select-opt-hint {
+      font-size: 11px;
+      color: var(--lw-text-tertiary);
+    }
+
+    option:checked {
+      background: var(--lw-wash-pressed);
+      font-weight: 600;
+    }
+
+    option:focus-visible {
+      outline: 2px solid var(--lw-focus-ring);
+      outline-offset: -2px;
+    }
 
     @media (hover: hover) {
-      select:not(:disabled):hover { border-color: color-mix(in srgb, var(--lw-text-secondary) 52%, var(--lw-outline)); }
-      option:not(:checked):hover { background: var(--lw-wash-hover); }
+      select:not(:disabled):hover {
+        border-color: color-mix(in srgb, var(--lw-text-secondary) 45%, var(--lw-outline));
+      }
+      option:not(:checked):hover {
+        background: var(--lw-wash-hover);
+      }
     }
   }
 </style>

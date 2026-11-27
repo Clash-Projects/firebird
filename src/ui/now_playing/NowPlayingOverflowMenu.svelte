@@ -9,6 +9,8 @@
   } from '$src/state/features.svelte';
   import { playerStore } from '$src/state/player.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
+  import { waveTooltip } from '$src/ui/components/tooltip';
+  import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import { immersiveState } from './immersive.svelte';
   import { NOW_PLAYING_STYLES } from './nowPlayingStyle';
@@ -99,10 +101,11 @@
         onToggleAmbient?.();
       }}
       aria-pressed={ambientEnabled}
-      title={ambientEnabled ? 'Disable ambient' : 'Enable ambient'}
+      use:waveTooltip={ambientEnabled ? 'Disable ambient' : 'Enable ambient'}
+      aria-label={ambientEnabled ? 'Disable ambient' : 'Enable ambient'}
       class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[6px] border transition {ambientEnabled
         ? 'border-[var(--lw-outline)] bg-[var(--lw-surface)] text-[var(--lw-accent)]'
-        : 'border-transparent bg-white/10 text-[var(--lw-text-secondary)] hover:bg-white/20 hover:text-[var(--lw-text-primary)]'}"
+        : 'border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]'}"
     >
       <WaveIcon name="sparkles" size={15} />
     </button>
@@ -112,10 +115,11 @@
     type="button"
     onclick={() => immersiveState.toggleImmersive()}
     aria-pressed={immersiveState.isImmersive}
-    title={immersiveState.isImmersive ? 'Exit fullscreen (F11)' : 'Fullscreen (F11)'}
+    use:waveTooltip={immersiveState.isImmersive ? 'Exit fullscreen (F11)' : 'Fullscreen (F11)'}
+    aria-label={immersiveState.isImmersive ? 'Exit fullscreen' : 'Fullscreen'}
     class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[6px] border transition {immersiveState.isImmersive
       ? 'border-[var(--lw-outline)] bg-[var(--lw-surface)] text-[var(--lw-accent)]'
-      : 'border-transparent bg-white/10 text-[var(--lw-text-secondary)] hover:bg-white/20 hover:text-[var(--lw-text-primary)]'}"
+      : 'border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]'}"
   >
     <WaveIcon name={immersiveState.isImmersive ? 'minimize' : 'maximize'} size={15} />
   </button>
@@ -124,8 +128,9 @@
     <button
       type="button"
       onclick={toggleMenu}
-      class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[6px] bg-white/10 text-[var(--lw-text-secondary)] transition hover:bg-white/20 hover:text-[var(--lw-text-primary)]"
-      title="More options"
+      class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[6px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] text-[var(--lw-text-secondary)] transition hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
+      use:waveTooltip={'More options'}
+      aria-label="More options"
       aria-expanded={open}
       aria-controls="lw-now-playing-options"
     >
@@ -136,7 +141,7 @@
       id="lw-now-playing-options"
       data-open={open}
       inert={!open}
-      class="lw-popover absolute right-0 top-10 z-40 w-[290px] rounded-[14px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] p-1.5 shadow-[var(--lw-shadow-flyout)]"
+      class="lw-popover absolute right-0 top-10 z-40 w-[290px] rounded-[12px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] p-1.5 shadow-[var(--lw-shadow-flyout)]"
     >
       {#if activeSubmenu !== null}
         <!-- Submenu View -->
@@ -161,7 +166,7 @@
           </span>
         </div>
 
-        <div class="lw-scroll max-h-[320px] space-y-0.5 overflow-y-auto p-1">
+        <div use:waveSmoothScroll class="lw-scroll max-h-[320px] space-y-0.5 overflow-y-auto p-1">
           {#if activeSubmenu === 'source'}
             {#each LYRICS_PROVIDERS as p (p.id)}
               <button
@@ -267,7 +272,7 @@
                 type="button"
                 onclick={() => featuresStore.adjustLyricsOffset(track.id, -500)}
                 class="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
-                title="-0.5s"
+                use:waveTooltip={'Delay -0.5s'}
               >−</button>
               <span class="min-w-[42px] text-center text-[12px] font-semibold {offsetMs !== 0 ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-primary)]'}">
                 {formatOffset(offsetMs)}
@@ -276,14 +281,14 @@
                 type="button"
                 onclick={() => featuresStore.adjustLyricsOffset(track.id, 500)}
                 class="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
-                title="+0.5s"
+                use:waveTooltip={'Advance +0.5s'}
               >+</button>
               {#if offsetMs !== 0}
                 <button
                   type="button"
                   onclick={() => featuresStore.resetLyricsOffset(track.id)}
                   class="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
-                  title="Reset to 0.0s"
+                  use:waveTooltip={'Reset to 0.0s'}
                 >
                   <WaveIcon name="close" size={11} />
                 </button>

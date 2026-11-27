@@ -11,18 +11,20 @@
 
   function openArtist(name: string, e: MouseEvent) {
     e.stopPropagation();
-    const match = libraryStore.artists.find((a) => a.name.toLowerCase().includes(name.toLowerCase()));
-    goArtist(match?.id ?? 'art-01');
+    const target = name.trim().toLowerCase();
+    const match = libraryStore.artists.find((a) => a.name.toLowerCase() === target)
+      ?? libraryStore.artists.find((a) => a.name.toLowerCase().includes(target));
+    goArtist(match?.id ?? encodeURIComponent(name.trim()));
   }
 </script>
 
 <span class="truncate text-[12px] text-[var(--lw-text-secondary)] {className}">
-  {#each artists as name, i (name)}
+  {#each artists as name, i (`${name}-${i}`)}
     {#if i > 0}<span>, </span>{/if}
     <button
       type="button"
       onclick={(e) => openArtist(name, e)}
-      class="cursor-pointer hover:text-[var(--lw-text-primary)] hover:underline"
+      class="cursor-pointer transition-colors duration-[120ms] hover:text-[var(--lw-text-primary)] hover:underline"
     >
       {name}
     </button>

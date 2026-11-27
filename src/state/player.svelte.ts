@@ -371,6 +371,24 @@ class PlayerStore {
     void ipcInvoke('player_clear_upcoming');
     this.emit('queueUpdate', this.queue);
   }
+
+  cycleSpeed() {
+    const steps = [0.75, 1.0, 1.25, 1.5, 2.0];
+    const idx = steps.findIndex((s) => Math.abs(s - this.speed) < 0.05);
+    const next = steps[(idx + 1) % steps.length];
+    this.setSpeed(next);
+  }
+
+  setSpeed(nextSpeed: number) {
+    const clamped = Math.max(0.5, Math.min(2.5, Math.round(nextSpeed * 100) / 100));
+    this.speed = clamped;
+    void ipcInvoke('player_set_speed', { speed: clamped });
+  }
+
+  setSleepTimer(minutes: number | null) {
+    this.sleepTimerMin = minutes;
+    void ipcInvoke('player_set_sleep_timer', { minutes });
+  }
 }
 
 export const playerStore = new PlayerStore();

@@ -4,6 +4,8 @@
   import { featuresStore, LYRICS_PROVIDERS } from '$src/state/features.svelte';
   import { playerStore } from '$src/state/player.svelte';
   import Select from '$src/ui/components/Select.svelte';
+  import { waveTooltip } from '$src/ui/components/tooltip';
+  import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
   import WaveHaze from '$src/ui/theme/WaveHaze.svelte';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import LyricsShareCard from './LyricsShareCard.svelte';
@@ -40,8 +42,8 @@
           type="button"
           onclick={() => (featuresStore.showRomanized = !featuresStore.showRomanized)}
           aria-pressed={featuresStore.showRomanized}
-          title="Toggle romanization"
-          class="flex h-7 cursor-pointer items-center gap-1 rounded-[8px] px-2 text-[11px] font-semibold hover:bg-[var(--lw-wash-hover)] {featuresStore.showRomanized ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'}"
+          use:waveTooltip={'Toggle romanization'}
+          class="flex h-7 cursor-pointer items-center gap-1 rounded-[6px] px-2 text-[11px] font-semibold hover:bg-[var(--lw-wash-hover)] {featuresStore.showRomanized ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'}"
         >
           Romaji
         </button>
@@ -49,16 +51,17 @@
           type="button"
           onclick={() => (featuresStore.showTranslation = !featuresStore.showTranslation)}
           aria-pressed={featuresStore.showTranslation}
-          title="Toggle translation"
-          class="flex h-7 cursor-pointer items-center gap-1 rounded-[8px] px-2 text-[11px] font-semibold hover:bg-[var(--lw-wash-hover)] {featuresStore.showTranslation ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'}"
+          use:waveTooltip={'Toggle translation'}
+          class="flex h-7 cursor-pointer items-center gap-1 rounded-[6px] px-2 text-[11px] font-semibold hover:bg-[var(--lw-wash-hover)] {featuresStore.showTranslation ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'}"
         >
           <WaveIcon name="globe" size={13} /> Translate
         </button>
         <button
           type="button"
+          use:waveTooltip={'Close lyrics'}
           onclick={() => windowState.closeRightPanel()}
           aria-label="Close lyrics"
-          class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-[8px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)]"
+          class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-[6px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)]"
         >
           <WaveIcon name="close" size={15} />
         </button>
@@ -82,26 +85,26 @@
             type="button"
             onclick={() => featuresStore.adjustLyricsOffset(track.id, -500)}
             class="h-6 w-5 cursor-pointer text-[var(--lw-text-secondary)] hover:text-[var(--lw-text-primary)]"
-            title="Delay -0.5s"
+            use:waveTooltip={'Delay -0.5s'}
           >−</button>
           <button
             type="button"
             onclick={() => featuresStore.resetLyricsOffset(track.id)}
             class="px-1 text-[var(--lw-text-secondary)] hover:text-[var(--lw-text-primary)]"
-            title="Reset timing offset"
+            use:waveTooltip={'Reset timing offset'}
           >{formatOffset(offsetMs)}</button>
           <button
             type="button"
             onclick={() => featuresStore.adjustLyricsOffset(track.id, 500)}
             class="h-6 w-5 cursor-pointer text-[var(--lw-text-secondary)] hover:text-[var(--lw-text-primary)]"
-            title="Advance +0.5s"
+            use:waveTooltip={'Advance +0.5s'}
           >+</button>
         </div>
       {/if}
     </div>
   </div>
 
-  <div class="flex min-h-0 flex-1 flex-col px-3">
+  <div use:waveSmoothScroll class="flex min-h-0 flex-1 flex-col px-3">
     <KaraokeLyricsView compact onShareLine={(text) => (shareText = text)} />
   </div>
 </WaveHaze>

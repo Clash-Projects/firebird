@@ -18,6 +18,7 @@
   } from '$src/lib/plugins/types';
   import { featuresStore } from '$src/state/features.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
+  import { waveTooltip } from '$src/ui/components/tooltip';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
 
   export type StoreDetailSelection =
@@ -266,7 +267,7 @@
     >
       <div class="flex items-center justify-between border-b border-[var(--lw-divider)] px-5 py-3.5">
         <div class="flex items-center gap-2 text-[12px] text-[var(--lw-text-secondary)]">
-          <span class="rounded-[6px] bg-white/8 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.5px] text-[var(--lw-text-primary)]">
+          <span class="rounded-[6px] bg-[var(--lw-wash)] px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.5px] text-[var(--lw-text-primary)]">
             {type}
           </span>
           <span class="rounded-[6px] bg-[var(--lw-success)]/12 px-2 py-0.5 text-[10.5px] font-medium text-[var(--lw-success)]">
@@ -277,7 +278,8 @@
         <button
           type="button"
           onclick={onClose}
-          title="Close (Esc)"
+          use:waveTooltip={'Close (Esc)'}
+          aria-label="Close"
           class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[8px] text-[var(--lw-text-tertiary)] transition-colors duration-[160ms] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
         >
           <WaveIcon name="close" size={16} />
@@ -289,7 +291,7 @@
         <div class="space-y-2.5">
           {#if hasUsableScreenshots}
             {@const currentUrl = previewUrls[activeSlide]}
-            <div class="group relative aspect-[16/10] w-full overflow-hidden rounded-[14px] border border-[rgba(255,255,255,0.08)] bg-[var(--lw-bg-deep)]">
+            <div class="group relative aspect-[16/10] w-full overflow-hidden rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-bg-deep)]">
               {#if currentUrl && !failedImgs[activeSlide]}
                 <img
                   src={currentUrl}
@@ -304,7 +306,8 @@
                 <button
                   type="button"
                   onclick={prevSlide}
-                  title="Previous image (Left Arrow)"
+                  use:waveTooltip={'Previous image (Left Arrow)'}
+                  aria-label="Previous image"
                   class="absolute left-3 top-1/2 flex h-9 w-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/65 text-white opacity-0 transition-opacity duration-[160ms] group-hover:opacity-100 hover:bg-black/85"
                 >
                   <WaveIcon name="chevronLeft" size={18} />
@@ -312,7 +315,8 @@
                 <button
                   type="button"
                   onclick={nextSlide}
-                  title="Next image (Right Arrow)"
+                  use:waveTooltip={'Next image (Right Arrow)'}
+                  aria-label="Next image"
                   class="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/65 text-white opacity-0 transition-opacity duration-[160ms] group-hover:opacity-100 hover:bg-black/85"
                 >
                   <WaveIcon name="chevronRight" size={18} />
@@ -332,7 +336,7 @@
                       onclick={() => (activeSlide = idx)}
                       class="aspect-[16/10] w-[96px] shrink-0 cursor-pointer overflow-hidden rounded-[8px] border transition-all duration-[160ms] {activeSlide === idx
                         ? 'border-[var(--lw-accent)] ring-2 ring-[var(--lw-accent)]'
-                        : 'border-white/10 opacity-70 hover:opacity-100'}"
+                        : 'border-[var(--lw-outline-soft)] opacity-70 hover:opacity-100'}"
                     >
                       <img
                         src={thumbUrl}
@@ -357,8 +361,8 @@
                   <button
                     type="button"
                     onclick={() => copyHex(chip.value)}
-                    title="Click to copy {chip.value}"
-                    class="flex cursor-pointer flex-col overflow-hidden rounded-[10px] border border-white/10 bg-[var(--lw-surface)] text-left transition-transform duration-[160ms] ease-[var(--ease-native)] hover:-translate-y-0.5"
+                    use:waveTooltip={`Click to copy ${chip.value}`}
+                    class="flex cursor-pointer flex-col overflow-hidden rounded-[10px] border border-[var(--lw-outline)] bg-[var(--lw-surface)] text-left transition-transform duration-[160ms] ease-[var(--ease-native)] hover:-translate-y-0.5"
                   >
                     <div class="h-16 w-full" style:background={chip.value}></div>
                     <div class="p-2.5">
@@ -377,9 +381,9 @@
                 <button
                   type="button"
                   onclick={() => copyHex(chip.value)}
-                  class="flex cursor-pointer items-center gap-2.5 rounded-[10px] border border-white/8 bg-[var(--lw-surface)] px-3 py-2 text-left transition-colors hover:bg-[var(--lw-wash-hover)]"
+                  class="flex cursor-pointer items-center gap-2.5 rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] px-3 py-2 text-left transition-colors hover:bg-[var(--lw-wash-hover)]"
                 >
-                  <span class="h-6 w-6 shrink-0 rounded-[6px] border border-white/15" style:background={chip.value}></span>
+                  <span class="h-6 w-6 shrink-0 rounded-[6px] border border-[var(--lw-outline)]" style:background={chip.value}></span>
                   <div class="min-w-0">
                     <div class="text-[11.5px] font-semibold">{chip.label}</div>
                     <div class="truncate font-mono text-[10.5px] text-[var(--lw-text-tertiary)]">{chip.value}</div>
@@ -443,7 +447,7 @@
           {#if hydrated?.loading}
             <div class="text-[12px] text-[var(--lw-text-tertiary)]">Loading README & manifest details...</div>
           {:else if readmeBlocks.length > 0}
-            <div class="space-y-1.5 rounded-[12px] border border-white/6 bg-[var(--lw-bg)]/55 p-4 text-[12.5px] leading-relaxed text-[var(--lw-text-secondary)]">
+            <div class="space-y-1.5 rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4 text-[12.5px] leading-relaxed text-[var(--lw-text-secondary)]">
               {#each readmeBlocks as block, i (`${i}-${block.text}`)}
                 {#if block.kind === 'h1' || block.kind === 'h2'}
                   <div class="pt-1 text-[13.5px] font-semibold text-[var(--lw-text-primary)]">{block.text}</div>
@@ -470,7 +474,7 @@
                     onSelectTag?.(tag);
                     onClose();
                   }}
-                  class="cursor-pointer rounded-full border border-white/8 bg-white/5 px-2.5 py-0.5 text-[11px] font-medium text-[var(--lw-text-secondary)] transition-colors hover:border-[var(--lw-accent)]/50 hover:text-[var(--lw-text-primary)]"
+                  class="cursor-pointer rounded-full border border-[var(--lw-outline-soft)] bg-[var(--lw-wash)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--lw-text-secondary)] transition-colors hover:border-[var(--lw-accent)]/50 hover:text-[var(--lw-text-primary)]"
                 >
                   #{tag}
                 </button>
@@ -480,7 +484,7 @@
         </div>
 
         <!-- Source & Provenance Footer -->
-        <div class="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-white/6 bg-[var(--lw-bg)]/65 px-4 py-3 text-[12px] text-[var(--lw-text-secondary)]">
+        <div class="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] px-4 py-3 text-[12px] text-[var(--lw-text-secondary)]">
           <div class="space-y-0.5">
             <div>
               <span class="text-[var(--lw-text-tertiary)]">Source:</span>
@@ -496,7 +500,7 @@
             href={githubBrowseUrl}
             target="_blank"
             rel="noopener noreferrer"
-            class="inline-flex items-center gap-1.5 rounded-[8px] border border-white/10 bg-[var(--lw-surface)] px-3 py-1.5 text-[12px] font-medium text-[var(--lw-text-primary)] transition-colors hover:bg-[var(--lw-wash-hover)]"
+            class="inline-flex items-center gap-1.5 rounded-[8px] border border-[var(--lw-outline)] bg-[var(--lw-surface)] px-3 py-1.5 text-[12px] font-medium text-[var(--lw-text-primary)] transition-colors hover:bg-[var(--lw-wash-hover)]"
           >
             View on GitHub
             <WaveIcon name="external" size={13} />

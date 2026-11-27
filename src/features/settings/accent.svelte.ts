@@ -16,6 +16,7 @@ export function resolveAccent(): AccentResolution {
   if (source === 'lastwave') {
     const mode = settingsStore.themeMode;
     if (mode === 'amoled') return { source, color: WaveColors.amoledAccent, resolved: true };
+    if (mode === 'volt') return { source, color: WaveColors.voltAccent, resolved: true };
     const light = mode === 'light' || (mode === 'custom' && isLightBase(settingsStore.customThemeBase));
     return { source, color: light ? WaveColors.lightAccent : WaveColors.defaultAccent, resolved: true };
   }

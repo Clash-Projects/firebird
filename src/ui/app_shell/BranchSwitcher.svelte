@@ -1,22 +1,55 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
 
   interface Props {
     routeKey: string;
+    hasDockSpacer?: boolean;
     children: Snippet;
   }
 
-  let { routeKey, children }: Props = $props();
+  let { routeKey, hasDockSpacer = false, children }: Props = $props();
+
+  let scroller = $state<HTMLDivElement | null>(null);
+  const savedScroll = new Map<string, number>();
+  let lastKey = '';
+
+  $effect(() => {
+    const el = scroller;
+    const key = routeKey;
+    if (!el) return;
+    if (lastKey && lastKey !== key) {
+      savedScroll.set(lastKey, el.scrollTop);
+    }
+    lastKey = key;
+    const restoreY = savedScroll.get(key) ?? 0;
+    requestAnimationFrame(() => {
+      if (el) el.scrollTop = restoreY;
+    });
+  });
+
+  function onScroll() {
+    if (scroller && routeKey) {
+      savedScroll.set(routeKey, scroller.scrollTop);
+    }
+  }
 </script>
 
-{#key routeKey}
-  <div class="lw-scroll stage-scroll relative z-10 h-full w-full scrollbar-gutter-stable">
-    <div class="lw-route-enter h-full w-full">
+<div
+  bind:this={scroller}
+  onscroll={onScroll}
+  use:waveSmoothScroll={{ axis: 'y' }}
+  class="lw-scroll stage-scroll relative z-10 h-full w-full"
+>
+  {#key routeKey}
+    <div class="lw-route-enter min-h-full w-full" style:padding-bottom={hasDockSpacer ? 'var(--lw-dock-h, 68px)' : undefined}>
       {@render children()}
     </div>
-  </div>
-{/key}
+  {/key}
+</div>
 
 <style>
-  .stage-scroll { overscroll-behavior: contain; scroll-behavior: var(--lw-scroll-behavior); }
+  .stage-scroll {
+    overscroll-behavior: contain;
+  }
 </style>

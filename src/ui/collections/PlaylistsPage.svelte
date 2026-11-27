@@ -65,9 +65,9 @@
           <button
             type="button"
             onclick={() => (pl.id === 'pl-liked' ? router.navigate('/liked') : goPlaylist(pl.id, 'youtube'))}
-            class="group cursor-pointer rounded-[14px] p-1.5 text-left transition-colors hover:bg-white/[0.04]"
+            class="group cursor-pointer rounded-[12px] p-1.5 text-left transition-colors hover:bg-[var(--lw-wash-hover)]"
           >
-            <Artwork src={pl.artworkUrl} alt={pl.name} radius={12} shadow="lift" class="aspect-square w-full transition-transform duration-[180ms] group-hover:scale-[1.03]" />
+            <Artwork src={pl.artworkUrl} label={pl.name} kind="album" alt={pl.name} radius={10} shadow="lift" class="aspect-square w-full transition-transform duration-[180ms] group-hover:scale-[1.03]" />
             <div class="mt-2 truncate text-[13px] font-semibold">{pl.name}</div>
             <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{pl.trackIds.length} tracks</div>
           </button>
@@ -84,9 +84,9 @@
           <button
             type="button"
             onclick={() => goPlaylist(pl.id, 'local')}
-            class="group cursor-pointer rounded-[14px] p-1.5 text-left transition-colors hover:bg-white/[0.04]"
+            class="group cursor-pointer rounded-[12px] p-1.5 text-left transition-colors hover:bg-[var(--lw-wash-hover)]"
           >
-            <Artwork src={pl.artworkUrl} alt={pl.name} radius={12} shadow="lift" class="aspect-square w-full transition-transform duration-[180ms] group-hover:scale-[1.03]" />
+            <Artwork src={pl.artworkUrl} label={pl.name} kind="album" alt={pl.name} radius={10} shadow="lift" class="aspect-square w-full transition-transform duration-[180ms] group-hover:scale-[1.03]" />
             <div class="mt-2 truncate text-[13px] font-semibold">{pl.name}</div>
             <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{pl.trackIds.length} tracks</div>
           </button>
@@ -103,9 +103,9 @@
           <button
             type="button"
             onclick={() => goPlaylist(pl.id, 'spotify')}
-            class="group cursor-pointer rounded-[14px] p-1.5 text-left transition-colors hover:bg-white/[0.04]"
+            class="group cursor-pointer rounded-[12px] p-1.5 text-left transition-colors hover:bg-[var(--lw-wash-hover)]"
           >
-            <Artwork src={pl.artworkUrl} alt={pl.name} radius={12} shadow="lift" class="aspect-square w-full transition-transform duration-[180ms] group-hover:scale-[1.03]" />
+            <Artwork src={pl.artworkUrl} label={pl.name} kind="album" alt={pl.name} radius={10} shadow="lift" class="aspect-square w-full transition-transform duration-[180ms] group-hover:scale-[1.03]" />
             <div class="mt-2 truncate text-[13px] font-semibold">{pl.name}</div>
             <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{pl.trackIds.length} tracks</div>
           </button>

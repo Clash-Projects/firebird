@@ -23,9 +23,10 @@
 
 <div
   data-lw={dataLw}
+  data-haze-level={level}
   class={className}
-  style:backdrop-filter={blurPx > 0 ? `blur(${blurPx}px)` : undefined}
-  style:-webkit-backdrop-filter={blurPx > 0 ? `blur(${blurPx}px)` : undefined}
+  style:backdrop-filter={blurPx > 0 ? `blur(${blurPx}px) saturate(1.15)` : undefined}
+  style:-webkit-backdrop-filter={blurPx > 0 ? `blur(${blurPx}px) saturate(1.15)` : undefined}
 >
   {@render children()}
 </div>

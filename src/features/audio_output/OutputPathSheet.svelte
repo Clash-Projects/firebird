@@ -1,5 +1,7 @@
 <script lang="ts">
   import Switch from '$src/ui/components/Switch.svelte';
+  import { waveTooltip } from '$src/ui/components/tooltip';
+  import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
   import { windowState } from '$src/app/window.svelte';
   import { getPlatformAudioCopy } from '$src/features/audio_output/platformAudio';
   import { ipcInvoke } from '$src/lib/ipc';
@@ -38,20 +40,22 @@
 
 <WaveHaze
   level="l2"
-  class="flex h-full w-[360px] shrink-0 flex-col border-l border-[var(--lw-divider)] bg-[var(--lw-panel-translucent)] p-4 shadow-[var(--lw-shadow-panel)]"
+  class="flex h-full w-[min(360px,100vw)] shrink-0 flex-col border-l border-[var(--lw-divider)] bg-[var(--lw-panel-translucent)] p-4 shadow-[var(--lw-shadow-panel)]"
 >
   <div class="flex items-center justify-between pb-3">
-    <h2 class="text-[14px] font-bold">Signal Path & Output</h2>
+    <h2 class="text-[14px] font-semibold">Signal Path &amp; Output</h2>
     <button
       type="button"
+      use:waveTooltip={'Close panel'}
       onclick={() => windowState.closeRightPanel()}
-      class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-[8px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)]"
+      aria-label="Close audio output"
+      class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-[6px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)]"
     >
       <WaveIcon name="close" size={15} />
     </button>
   </div>
 
-  <div class="lw-scroll flex-1 space-y-4">
+  <div use:waveSmoothScroll class="lw-scroll flex-1 space-y-4">
     <div class="rounded-[16px] border border-[var(--lw-outline)] bg-[var(--lw-surface)] p-3.5">
       <div class="flex items-center justify-between">
         <span class="text-[12px] font-semibold">Bit-Perfect Status</span>

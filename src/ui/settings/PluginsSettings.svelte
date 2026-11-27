@@ -15,6 +15,7 @@
   import Input from '$src/ui/components/Input.svelte';
   import Select from '$src/ui/components/Select.svelte';
   import Switch from '$src/ui/components/Switch.svelte';
+  import { waveTooltip } from '$src/ui/components/tooltip';
   import WaveIcon, { type WaveIconName } from '$src/ui/theme/WaveIcon.svelte';
   import GithubInstallModal from './GithubInstallModal.svelte';
   import LocalInstallModal from './LocalInstallModal.svelte';
@@ -323,8 +324,8 @@
         </div>
       {/if}
 
-      <div class="mt-3 flex items-center justify-between gap-2 border-t border-white/6 pt-2.5">
-        <span class="rounded-[6px] bg-white/6 px-2 py-0.5 font-mono text-[11px] text-[var(--lw-text-tertiary)]">
+      <div class="mt-3 flex items-center justify-between gap-2 border-t border-[var(--lw-divider)] pt-2.5">
+        <span class="rounded-[6px] bg-[var(--lw-wash)] px-2 py-0.5 font-mono text-[11px] text-[var(--lw-text-tertiary)]">
           v{card.version}
         </span>
 
@@ -336,7 +337,8 @@
                 e.stopPropagation();
                 void pluginManager.uninstallPlugin(card.id);
               }}
-              title="Uninstall"
+              use:waveTooltip={'Uninstall'}
+              aria-label="Uninstall plugin"
               class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[8px] text-[var(--lw-text-tertiary)] transition-colors hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-danger)]"
             >
               <WaveIcon name="trash" size={14} />
@@ -468,7 +470,7 @@
           size="sm"
           disabled={pluginManager.marketplaceLoading}
           onclick={() => void pluginManager.fetchMarketplace()}
-          title="Refresh registry"
+          tooltip="Refresh registry"
         >
           <WaveIcon name="refresh" size={14} class={pluginManager.marketplaceLoading ? 'animate-spin' : ''} />
           Refresh

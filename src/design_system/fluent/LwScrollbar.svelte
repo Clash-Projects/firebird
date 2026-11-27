@@ -1,14 +1,19 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
 
   interface Props {
     class?: string;
+    axis?: 'y' | 'x';
     children: Snippet;
   }
 
-  let { class: className = '', children }: Props = $props();
+  let { class: className = '', axis = 'y', children }: Props = $props();
 </script>
 
-<div class="lw-scroll {className}">
+<div
+  class="{axis === 'x' ? 'lw-scroll-x' : 'lw-scroll'} {className}"
+  use:waveSmoothScroll={{ axis, drag: axis === 'x' }}
+>
   {@render children()}
 </div>

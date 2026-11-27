@@ -8,6 +8,8 @@
   import { settingsStore } from '$src/state/settings.svelte';
   import AmbientStage from '$src/ui/components/AmbientStage.svelte';
   import AnimatedArtworkVideo from '$src/ui/components/AnimatedArtworkVideo.svelte';
+  import { waveTooltip } from '$src/ui/components/tooltip';
+  import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import { immersiveState } from './immersive.svelte';
   import NowPlayingFullBleedView from './NowPlayingFullBleedView.svelte';
@@ -106,7 +108,7 @@
   {#if !track}
     <div class="now-empty">
       <span class="now-empty-icon"><WaveIcon name="album" size={32} /></span>
-      <h1 class="lw-display">Nothing playing</h1>
+      <h1>Nothing playing</h1>
       <p>Pick something from Home, Discover or Search and it will take centre stage here.</p>
       <button type="button" onclick={() => router.navigate('/home')}>
         <WaveIcon name="search" size={16} /> Browse music
@@ -151,7 +153,7 @@
           {focusMode}
           onToggleFocus={toggleFocus}
         />
-        <button type="button" onclick={close} aria-label="Close Now Playing" title="Close Now Playing">
+        <button type="button" onclick={close} aria-label="Close Now Playing" use:waveTooltip={'Close Now Playing'}>
           <WaveIcon name="close" size={16} />
         </button>
       </div>
@@ -171,14 +173,14 @@
                 />
               </div>
               <div class="now-meta">
-                <h1 class="lw-display" title={track.title}>{track.title}</h1>
+                <h1>{track.title}</h1>
                 <p>{track.artist}</p>
                 <div class="now-format lw-tabular">
                   <WaveIcon name="activity" size={13} />
                   {track.codec} · {track.bitDepth}-bit / {(track.sampleRateHz / 1000).toFixed(0)} kHz
                 </div>
                 {#if nextTrack}
-                  <p class="now-next" title={`${nextTrack.title} · ${nextTrack.artist}`}>
+                  <p class="now-next">
                     <strong>Up next</strong> <span>{nextTrack.title} · {nextTrack.artist}</span>
                   </p>
                 {/if}
@@ -188,7 +190,7 @@
         {/if}
 
         {#if effectiveLyricsVisible}
-          <div class="now-lyrics lw-scroll lw-route-enter">
+          <div use:waveSmoothScroll class="now-lyrics lw-scroll lw-route-enter">
             <KaraokeLyricsView fontSize={32} />
           </div>
         {/if}
@@ -238,14 +240,15 @@
   }
   .now-stage.with-lyrics { grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr); }
   .now-track { width: min(100%, clamp(152px, 45vh, 490px)); min-width: 0; }
-  .now-cover { overflow: hidden; border: 1px solid var(--lw-outline); border-radius: 20px; box-shadow: var(--lw-shadow-artwork); }
+  .now-cover { overflow: hidden; border-radius: 18px; box-shadow: var(--lw-shadow-artwork); }
   .now-meta { margin-top: 13px; }
   .now-meta h1 {
     display: -webkit-box;
     overflow: hidden;
-    font-size: clamp(26px, 3.4vw, 43px);
+    font-size: clamp(24px, 3.2vw, 38px);
     font-weight: 700;
-    line-height: 1.05;
+    letter-spacing: -0.02em;
+    line-height: 1.08;
     overflow-wrap: anywhere;
     text-wrap: balance;
     -webkit-box-orient: vertical;

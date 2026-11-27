@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { playTrackNow } from '$src/app/trackActions';
+  import { downloadTrack, playTrackNow } from '$src/app/trackActions';
   import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
+  import { featuresStore } from '$src/state/features.svelte';
   import { libraryStore, mapYtTrack } from '$src/state/library.svelte';
   import type { Album, Track } from '$src/state/types';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import DesktopTable from '$src/ui/components/DesktopTable.svelte';
   import HeroHeader from '$src/ui/components/HeroHeader.svelte';
+  import Skeletons from '$src/ui/components/Skeletons.svelte';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
 
   interface Props {
@@ -68,6 +70,22 @@
         ? libraryStore.tracksByIds(album.trackIds)
         : []
   );
+
+  function shuffleAlbum() {
+    if (tracks.length === 0) return;
+    const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+    playTrackNow(shuffled[0], shuffled);
+  }
+
+  function downloadAlbum() {
+    if (tracks.length === 0) return;
+    tracks.forEach((t) => libraryStore.enqueueDownload(t));
+    featuresStore.showToast({
+      title: `Queued ${tracks.length} tracks for offline playback`,
+      subtitle: album?.title,
+      severity: 'success',
+    });
+  }
 </script>
 
 <div class="px-8 py-8 pb-10">
@@ -80,17 +98,26 @@
       artworkUrl={album.artworkUrl}
     >
       {#snippet actions()}
-        <Buttons variant="primary" onclick={() => tracks[0] && playTrackNow(tracks[0], tracks)}>
+        <Buttons variant="primary" disabled={tracks.length === 0} onclick={() => tracks[0] && playTrackNow(tracks[0], tracks)}>
           <WaveIcon name="play" size={15} filled /> Play Album
+        </Buttons>
+        <Buttons variant="secondary" disabled={tracks.length === 0} onclick={shuffleAlbum}>
+          <WaveIcon name="shuffle" size={14} /> Shuffle
+        </Buttons>
+        <Buttons variant="ghost" disabled={tracks.length === 0} onclick={downloadAlbum}>
+          <WaveIcon name="download" size={14} /> Save offline
         </Buttons>
       {/snippet}
     </HeroHeader>
     {#if loading && tracks.length === 0}
-      <div class="py-8 text-center text-[13px] text-[var(--lw-text-secondary)]">Loading album tracks...</div>
+      <Skeletons variant="rows" rows={8} />
     {:else}
       <DesktopTable {tracks} showAlbum={false} />
     {/if}
   {:else if loading}
-    <div class="py-12 text-center text-[13px] text-[var(--lw-text-secondary)]">Loading album...</div>
+    <Skeletons variant="feature" />
+    <div class="mt-6">
+      <Skeletons variant="rows" rows={8} />
+    </div>
   {/if}
 </div>

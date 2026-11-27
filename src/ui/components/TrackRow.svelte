@@ -3,6 +3,7 @@
   import { libraryStore } from '$src/state/library.svelte';
   import { formatDuration, playerStore } from '$src/state/player.svelte';
   import type { Track } from '$src/state/types';
+  import { waveTooltip } from '$src/ui/components/tooltip';
   import { goAlbum } from '$src/ui/navigation/waveNav';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import ArtistLine from './ArtistLine.svelte';
@@ -15,9 +16,25 @@
     list?: Track[];
     showAlbum?: boolean;
     showQuality?: boolean;
+    selected?: boolean;
+    focused?: boolean;
+    removeLabel?: string;
+    onRemove?: () => void;
+    onRowClick?: (e: MouseEvent) => void;
   }
 
-  let { track, index, list, showAlbum = true, showQuality = true }: Props = $props();
+  let {
+    track,
+    index,
+    list,
+    showAlbum = true,
+    showQuality = true,
+    selected = false,
+    focused = false,
+    removeLabel,
+    onRemove,
+    onRowClick,
+  }: Props = $props();
 
   let isCurrent = $derived(playerStore.currentTrack?.id === track.id);
   let isPlayingCurrent = $derived(isCurrent && playerStore.isPlaying);
@@ -29,10 +46,15 @@
   tabindex="0"
   data-lw="track-row"
   data-active={isCurrent}
-  onclick={() => playTrackNow(track, list)}
+  data-selected={selected}
+  data-focused={focused}
+  onclick={(e) => (onRowClick ? onRowClick(e) : playTrackNow(track, list))}
   onkeydown={(e) => e.key === 'Enter' && playTrackNow(track, list)}
-  oncontextmenu={(e) => contextMenu.showForTrack(e, track)}
-  class="group flex h-[54px] cursor-pointer items-center rounded-[12px] px-2 transition-all duration-[160ms] ease-[var(--ease-native)] hover:bg-[var(--lw-wash-hover)]"
+  oncontextmenu={(e) =>
+    contextMenu.showForTrack(e, track, removeLabel && onRemove ? { removeLabel, onRemove } : undefined)}
+  class="track-row group flex h-[54px] cursor-pointer items-center rounded-[10px] px-2 transition-colors duration-[140ms] ease-[var(--ease-native)] hover:bg-[var(--lw-wash-hover)] {selected
+    ? 'bg-[var(--lw-accent-subtle)]'
+    : ''}"
 >
   {#if index !== undefined}
     <div class="flex w-[30px] shrink-0 items-center justify-center text-[12px] lw-tabular">
@@ -54,7 +76,16 @@
     </div>
   {/if}
 
-  <Artwork src={track.artworkUrl} alt={track.title} size={40} radius={12} />
+  <Artwork
+    src={track.artworkUrl}
+    label={track.title}
+    artist={track.artist}
+    album={track.album}
+    kind="track"
+    alt={track.title}
+    size={40}
+    radius={10}
+  />
 
   <div class="ml-3 min-w-0 flex-[5]">
     <div class="flex items-center gap-1.5">
@@ -84,35 +115,38 @@
   {/if}
 
   {#if showQuality}
-    <div class="ml-2 hidden shrink-0 items-center lg:flex">
+    <div class="ml-2 hidden w-16 shrink-0 items-center lg:flex">
       <span class="rounded-[6px] border border-[var(--lw-outline)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--lw-text-tertiary)]">
         {track.codec}
       </span>
     </div>
   {/if}
 
-  <div class="ml-2 flex shrink-0 items-center gap-0.5">
+  <div class="ml-2 flex w-[118px] shrink-0 items-center justify-end gap-0.5">
     <button
       type="button"
+      use:waveTooltip={liked ? 'Remove from Liked' : 'Like'}
       onclick={(e) => {
         e.stopPropagation();
         toggleTrackLike(track);
       }}
       aria-label={liked ? 'Unlike track' : 'Like track'}
-      class="lw-press flex h-8 w-8 cursor-pointer items-center justify-center rounded-[10px] hover:bg-[var(--lw-wash-hover)] {liked
+      class="lw-press flex h-8 w-8 cursor-pointer items-center justify-center rounded-[8px] hover:bg-[var(--lw-wash-hover)] {liked
         ? 'text-[var(--lw-danger)] opacity-100'
-        : 'text-[var(--lw-text-tertiary)] opacity-0 group-hover:opacity-100 hover:text-[var(--lw-text-primary)]'}"
+        : 'text-[var(--lw-text-tertiary)] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-[var(--lw-text-primary)]'}"
     >
-      <WaveIcon name="heart" size={15} filled={liked} />
+      <WaveIcon name="heart" size={14} filled={liked} />
     </button>
 
     <button
       type="button"
-      onclick={(e) => contextMenu.showForTrack(e, track)}
+      use:waveTooltip={'More options'}
+      onclick={(e) =>
+        contextMenu.showForTrack(e, track, removeLabel && onRemove ? { removeLabel, onRemove } : undefined)}
       aria-label="Track options"
-      class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[10px] text-[var(--lw-text-tertiary)] opacity-0 transition-[opacity,background-color,color] group-hover:opacity-100 focus-visible:opacity-100 hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
+      class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[8px] text-[var(--lw-text-tertiary)] opacity-0 transition-[opacity,background-color,color] group-hover:opacity-100 focus-visible:opacity-100 hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
     >
-      <WaveIcon name="more" size={15} />
+      <WaveIcon name="more" size={14} />
     </button>
 
     <span class="w-11 text-right text-[12px] text-[var(--lw-text-tertiary)] lw-tabular">
@@ -120,3 +154,10 @@
     </span>
   </div>
 </div>
+
+<style>
+  .track-row[data-focused='true'] {
+    outline: 1.5px solid var(--lw-accent);
+    outline-offset: -1.5px;
+  }
+</style>

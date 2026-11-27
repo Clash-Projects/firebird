@@ -3,8 +3,10 @@
   import { windowState } from '$src/app/window.svelte';
   import { t } from '$src/core/l10n/appLocalizations.svelte';
   import { uiSlots } from '$src/lib/plugins/uiSlots.svelte';
+  import { waveTooltip } from '$src/ui/components/tooltip';
   import WaveHaze from '$src/ui/theme/WaveHaze.svelte';
   import WaveIcon, { type WaveIconName } from '$src/ui/theme/WaveIcon.svelte';
+  import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
   import { NAV_DESTINATIONS, type NavDestination } from './destinations';
 
   const listen = NAV_DESTINATIONS.filter((item) => item.group === 'listen');
@@ -22,7 +24,7 @@
   });
 </script>
 
-<WaveHaze level="l1" enableBlur={false} dataLw="sidebar" class="rail">
+<WaveHaze level="l1" enableBlur={false} dataLw="sidebar" class="rail {windowState.railExpanded ? 'expanded' : ''}">
   <nav class="rail-nav" aria-label="Primary navigation">
     {#snippet navItem(route: string, label: string, icon: WaveIconName, active: boolean)}
       <button
@@ -31,12 +33,12 @@
         data-active={active}
         aria-current={active ? 'page' : undefined}
         aria-label={label}
-        title={windowState.railExpanded ? undefined : label}
+        use:waveTooltip={windowState.railExpanded ? null : label}
         onclick={() => router.navigate(route)}
         class="rail-item"
       >
         <span class="rail-icon"><WaveIcon name={icon} size={18} /></span>
-        {#if windowState.railExpanded}<span class="rail-label">{label}</span>{/if}
+        <span class="rail-label">{label}</span>
       </button>
     {/snippet}
 
@@ -44,7 +46,7 @@
       {@render navItem(item.route, t(item.labelKey, item.fallbackLabel), item.icon, activePath === item.route || activePath.startsWith(`${item.route}/`))}
     {/snippet}
 
-    <div class="lw-scroll flex-1 overflow-x-hidden">
+    <div class="lw-scroll flex-1 overflow-x-hidden" use:waveSmoothScroll={{ axis: 'y' }}>
       <div class="rail-group">
         {#each listen as item (item.id)}{@render destination(item)}{/each}
       </div>
@@ -84,9 +86,12 @@
     flex: 0 0 var(--lw-shell-rail-width);
     width: var(--lw-shell-rail-width);
     min-width: 0;
+    overflow: hidden;
     border-right: 1px solid var(--lw-divider);
     background: var(--lw-rail-translucent);
-    transition: flex-basis 180ms cubic-bezier(0.23, 1, 0.32, 1), width 180ms cubic-bezier(0.23, 1, 0.32, 1);
+    transition:
+      flex-basis var(--lw-motion-normal) var(--ease-wave),
+      width var(--lw-motion-normal) var(--ease-wave);
   }
 
   .rail-nav {
@@ -126,7 +131,10 @@
     cursor: pointer;
     color: var(--lw-text-secondary);
     text-align: left;
-    transition: background-color 110ms ease, border-color 110ms ease, color 110ms ease;
+    transition:
+      background-color var(--lw-motion-fast) ease,
+      border-color var(--lw-motion-fast) ease,
+      color var(--lw-motion-fast) ease;
   }
 
   .rail-item::before {
@@ -134,27 +142,25 @@
     left: 0;
     width: 3px;
     height: 16px;
-    border-radius: 999px;
+    border-radius: 6px;
     background: var(--lw-accent);
     opacity: 0;
     content: '';
-    transform: scaleY(0.65);
-    transition: opacity 110ms ease, transform 110ms cubic-bezier(0.23, 1, 0.32, 1);
+    transform: translateX(-4px);
+    transition:
+      opacity var(--lw-motion-fast) ease,
+      transform var(--lw-motion-fast) var(--ease-wave);
   }
 
+  /* OG side_rail.dart: subtle neutral active wash (8%), transparent border, primary ink — nothing loud */
   .rail-item[data-active="true"] {
-    border-color: color-mix(in srgb, var(--lw-accent) 42%, transparent);
-    background: color-mix(in srgb, var(--lw-accent) 11%, transparent);
+    background: color-mix(in srgb, var(--lw-text-primary) 8%, transparent);
     color: var(--lw-text-primary);
   }
 
   .rail-item[data-active="true"]::before {
     opacity: 1;
-    transform: scaleY(1);
-  }
-
-  .rail-item[data-active="true"] .rail-icon {
-    color: var(--lw-accent);
+    transform: translateX(0);
   }
 
   .rail-item:focus-visible {
@@ -167,11 +173,11 @@
     width: 46px;
     flex: none;
     place-items: center;
-    transition: transform 110ms ease, color 110ms ease;
+    transition: transform var(--lw-motion-fast) var(--ease-wave), color var(--lw-motion-fast) ease;
   }
 
   .rail-item[data-active="true"] .rail-icon {
-    transform: scale(1.04);
+    transform: scale(1.06);
   }
 
   .rail-label {
@@ -181,6 +187,12 @@
     font-weight: 500;
     text-overflow: ellipsis;
     white-space: nowrap;
+    opacity: 0;
+    transition: opacity var(--lw-motion-normal) var(--ease-wave);
+  }
+
+  :global([data-lw="sidebar"].rail.expanded) .rail-label {
+    opacity: 1;
   }
 
   .rail-item[data-active="true"] .rail-label {
@@ -192,7 +204,10 @@
       color: var(--lw-text-primary);
     }
     .rail-item[data-active="false"]:hover {
-      background: var(--lw-wash-hover);
+      background: color-mix(in srgb, var(--lw-text-primary) 4%, transparent);
+    }
+    .rail-item[data-active="false"]:hover .rail-icon {
+      transform: scale(1.03);
     }
   }
 </style>

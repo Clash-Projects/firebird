@@ -9,6 +9,7 @@
   import Buttons from '$src/ui/components/Buttons.svelte';
   import Input from '$src/ui/components/Input.svelte';
   import Switch from '$src/ui/components/Switch.svelte';
+  import { waveTooltip } from '$src/ui/components/tooltip';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
 
   type JamPhase = 'disconnected' | 'connecting' | 'active' | 'error';
@@ -328,7 +329,8 @@
     <div class="flex-1"></div>
     <button
       type="button"
-      title="Close"
+      use:waveTooltip={'Close'}
+      aria-label="Close Jam"
       onclick={() => router.navigate('/home')}
       class="flex h-8 w-8 items-center justify-center rounded-[8px] text-[var(--lw-text-secondary)] transition hover:bg-[var(--lw-surface-hover)] hover:text-[var(--lw-text-primary)]"
     >
@@ -472,7 +474,8 @@
         </div>
         <button
           type="button"
-          title="Dismiss"
+          use:waveTooltip={'Dismiss'}
+          aria-label="Dismiss notice"
           onclick={dismissNotice}
           class="flex h-6 w-6 items-center justify-center rounded text-[var(--lw-text-secondary)] hover:bg-[var(--lw-surface-hover)] hover:text-[var(--lw-text-primary)]"
         >
@@ -704,7 +707,8 @@
                     {#if mine}
                       <button
                         type="button"
-                        title="Reply"
+                        use:waveTooltip={'Reply'}
+                        aria-label="Reply"
                         onclick={() => (replyTo = line)}
                         class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--lw-text-tertiary)] opacity-0 transition group-hover:opacity-100 hover:bg-[var(--lw-surface-hover)] hover:text-[var(--lw-text-primary)]"
                       >
@@ -734,7 +738,8 @@
                     {#if !mine}
                       <button
                         type="button"
-                        title="Reply"
+                        use:waveTooltip={'Reply'}
+                        aria-label="Reply"
                         onclick={() => (replyTo = line)}
                         class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--lw-text-tertiary)] opacity-0 transition group-hover:opacity-100 hover:bg-[var(--lw-surface-hover)] hover:text-[var(--lw-text-primary)]"
                       >
@@ -761,7 +766,8 @@
             </div>
             <button
               type="button"
-              title="Cancel reply"
+              use:waveTooltip={'Cancel reply'}
+              aria-label="Cancel reply"
               onclick={() => (replyTo = null)}
               class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--lw-text-secondary)] hover:bg-[var(--lw-surface-hover)] hover:text-[var(--lw-text-primary)]"
             >

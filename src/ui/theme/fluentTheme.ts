@@ -1,5 +1,5 @@
 import type { ThemeMode } from '$src/state/settings.svelte';
-import { isLightBase, onAccentFor, surfacesFromCustomBase, WaveColors } from './tokens';
+import { isLightBase, onAccentFor, surfacesFromCustomBase, WaveColors, withAlpha } from './tokens';
 
 export interface WaveThemeOptions {
   mode: ThemeMode;
@@ -9,6 +9,10 @@ export interface WaveThemeOptions {
   fontFamily: string;
   uiScale: number;
   artworkColor?: string | null;
+  hazeMaterial?: 'automatic' | 'haze' | 'solid';
+  hazeIntensity?: 'low' | 'medium' | 'high';
+  liquidGlass?: boolean;
+  performanceMode?: boolean;
 }
 
 const CUSTOM_SURFACE_PROPS = [
@@ -46,15 +50,39 @@ export function applyWaveThemeToDocument(opts: WaveThemeOptions) {
     delete root.dataset.glass;
   }
 
+  if (opts.hazeMaterial) {
+    root.dataset.hazeMaterial = opts.hazeMaterial;
+  } else {
+    delete root.dataset.hazeMaterial;
+  }
+
+  if (opts.hazeIntensity) {
+    root.dataset.hazeIntensity = opts.hazeIntensity;
+  } else {
+    delete root.dataset.hazeIntensity;
+  }
+
+  if (opts.liquidGlass) {
+    root.dataset.liquidGlass = 'true';
+  } else {
+    delete root.dataset.liquidGlass;
+  }
+
+  if (opts.performanceMode) {
+    root.dataset.performance = 'true';
+  } else {
+    delete root.dataset.performance;
+  }
+
   if (isCustomOrArtwork && !opts.glass) {
     const s = surfacesFromCustomBase(effectiveBase);
     root.style.setProperty('--lw-bg', s.background);
     root.style.setProperty('--lw-surface', s.surface);
     root.style.setProperty('--lw-surface-raised', s.surfaceRaised);
     root.style.setProperty('--lw-surface-overlay', s.surfaceOverlay);
-    root.style.setProperty('--lw-panel-translucent', s.panelTranslucent);
-    root.style.setProperty('--lw-dock-translucent', s.dockTranslucent);
-    root.style.setProperty('--lw-rail-translucent', s.railTranslucent);
+    root.style.setProperty('--lw-panel-translucent', opts.hazeMaterial === 'solid' ? s.surface : s.panelTranslucent);
+    root.style.setProperty('--lw-dock-translucent', opts.hazeMaterial === 'solid' ? s.background : s.dockTranslucent);
+    root.style.setProperty('--lw-rail-translucent', opts.hazeMaterial === 'solid' ? s.background : s.railTranslucent);
     root.style.setProperty('--lw-outline', s.outline);
     root.style.setProperty('--lw-outline-soft', s.outlineSoft);
     root.style.setProperty('--lw-divider', s.outlineSoft);
@@ -67,6 +95,11 @@ export function applyWaveThemeToDocument(opts: WaveThemeOptions) {
   const safeAccent = opts.accent || WaveColors.defaultAccent;
   root.style.setProperty('--lw-accent', safeAccent);
   root.style.setProperty('--lw-on-accent', onAccentFor(safeAccent));
+  if (/^#[0-9a-fA-F]{3,8}$/.test(safeAccent)) {
+    root.style.setProperty('--lw-accent-subtle', withAlpha(safeAccent, effectiveLight ? 0.1 : 0.14));
+  } else {
+    root.style.setProperty('--lw-accent-subtle', 'color-mix(in srgb, var(--lw-accent) 14%, transparent)');
+  }
 
   if (opts.fontFamily) {
     root.style.setProperty(
@@ -79,5 +112,5 @@ export function applyWaveThemeToDocument(opts: WaveThemeOptions) {
     root.style.removeProperty('--lw-font-display');
   }
 
-  root.style.setProperty('--lw-ui-scale', String(opts.uiScale));
+  root.style.setProperty('--lw-ui-scale', String(opts.uiScale || 1));
 }

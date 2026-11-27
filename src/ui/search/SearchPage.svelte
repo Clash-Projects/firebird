@@ -116,7 +116,7 @@
 </script>
 
 <div class="mx-auto w-full max-w-[1440px] space-y-6 px-6 py-6 pb-12 md:px-8">
-  <h1 class="lw-display text-[34px] font-bold leading-tight">Search</h1>
+  <h1 class="text-[22px] font-bold tracking-[-0.4px] leading-tight text-[var(--lw-text-primary)]">Search</h1>
   <form onsubmit={submitSearch} class="flex flex-wrap items-center gap-3">
     <div class="w-full max-w-[460px]">
       <Input bind:value={query} ariaLabel="Search songs, albums, and artists" placeholder="Search songs, albums, artists…" autofocus />
@@ -190,8 +190,8 @@
       <Shelf title="Albums">
         <div class="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-6">
           {#each albums as album (album.id)}
-            <button type="button" onclick={() => goAlbum(album.id)} class="cursor-pointer rounded-[14px] p-1.5 text-left hover:bg-white/[0.04]">
-              <Artwork src={album.artworkUrl} radius={12} class="aspect-square w-full" />
+            <button type="button" onclick={() => goAlbum(album.id)} class="cursor-pointer rounded-[12px] p-1.5 text-left transition-colors hover:bg-[var(--lw-wash-hover)]">
+              <Artwork src={album.artworkUrl} label={album.title} artist={album.artist} kind="album" radius={10} class="aspect-square w-full" />
               <div class="mt-2 truncate text-[13px] font-semibold">{album.title}</div>
               <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{album.artist}</div>
             </button>
@@ -204,8 +204,8 @@
       <Shelf title="Artists">
         <div class="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-6">
           {#each artists as artist (artist.id)}
-            <button type="button" onclick={() => goArtist(artist.id)} class="cursor-pointer rounded-[14px] p-2 text-center hover:bg-white/[0.04]">
-              <Artwork src={artist.artworkUrl} circle class="mx-auto aspect-square w-full max-w-[140px]" />
+            <button type="button" onclick={() => goArtist(artist.id)} class="cursor-pointer rounded-[12px] p-2 text-center transition-colors hover:bg-[var(--lw-wash-hover)]">
+              <Artwork src={artist.artworkUrl} label={artist.name} kind="artist" circle class="mx-auto aspect-square w-full max-w-[140px]" />
               <div class="mt-2 truncate text-[13px] font-semibold">{artist.name}</div>
               <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{artist.monthlyListeners}</div>
             </button>
