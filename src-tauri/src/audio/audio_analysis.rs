@@ -713,7 +713,7 @@ fn detrend(x: &[f64], win: usize) -> Vec<f64> {
 }
 
 /// In-place iterative radix-2 FFT.
-fn fft(re: &mut [f64], im: &mut [f64]) {
+pub(crate) fn fft(re: &mut [f64], im: &mut [f64]) {
     let n = re.len();
     let mut j = 0usize;
     for i in 1..n {

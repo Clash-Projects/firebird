@@ -3,10 +3,12 @@
 
 use std::time::Duration;
 
+use tauri::ipc::Channel;
 use tauri::State;
 
 use crate::audio::headphone_profiles::{HeadphoneProfile, HeadphoneProfiles};
 use crate::audio::output_controller::AudioOutputState;
+use crate::audio::spectrum_stream::SpectrumFrame;
 use crate::commands::state::AppState;
 use crate::models::equalizer_models::{
     ClarityPreset, ClarityPresets, EqPreset, EqualizerPresets, EqualizerState,
@@ -19,6 +21,22 @@ use crate::models::stream_models::PlayableTrack;
 #[tauri::command]
 pub fn player_snapshot(state: State<'_, AppState>) -> PlayerSnapshot {
     state.playback.snapshot()
+}
+
+#[tauri::command]
+pub fn spectrum_subscribe(
+    state: State<'_, AppState>,
+    channel: Channel<SpectrumFrame>,
+) -> u64 {
+    state
+        .spectrum
+        .set_playing(state.playback.snapshot().is_playing);
+    state.spectrum.subscribe(channel)
+}
+
+#[tauri::command]
+pub fn spectrum_unsubscribe(state: State<'_, AppState>, subscription_id: Option<u64>) {
+    state.spectrum.unsubscribe(subscription_id);
 }
 
 #[tauri::command]

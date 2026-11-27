@@ -12,6 +12,7 @@ use crate::audio::output_controller::AudioOutputController;
 use crate::audio::playback_service::{
     NoopLosslessBackend, PlaybackService, PrefsHandle, SessionStore,
 };
+use crate::audio::spectrum_stream::SpectrumStreamController;
 use crate::extractor::http_client::HttpClientFactory;
 use crate::extractor::innertube_api::InnerTubeMusicApi;
 use crate::extractor::potoken_engine::PoTokenEngine;
@@ -77,6 +78,7 @@ pub struct AppState {
     pub equalizer: Arc<EqualizerController>,
     pub audio_output: Arc<AudioOutputController>,
     pub playback: Arc<PlaybackService>,
+    pub spectrum: Arc<SpectrumStreamController>,
     pub jam_sync: Arc<JamSyncBridge>,
     app_handle: Mutex<Option<AppHandle>>,
 }
@@ -215,6 +217,7 @@ impl AppState {
             Arc::clone(&official_artwork),
             None,
         );
+        let spectrum = Arc::new(SpectrumStreamController::new());
         let jam_sync = Arc::new(JamSyncBridge::new(
             Arc::clone(&jam),
             Arc::clone(&playback),
@@ -253,6 +256,7 @@ impl AppState {
             equalizer,
             audio_output,
             playback,
+            spectrum,
             jam_sync,
             app_handle: Mutex::new(None),
         }

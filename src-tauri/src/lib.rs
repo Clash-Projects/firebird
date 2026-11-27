@@ -22,7 +22,9 @@ pub fn run() {
             state.set_app_handle(handle.clone());
 
             let emit_handle = handle.clone();
+            let spectrum = Arc::clone(&state.spectrum);
             state.playback.add_snapshot_listener(Arc::new(move |snap| {
+                spectrum.set_playing(snap.is_playing);
                 let _ = emit_handle.emit("player:snapshot", snap);
             }));
 
@@ -31,6 +33,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             // commands::player
             commands::player::player_snapshot,
+            commands::player::spectrum_subscribe,
+            commands::player::spectrum_unsubscribe,
             commands::player::player_play,
             commands::player::player_play_queue,
             commands::player::player_play_next,

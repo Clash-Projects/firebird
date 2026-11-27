@@ -17,5 +17,6 @@ pub mod output_controller;
 pub mod play_diag;
 pub mod playback_service;
 pub mod smtc_service;
+pub mod spectrum_stream;
 pub mod wasapi_engine;
 pub mod windows_memory;
