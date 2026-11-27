@@ -21,7 +21,7 @@
       } else {
         const conn = await ipcInvoke<{ connected?: boolean; accountName?: string; profileEmail?: string }>(
           'yt_web_sign_in',
-          { expectedEmail: null }
+          { fresh: false }
         );
         if (conn?.connected) {
           settingsStore.ytConnected = true;

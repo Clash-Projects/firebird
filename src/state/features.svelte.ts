@@ -29,15 +29,27 @@ export const LYRICS_PROVIDERS: ReadonlyArray<{ id: string; label: string }> = [
 ];
 
 export const EQ_FREQUENCIES = [
-  25, 40, 63, 100, 160, 250, 400, 630, 1000, 1600, 2500, 4000, 6300, 10000, 16000,
+  31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000,
 ];
 
 export const EQ_PRESETS: Record<string, number[]> = {
-  Flat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  'Studio Reference': [0.5, 0.8, 0.4, 0, -0.3, -0.4, 0, 0.2, 0.5, 0.8, 1.0, 0.9, 0.6, 0.4, 0.2],
-  'Warm Bass': [3.5, 4.0, 3.2, 2.0, 1.0, 0, -0.5, -0.4, 0, 0.4, 0.8, 1.0, 0.6, 0.3, 0],
-  'Vocal Clarity': [-1.0, -0.5, 0, 0.5, 1.0, 1.8, 2.4, 2.8, 2.2, 1.5, 0.8, 0.4, 0, -0.4, -0.6],
-  'Late Night': [1.5, 1.2, 0.8, 0, -0.5, -0.8, -0.5, 0, 0.5, 0.8, 0.4, -0.4, -1.0, -1.5, -2.0],
+  Default: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+  'Studio Master': [2.7, 2.2, 0.6, -2.6, -0.6, 1.2, 3.0, 4.0, 4.3, 4.8],
+  'Vocal Clarity': [-1.2, -0.5, 0.0, 1.0, 2.5, 3.5, 2.8, 2.0, 1.5, 1.0],
+  'Deep Bass Clean': [4.8, 3.5, 2.5, 0.0, -0.5, 0.0, 0.0, 0.0, 0.5, 0.5],
+  'Bass Boost': [6.0, 5.0, 3.5, 1.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+  Warm: [2.0, 2.0, 1.5, 1.0, 0.5, 0.0, -0.5, -1.2, -2.0, -2.8],
+  Bright: [-1.0, -0.5, 0.0, 0.0, 0.0, 0.5, 1.5, 3.0, 4.0, 4.5],
+  'Late Night': [1.5, 1.0, 0.5, 0.0, 0.0, 0.5, 1.0, 1.0, 0.5, 0.0],
+  Rock: [3.8, 3.0, 1.5, -1.0, -0.8, 0.5, 2.0, 3.0, 3.8, 4.0],
+  Pop: [-0.8, 0.0, 1.0, 2.0, 1.8, 1.0, 0.5, 1.0, 1.8, 2.5],
+  Electronic: [4.2, 3.0, 2.0, -0.5, 0.5, 2.0, 2.5, 2.5, 3.2, 4.0],
+  'R&B': [4.8, 3.5, 2.0, -0.5, -0.8, 0.5, 1.8, 2.5, 3.0, 3.0],
+  Acoustic: [2.8, 2.0, 1.5, 1.0, 1.8, 2.0, 1.2, 1.0, 1.2, 1.5],
+  Classical: [2.8, 2.0, 1.5, 0.0, 0.0, 0.5, 1.8, 2.0, 2.8, 3.0],
+  Jazz: [2.2, 1.5, 1.0, -0.5, 0.2, 1.0, 1.8, 2.0, 2.5, 2.5],
+  'Treble Air': [0.0, 0.0, -0.5, -0.5, 0.2, 1.0, 1.8, 3.0, 4.0, 5.0],
+  'Speech / Podcast': [-4.0, -3.0, -1.5, 0.0, 1.5, 3.0, 3.5, 2.5, 0.5, -1.0],
 };
 
 export interface JamChatMessage {
@@ -102,11 +114,11 @@ interface BackendPodcastShelf {
 
 class FeaturesStore {
   eqEnabled = $state(false);
-  eqPreset = $state('Flat');
-  eqBands = $state<number[]>([...EQ_PRESETS.Flat]);
+  eqPreset = $state('Default');
+  eqBands = $state<number[]>([...EQ_PRESETS.Default]);
   eqPreampDb = $state(0);
   studioClarity = $state(false);
-  headphoneProfile = $state('Off');
+  headphoneProfile = $state('off');
 
   devices = $state<AudioDevice[]>([]);
   selectedDeviceId = $state('');
@@ -143,8 +155,43 @@ class FeaturesStore {
     if (!isTauriRuntime()) return;
     await Promise.allSettled([
       this.refreshAudioOutput(),
+      this.refreshEqState(),
       this.loadPodcasts(),
     ]);
+  }
+
+  async refreshEqState() {
+    if (!isTauriRuntime()) return;
+    const eq = await ipcInvoke<{
+      enabled?: boolean;
+      presetName?: string;
+      gainsDb?: number[];
+      studioClarityEnabled?: boolean;
+    }>('eq_get_state');
+    if (!eq) return;
+    if (typeof eq.enabled === 'boolean') this.eqEnabled = eq.enabled;
+    if (typeof eq.studioClarityEnabled === 'boolean') this.studioClarity = eq.studioClarityEnabled;
+    if (typeof eq.presetName === 'string' && eq.presetName) this.eqPreset = eq.presetName;
+    if (Array.isArray(eq.gainsDb) && eq.gainsDb.length === this.eqBands.length) {
+      this.eqBands = [...eq.gainsDb];
+    }
+  }
+
+  hydrateFromPrefs(all: Record<string, unknown> | null) {
+    if (!all) return;
+    if (typeof all.lyricsProviderId === 'string' && all.lyricsProviderId) {
+      this.lyricsProviderId = all.lyricsProviderId;
+    }
+    if (typeof all.wordByWord === 'boolean') this.wordByWord = all.wordByWord;
+    if (typeof all.lyricsTransliteration === 'boolean') {
+      this.showRomanized = all.lyricsTransliteration;
+    }
+    if (typeof all.lyricsTextScale === 'number' && all.lyricsTextScale > 0) {
+      this.lyricsFontScale = all.lyricsTextScale;
+    }
+    if (typeof all.headphoneProfile === 'string' && all.headphoneProfile) {
+      this.headphoneProfile = all.headphoneProfile;
+    }
   }
 
   async refreshAudioOutput() {
@@ -353,11 +400,11 @@ class FeaturesStore {
     if (!preset) return;
     this.eqPreset = name;
     this.eqBands = [...preset];
-    void ipcInvoke('eq_set_preset', { presetId: name });
+    void ipcInvoke('eq_set_preset', { presetName: name });
   }
 
   setEqBand(index: number, db: number) {
-    const clamped = Math.max(-12, Math.min(12, Math.round(db * 10) / 10));
+    const clamped = Math.max(-8, Math.min(8, Math.round(db * 10) / 10));
     this.eqBands[index] = clamped;
     this.eqPreset = 'Custom';
     void ipcInvoke('eq_set_band_gain', { bandIndex: index, gainDb: clamped });

@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 use std::sync::Mutex;
 
 /// OS keyring service identifier for LastWave Desktop.
@@ -8,24 +9,28 @@ pub const SESSION_KEY: &str = "lastwave.session_key";
 pub const YT_COOKIES: &str = "lastwave.yt_cookies";
 pub const YT_PROFILES: &str = "lastwave.yt_profiles";
 pub const YT_ACTIVE: &str = "lastwave.yt_active";
+pub const YT_SESSION_BUNDLE: &str = "yt_session_bundle";
 pub const SPOTIFY_SP_DC: &str = "lastwave.spotify_sp_dc";
 
-const KNOWN_KEYS: [&str; 5] = [
+const KNOWN_KEYS: [&str; 6] = [
     SESSION_KEY,
     YT_COOKIES,
     YT_PROFILES,
     YT_ACTIVE,
+    YT_SESSION_BUNDLE,
     SPOTIFY_SP_DC,
 ];
 
 /// Secure credential storage (session keys, cookies).
 ///
-/// Uses OS keychain/credential-manager via `keyring`; falls back to in-memory
-/// storage on platforms without a backend so the app keeps working.
+/// Uses OS keychain/credential-manager via `keyring`, reads legacy
+/// `flutter_secure_storage.dat` DPAPI vaults from official LastWave Desktop
+/// installs on Windows when present, and falls back to in-memory storage.
 pub struct SecureStore {
     service: String,
     use_keyring: bool,
     memory_fallback: Mutex<HashMap<String, String>>,
+    legacy_vault: Mutex<HashMap<String, String>>,
     tracked_keys: Mutex<HashSet<String>>,
 }
 
@@ -35,10 +40,75 @@ impl Default for SecureStore {
     }
 }
 
+#[cfg(target_os = "windows")]
+fn load_flutter_secure_storage_dat(app_support_dir: &Path) -> HashMap<String, String> {
+    use windows::Win32::Foundation::{LocalFree, HLOCAL};
+    use windows::Win32::Security::Cryptography::{CryptUnprotectData, CRYPT_INTEGER_BLOB};
+
+    let vault_path = app_support_dir.join("flutter_secure_storage.dat");
+    let Ok(mut bytes) = std::fs::read(vault_path) else {
+        return HashMap::new();
+    };
+    if bytes.is_empty() {
+        return HashMap::new();
+    }
+
+    let in_blob = CRYPT_INTEGER_BLOB {
+        cbData: bytes.len() as u32,
+        pbData: bytes.as_mut_ptr(),
+    };
+    let mut out_blob = CRYPT_INTEGER_BLOB::default();
+    let ok = unsafe {
+        CryptUnprotectData(
+            &in_blob,
+            None,
+            None,
+            None,
+            None,
+            0,
+            &mut out_blob,
+        )
+        .is_ok()
+    };
+    if !ok || out_blob.pbData.is_null() {
+        return HashMap::new();
+    }
+
+    let slice = unsafe { std::slice::from_raw_parts(out_blob.pbData, out_blob.cbData as usize) };
+    let text = String::from_utf8_lossy(slice).into_owned();
+    unsafe {
+        let _ = LocalFree(HLOCAL(out_blob.pbData.cast()));
+    }
+
+    serde_json::from_str::<HashMap<String, String>>(&text).unwrap_or_default()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn load_flutter_secure_storage_dat(_app_support_dir: &Path) -> HashMap<String, String> {
+    HashMap::new()
+}
+
 impl SecureStore {
     /// Creates a `SecureStore` backed by the OS keyring with an in-memory fallback.
     pub fn new() -> Self {
         Self::with_service(KEYRING_SERVICE)
+    }
+
+    /// Creates a `SecureStore` backed by OS keyring plus legacy `flutter_secure_storage.dat`
+    /// credentials located inside `app_support_dir` (when present on Windows).
+    pub fn from_app_support_dir(app_support_dir: &Path) -> Self {
+        let legacy = load_flutter_secure_storage_dat(app_support_dir);
+        let mut tracked: HashSet<String> = KNOWN_KEYS.iter().map(|k| (*k).to_string()).collect();
+        for k in legacy.keys() {
+            tracked.insert(k.clone());
+        }
+        Self {
+            service: KEYRING_SERVICE.to_string(),
+            use_keyring: true,
+            memory_fallback: Mutex::new(HashMap::new()),
+            legacy_vault: Mutex::new(legacy),
+            tracked_keys: Mutex::new(tracked),
+        }
     }
 
     /// Creates a `SecureStore` using a custom keyring service name.
@@ -48,6 +118,7 @@ impl SecureStore {
             service: service.into(),
             use_keyring: true,
             memory_fallback: Mutex::new(HashMap::new()),
+            legacy_vault: Mutex::new(HashMap::new()),
             tracked_keys: Mutex::new(tracked),
         }
     }
@@ -59,6 +130,7 @@ impl SecureStore {
             service: KEYRING_SERVICE.to_string(),
             use_keyring: false,
             memory_fallback: Mutex::new(HashMap::new()),
+            legacy_vault: Mutex::new(HashMap::new()),
             tracked_keys: Mutex::new(tracked),
         }
     }
@@ -70,6 +142,14 @@ impl SecureStore {
     }
 
     fn read_internal(&self, key: &str) -> Option<String> {
+        if let Some(mem) = self
+            .memory_fallback
+            .lock()
+            .ok()
+            .and_then(|map| map.get(key).cloned())
+        {
+            return Some(mem);
+        }
         if self.use_keyring {
             if let Ok(entry) = keyring::Entry::new(&self.service, key) {
                 if let Ok(v) = entry.get_password() {
@@ -77,7 +157,7 @@ impl SecureStore {
                 }
             }
         }
-        self.memory_fallback
+        self.legacy_vault
             .lock()
             .ok()
             .and_then(|map| map.get(key).cloned())
@@ -88,6 +168,9 @@ impl SecureStore {
         match value {
             None => {
                 if let Ok(mut map) = self.memory_fallback.lock() {
+                    map.remove(key);
+                }
+                if let Ok(mut map) = self.legacy_vault.lock() {
                     map.remove(key);
                 }
                 if self.use_keyring {
@@ -167,6 +250,9 @@ impl SecureStore {
 
     pub fn clear_all(&self) {
         if let Ok(mut map) = self.memory_fallback.lock() {
+            map.clear();
+        }
+        if let Ok(mut map) = self.legacy_vault.lock() {
             map.clear();
         }
         if self.use_keyring {

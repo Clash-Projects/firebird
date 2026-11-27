@@ -214,38 +214,43 @@ impl Prefs {
         self.inner.read().ok()?.file_path.clone()
     }
 
+    fn lookup<'a>(data: &'a BTreeMap<String, Value>, key: &str) -> Option<&'a Value> {
+        data.get(key)
+            .or_else(|| data.get(&format!("flutter.{key}")))
+    }
+
     pub fn get(&self, key: &str) -> Option<Value> {
-        self.inner.read().ok()?.data.get(key).cloned()
+        let guard = self.inner.read().ok()?;
+        Self::lookup(&guard.data, key).cloned()
     }
 
     pub fn get_bool(&self, key: &str) -> Option<bool> {
-        self.inner.read().ok()?.data.get(key)?.as_bool()
+        let guard = self.inner.read().ok()?;
+        Self::lookup(&guard.data, key)?.as_bool()
     }
 
     pub fn get_int(&self, key: &str) -> Option<i64> {
         let guard = self.inner.read().ok()?;
-        let val = guard.data.get(key)?;
+        let val = Self::lookup(&guard.data, key)?;
         val.as_i64()
             .or_else(|| val.as_u64().and_then(|u| i64::try_from(u).ok()))
     }
 
     pub fn get_double(&self, key: &str) -> Option<f64> {
-        self.inner.read().ok()?.data.get(key)?.as_f64()
+        let guard = self.inner.read().ok()?;
+        Self::lookup(&guard.data, key)?.as_f64()
     }
 
     pub fn get_string(&self, key: &str) -> Option<String> {
-        self.inner
-            .read()
-            .ok()?
-            .data
-            .get(key)?
+        let guard = self.inner.read().ok()?;
+        Self::lookup(&guard.data, key)?
             .as_str()
             .map(ToString::to_string)
     }
 
     pub fn get_string_list(&self, key: &str) -> Option<Vec<String>> {
         let guard = self.inner.read().ok()?;
-        let arr = guard.data.get(key)?.as_array()?;
+        let arr = Self::lookup(&guard.data, key)?.as_array()?;
         let mut out = Vec::with_capacity(arr.len());
         for item in arr {
             out.push(item.as_str()?.to_string());
@@ -278,7 +283,9 @@ impl Prefs {
 
     pub fn remove(&self, key: &str) {
         if let Ok(mut guard) = self.inner.write() {
-            if guard.data.remove(key).is_some() {
+            let r1 = guard.data.remove(key).is_some();
+            let r2 = guard.data.remove(&format!("flutter.{key}")).is_some();
+            if r1 || r2 {
                 Self::persist_locked(&guard);
             }
         }
@@ -286,6 +293,10 @@ impl Prefs {
 
     fn set_value(&self, key: &str, value: Value) {
         if let Ok(mut guard) = self.inner.write() {
+            let flutter_key = format!("flutter.{key}");
+            if guard.data.contains_key(&flutter_key) {
+                guard.data.insert(flutter_key, value.clone());
+            }
             guard.data.insert(key.to_string(), value);
             Self::persist_locked(&guard);
         }
@@ -1569,5 +1580,27 @@ mod tests {
         assert!(!portable_keys.contains("lw_sessionkey"));
         assert!(!portable_keys.contains("lw_username"));
         assert!(!portable_keys.contains("lw_download_dir"));
+    }
+
+    #[test]
+    fn reads_flutter_prefixed_legacy_keys() {
+        let dir = std::env::temp_dir().join(format!("lw_prefs_flutter_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join(PREFS_FILENAME),
+            r#"{"flutter.lw_lastfm_api_key":"legacy_key","flutter.lw_lossless_quality":28}"#,
+        )
+        .unwrap();
+
+        let prefs = Prefs::load(&dir);
+        assert_eq!(prefs.last_fm_api_key(), "legacy_key");
+        assert_eq!(prefs.lossless_quality(), 28);
+
+        prefs.set_lossless_quality(6);
+        assert_eq!(prefs.lossless_quality(), 6);
+        assert_eq!(prefs.get_int("flutter.lw_lossless_quality"), Some(6));
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -33,7 +33,7 @@
     if (!isTauriRuntime()) return;
     const state = await ipcInvoke<{ status?: string; username?: string; message?: string }>('lastfm_auth_state');
     if (!state) return;
-    settingsStore.lastfmConnected = Boolean(state.username) && state.status === 'authenticated';
+    settingsStore.lastfmConnected = Boolean(state.username) && state.status === 'signedIn';
     settingsStore.lastfmUser = state.username || '';
     if (state.message && state.status === 'error') {
       lastfmError = state.message;

@@ -57,11 +57,61 @@ pub fn run() {
             let handle = app.handle().clone();
             let state = app.state::<AppState>();
             state.set_app_handle(handle.clone());
+            tauri::async_runtime::block_on(async {
+                state.tube.load_persisted_connection().await;
+                state.spotify_auth.load().await;
+            });
 
             let emit_handle = handle.clone();
             let spectrum = Arc::clone(&state.spectrum);
+            let discord = Arc::clone(&state.discord_presence);
+            let playback_for_eq = Arc::clone(&state.playback);
+            state.equalizer.set_filter_sink(Some(Arc::new(move |af: &str| {
+                let pb = Arc::clone(&playback_for_eq);
+                let filter = af.to_string();
+                tauri::async_runtime::spawn(async move {
+                    pb.set_audio_filter(filter).await;
+                });
+            })));
+
+            let smtc = Arc::new(crate::audio::smtc_service::SmtcService::new());
+            smtc.set_macos_now_playing(state.prefs.macos_now_playing());
+            {
+                let pb_smtc = Arc::clone(&state.playback);
+                smtc.set_action_handler(Arc::new(move |action| {
+                    pb_smtc.handle_media_control_action(action);
+                }));
+            }
+            state.playback.attach_smtc(Arc::clone(&smtc));
+            #[cfg(windows)]
+            {
+                let hwnd = app
+                    .get_webview_window("main")
+                    .and_then(|w| w.hwnd().ok())
+                    .map(|h| h.0 as isize)
+                    .unwrap_or(0);
+                smtc.startup(hwnd, None);
+            }
+            #[cfg(target_os = "macos")]
+            smtc.startup(0, None);
+
+            {
+                let discord_hb = Arc::clone(&state.discord_presence);
+                let pb_hb = Arc::clone(&state.playback);
+                tauri::async_runtime::spawn(async move {
+                    discord_hb
+                        .start_heartbeat(move || Some(pb_hb.snapshot()))
+                        .await;
+                });
+            }
+
             state.playback.add_snapshot_listener(Arc::new(move |snap| {
                 spectrum.update_playback(snap);
+                let discord_snap = Arc::clone(&discord);
+                let snap_clone = snap.clone();
+                tauri::async_runtime::spawn(async move {
+                    discord_snap.on_snapshot(snap_clone).await;
+                });
                 let _ = emit_handle.emit("player:snapshot", snap);
             }));
 

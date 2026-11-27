@@ -3,6 +3,7 @@
   import { windowState } from '$src/app/window.svelte';
   import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
   import { EQ_FREQUENCIES, EQ_PRESETS, featuresStore } from '$src/state/features.svelte';
+  import { settingsStore } from '$src/state/settings.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import Select from '$src/ui/components/Select.svelte';
   import Switch from '$src/ui/components/Switch.svelte';
@@ -11,25 +12,18 @@
 
   const presetOptions = Object.keys(EQ_PRESETS).map((k) => ({ value: k, label: k }));
   const headphoneOptions = [
-    { value: 'Off', label: 'Off (No AutoEQ)' },
-    { value: 'Sennheiser HD 600', label: 'Sennheiser HD 600' },
-    { value: 'Sennheiser HD 650', label: 'Sennheiser HD 650' },
-    { value: 'HiFiMAN Sundara', label: 'HiFiMAN Sundara' },
-    { value: 'Sony WH-1000XM5', label: 'Sony WH-1000XM5' },
-    { value: 'Apple AirPods Max', label: 'Apple AirPods Max' },
+    { value: 'off', label: 'Off (No AutoEQ)' },
+    { value: 'sony-wh-1000xm5', label: 'Sony WH-1000XM5' },
+    { value: 'bose-qc-ultra', label: 'Bose QC Ultra' },
+    { value: 'airpods-max', label: 'Apple AirPods Max' },
+    { value: 'sennheiser-hd600', label: 'Sennheiser HD 600' },
+    { value: 'ath-m50x', label: 'Audio-Technica ATH-M50x' },
+    { value: 'dt-770', label: 'Beyerdynamic DT 770' },
   ];
 
-  onMount(async () => {
+  onMount(() => {
     if (!isTauriRuntime()) return;
-    const eq = await ipcInvoke<{ enabled?: boolean; studioClarityEnabled?: boolean; bandGains?: number[] }>(
-      'eq_get_state'
-    );
-    if (!eq) return;
-    if (typeof eq.enabled === 'boolean') featuresStore.eqEnabled = eq.enabled;
-    if (typeof eq.studioClarityEnabled === 'boolean') featuresStore.studioClarity = eq.studioClarityEnabled;
-    if (Array.isArray(eq.bandGains) && eq.bandGains.length === featuresStore.eqBands.length) {
-      featuresStore.eqBands = [...eq.bandGains];
-    }
+    void featuresStore.refreshEqState();
   });
 
   function toggleEqEnabled(enabled: boolean) {
@@ -42,8 +36,15 @@
     void ipcInvoke('eq_set_studio_clarity_enabled', { enabled });
   }
 
+  function changeHeadphoneProfile(id: string) {
+    featuresStore.headphoneProfile = id;
+    settingsStore.saveStringPref('lw_headphone_profile', id);
+    void ipcInvoke('player_apply_audio_prefs');
+  }
+
   function resetEq() {
-    featuresStore.applyEqPreset('Flat');
+    featuresStore.eqPreset = 'Default';
+    featuresStore.eqBands = [...EQ_PRESETS.Default];
     void ipcInvoke('eq_reset');
   }
 
@@ -59,7 +60,7 @@
 >
   <div class="flex items-center justify-between pb-3">
     <div>
-      <h2 class="text-[14px] font-bold">15-Band Parametric EQ</h2>
+      <h2 class="text-[14px] font-bold">10-Band Parametric EQ</h2>
       <p class="text-[11.5px] text-[var(--lw-text-tertiary)]">Studio DSP filter chain</p>
     </div>
     <div class="flex items-center gap-2">
@@ -111,8 +112,8 @@
             <span class="w-9 text-right text-[var(--lw-text-tertiary)] lw-tabular">{fmtFreq(hz)}</span>
             <input
               type="range"
-              min="-12"
-              max="12"
+              min="-8"
+              max="8"
               step="0.5"
               disabled={!featuresStore.eqEnabled}
               value={featuresStore.eqBands[idx]}
@@ -129,7 +130,13 @@
 
     <div class="space-y-2 rounded-[16px] border border-[var(--lw-outline)] bg-[var(--lw-surface)] p-3">
       <div class="text-[12px] font-semibold">AutoEQ Headphone Curve</div>
-      <Select label="AutoEQ Headphone Curve" bind:value={featuresStore.headphoneProfile} options={headphoneOptions} class="w-full" />
+      <Select
+        label="AutoEQ Headphone Curve"
+        value={featuresStore.headphoneProfile}
+        options={headphoneOptions}
+        onchange={changeHeadphoneProfile}
+        class="w-full"
+      />
       <label class="flex cursor-pointer items-center justify-between gap-3 pt-1 text-[12px]">
         <span class="text-[var(--lw-text-secondary)]">Studio Master Clarity Filter</span>
         <Switch

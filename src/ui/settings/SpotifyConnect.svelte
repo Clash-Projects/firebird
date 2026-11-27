@@ -22,12 +22,18 @@
     if (!token || busy) return;
     busy = true;
     try {
-      const ok = await ipcInvoke<boolean>('spotify_connect_sp_dc', { spDc: token });
-      if (ok) {
+      const status = await ipcInvoke<string>('spotify_connect_sp_dc', { raw: token });
+      if (status === 'ok') {
         settingsStore.spotifyConnected = true;
         showTokenInput = false;
         spDcInput = '';
         featuresStore.showToast({ title: 'Spotify connected', severity: 'success' });
+      } else {
+        featuresStore.showToast({
+          title: 'Spotify sign-in failed',
+          subtitle: status === 'refused' ? 'Cookie rejected or expired' : 'Could not verify sp_dc cookie',
+          severity: 'error',
+        });
       }
     } finally {
       busy = false;
