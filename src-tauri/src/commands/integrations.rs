@@ -57,9 +57,7 @@ use crate::models::podcast_models::{
 use crate::storage::home_snapshot::{PersonalMixData, SwrState};
 use crate::storage::playlists::SavedPlaylist;
 
-// ---------------------------------------------------------------------------
 // Adapters for trait-object repositories
-// ---------------------------------------------------------------------------
 
 struct TubePlaylistSource(Arc<InnerTubeMusicApi>);
 
@@ -206,9 +204,7 @@ fn podcast_repo(state: &AppState) -> PodcastRepository {
     )
 }
 
-// ---------------------------------------------------------------------------
 // Lyrics commands
-// ---------------------------------------------------------------------------
 
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
@@ -275,9 +271,7 @@ pub async fn lyrics_translate(
     Ok(translator.translate(&track_key, &target, &lines).await)
 }
 
-// ---------------------------------------------------------------------------
 // Last.fm & Extra Scrobblers commands
-// ---------------------------------------------------------------------------
 
 #[tauri::command]
 pub async fn lastfm_auth_state(state: State<'_, AppState>) -> Result<AuthState, String> {
@@ -506,9 +500,7 @@ pub async fn extra_scrobblers_submit(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
 // Discord Presence commands
-// ---------------------------------------------------------------------------
 
 #[tauri::command]
 pub async fn discord_presence_update(
@@ -525,9 +517,7 @@ pub async fn discord_presence_shutdown(state: State<'_, AppState>) -> Result<(),
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
 // Jam commands
-// ---------------------------------------------------------------------------
 
 #[tauri::command]
 pub async fn jam_snapshot(state: State<'_, AppState>) -> Result<JamSnapshot, String> {
@@ -649,9 +639,7 @@ pub async fn jam_on_player_snapshot(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
 // Spotify commands
-// ---------------------------------------------------------------------------
 
 #[tauri::command]
 pub async fn spotify_connected(state: State<'_, AppState>) -> Result<bool, String> {
@@ -725,9 +713,7 @@ pub async fn spotify_canvas(
         .await)
 }
 
-// ---------------------------------------------------------------------------
 // Podcasts commands
-// ---------------------------------------------------------------------------
 
 #[tauri::command]
 pub async fn podcasts_home(
@@ -785,9 +771,7 @@ pub fn podcasts_resume_ms(state: State<'_, AppState>, video_id: String) -> i64 {
     podcast_repo(&state).resume_ms(&video_id)
 }
 
-// ---------------------------------------------------------------------------
 // Playlist Importer commands
-// ---------------------------------------------------------------------------
 
 #[tauri::command]
 pub async fn playlist_preview_link(
@@ -835,9 +819,7 @@ pub fn playlist_detect_link(raw: String) -> Option<PlaylistLinkSource> {
     detect_playlist_link(&raw)
 }
 
-// ---------------------------------------------------------------------------
 // Artwork commands
-// ---------------------------------------------------------------------------
 
 #[tauri::command]
 pub async fn artwork_resolve_track(
@@ -883,9 +865,7 @@ pub async fn artwork_lookup_animated(
     Ok(state.animated_artwork.lookup(&query).await)
 }
 
-// ---------------------------------------------------------------------------
 // Home, Feed, Search, Stats, Updates commands
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

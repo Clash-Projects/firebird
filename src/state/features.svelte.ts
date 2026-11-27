@@ -1,4 +1,3 @@
-import { MOCK_AUDIO_DEVICES, MOCK_LYRICS, MOCK_PODCASTS } from './mockData';
 import type { AudioDevice, LyricsDocument, PodcastShow, ToastMessage } from './types';
 
 export const EQ_FREQUENCIES = [
@@ -21,45 +20,32 @@ export interface JamChatMessage {
 }
 
 class FeaturesStore {
-  // Equalizer
-  eqEnabled = $state(true);
-  eqPreset = $state('Studio Reference');
-  eqBands = $state<number[]>([...EQ_PRESETS['Studio Reference']]);
-  eqPreampDb = $state(-1.0);
-  studioClarity = $state(true);
+  eqEnabled = $state(false);
+  eqPreset = $state('Flat');
+  eqBands = $state<number[]>([...EQ_PRESETS.Flat]);
+  eqPreampDb = $state(0);
+  studioClarity = $state(false);
   headphoneProfile = $state('Off');
 
-  // Audio Output
-  devices = $state<AudioDevice[]>([...MOCK_AUDIO_DEVICES]);
-  selectedDeviceId = $state('dev-fiio-k7');
+  devices = $state<AudioDevice[]>([]);
+  selectedDeviceId = $state('');
 
-  // Lyrics
-  lyricsByTrack = $state<Record<string, LyricsDocument>>({ ...MOCK_LYRICS });
+  lyricsByTrack = $state<Record<string, LyricsDocument>>({});
   showTranslation = $state(false);
   showRomanized = $state(false);
   lyricsFontScale = $state(1.0);
 
-  // Podcasts
-  podcasts = $state<PodcastShow[]>([...MOCK_PODCASTS]);
+  podcasts = $state<PodcastShow[]>([]);
 
-  // Jam
   jamConnected = $state(false);
-  jamRoomCode = $state('WAVE-7429');
-  jamIsHost = $state(true);
-  jamParticipants = $state([
-    { id: 'u1', name: 'Ajisth (Host)', role: 'host' },
-    { id: 'u2', name: 'Mira', role: 'listener' },
-    { id: 'u3', name: 'Devon', role: 'co-host' },
-  ]);
-  jamChat = $state<JamChatMessage[]>([
-    { id: 'm1', sender: 'Mira', text: 'This 24-bit master sounds super clean.', time: '01:12' },
-    { id: 'm2', sender: 'Devon', text: 'Queue up Chrome Rain next!', time: '01:14' },
-  ]);
+  jamRoomCode = $state('');
+  jamIsHost = $state(false);
+  jamParticipants = $state<{ id: string; name: string; role: string }[]>([]);
+  jamChat = $state<JamChatMessage[]>([]);
 
-  // Toasts / Infobar
   toasts = $state<ToastMessage[]>([]);
 
-  selectedDevice = $derived(
+  selectedDevice = $derived<AudioDevice | undefined>(
     this.devices.find((d) => d.id === this.selectedDeviceId) ?? this.devices[0]
   );
 
@@ -75,16 +61,8 @@ class FeaturesStore {
     this.eqPreset = 'Custom';
   }
 
-  getLyrics(trackId: string): LyricsDocument {
-    return (
-      this.lyricsByTrack[trackId] ?? {
-        trackId,
-        provider: 'LRCLIB (Synced)',
-        synced: true,
-        wordSynced: false,
-        lines: MOCK_LYRICS['trk-01'].lines,
-      }
-    );
+  getLyrics(trackId: string): LyricsDocument | null {
+    return this.lyricsByTrack[trackId] ?? null;
   }
 
   sendJamMessage(text: string) {

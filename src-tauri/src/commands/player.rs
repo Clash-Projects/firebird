@@ -14,9 +14,7 @@ use crate::models::equalizer_models::{
 use crate::models::player_state::PlayerSnapshot;
 use crate::models::stream_models::PlayableTrack;
 
-// ---------------------------------------------------------------------------
 // Playback & queue
-// ---------------------------------------------------------------------------
 
 #[tauri::command]
 pub fn player_snapshot(state: State<'_, AppState>) -> PlayerSnapshot {
@@ -242,9 +240,7 @@ pub fn player_persist_now(state: State<'_, AppState>) {
     state.playback.persist_now();
 }
 
-// ---------------------------------------------------------------------------
 // Crossfade / AutoMix / Audio prefs
-// ---------------------------------------------------------------------------
 
 #[tauri::command]
 pub async fn player_apply_audio_prefs(state: State<'_, AppState>) -> Result<(), String> {
@@ -267,9 +263,7 @@ pub fn player_debug_mix_state(state: State<'_, AppState>) -> (usize, f64, Option
     state.playback.debug_mix_state()
 }
 
-// ---------------------------------------------------------------------------
 // Equalizer & DSP
-// ---------------------------------------------------------------------------
 
 #[tauri::command]
 pub fn eq_get_state(state: State<'_, AppState>) -> EqualizerState {
@@ -346,9 +340,7 @@ pub fn headphone_profiles_list() -> Vec<HeadphoneProfile> {
     HeadphoneProfiles::ALL.to_vec()
 }
 
-// ---------------------------------------------------------------------------
 // Audio output / WASAPI / bit-perfect
-// ---------------------------------------------------------------------------
 
 #[tauri::command]
 pub fn audio_output_state(state: State<'_, AppState>) -> AudioOutputState {

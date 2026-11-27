@@ -1,11 +1,11 @@
 <script lang="ts">
   import { router } from '$src/app/router.svelte';
-  import { featuresStore } from '$src/state/features.svelte';
   import { libraryStore } from '$src/state/library.svelte';
   import Artwork from '$src/ui/components/Artwork.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import HeroHeader from '$src/ui/components/HeroHeader.svelte';
   import Input from '$src/ui/components/Input.svelte';
+  import States from '$src/ui/components/States.svelte';
   import { goPlaylist } from '$src/ui/navigation/waveNav';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import PlaylistDialogs from './PlaylistDialogs.svelte';
@@ -43,13 +43,6 @@
       <Buttons variant="primary" size="sm" onclick={() => (createOpen = true)}>
         <WaveIcon name="plus" size={14} /> New
       </Buttons>
-      <Buttons
-        variant="ghost"
-        size="sm"
-        onclick={() => featuresStore.showToast({ title: 'Import playlist', subtitle: 'Supports Spotify, Apple Music, YouTube, CSV, and M3U', severity: 'info' })}
-      >
-        <WaveIcon name="download" size={14} /> Import
-      </Buttons>
     {/snippet}
   </HeroHeader>
 
@@ -59,6 +52,10 @@
       {localLists.length + ytLists.length + spotifyLists.length} shown
     </span>
   </div>
+
+  {#if localLists.length + ytLists.length + spotifyLists.length === 0}
+    <States icon="library" title="No playlists yet" description="Create a new playlist to organize your music." />
+  {/if}
 
   {#if ytLists.length > 0}
     <section class="space-y-2.5">

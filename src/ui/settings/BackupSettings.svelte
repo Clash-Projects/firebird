@@ -23,12 +23,5 @@
   </div>
   <div class="flex gap-2">
     <Buttons variant="secondary" size="sm" onclick={exportBackup}>Export JSON</Buttons>
-    <Buttons
-      variant="ghost"
-      size="sm"
-      onclick={() => featuresStore.showToast({ title: 'Restore ready', subtitle: 'Drop a backup JSON file to restore', severity: 'info' })}
-    >
-      Restore
-    </Buttons>
   </div>
 </div>

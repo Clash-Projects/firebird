@@ -74,5 +74,9 @@
     <div class="px-3 pt-4 text-[11px] text-[var(--lw-text-tertiary)]">
       Source: {doc.provider}
     </div>
+  {:else}
+    <div class="px-3 py-10 text-center text-[13px] text-[var(--lw-text-secondary)]">
+      {track ? 'No lyrics available for this track.' : 'Play a track to view lyrics.'}
+    </div>
   {/if}
 </div>

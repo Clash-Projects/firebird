@@ -2,7 +2,7 @@
   import { featuresStore } from '$src/state/features.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
 
-  let cacheSizeMb = $state(148.4);
+  let cacheSizeMb = $state(0);
 
   function clearCache() {
     cacheSizeMb = 0;

@@ -11,17 +11,19 @@
   let bitPerfectActive = $derived(
     settingsStore.exclusiveMode &&
       settingsStore.bitPerfectEnabled &&
-      device.supportsExclusive &&
+      Boolean(device?.supportsExclusive) &&
       !featuresStore.eqEnabled
   );
   let blockingReason = $derived(
-    !settingsStore.exclusiveMode
-      ? 'WASAPI Exclusive mode is off'
-      : !device.supportsExclusive
-        ? 'Selected device does not support Exclusive mode'
-        : featuresStore.eqEnabled
-          ? 'Parametric EQ DSP is active'
-          : null
+    !device
+      ? 'No audio output device detected'
+      : !settingsStore.exclusiveMode
+        ? 'WASAPI Exclusive mode is off'
+        : !device.supportsExclusive
+          ? 'Selected device does not support Exclusive mode'
+          : featuresStore.eqEnabled
+            ? 'Parametric EQ DSP is active'
+            : null
   );
 </script>
 
@@ -59,33 +61,39 @@
         <div class="mt-3 space-y-1 border-t border-[var(--lw-divider)] pt-2.5 text-[12px] text-[var(--lw-text-secondary)]">
           <div class="flex justify-between"><span>Source</span><span class="text-[var(--lw-text-primary)]">{track.codec}</span></div>
           <div class="flex justify-between"><span>Sample Rate</span><span class="lw-tabular text-[var(--lw-text-primary)]">{(track.sampleRateHz / 1000).toFixed(1)} kHz / {track.bitDepth}-bit</span></div>
-          <div class="flex justify-between"><span>Output Driver</span><span class="text-[var(--lw-text-primary)]">{device.driver} {settingsStore.exclusiveMode ? 'Exclusive' : 'Shared'}</span></div>
+          <div class="flex justify-between"><span>Output Driver</span><span class="text-[var(--lw-text-primary)]">{device?.driver ?? 'System Default'} {settingsStore.exclusiveMode ? 'Exclusive' : 'Shared'}</span></div>
         </div>
       {/if}
     </div>
 
     <div class="space-y-2">
       <div class="text-[11px] font-bold tracking-[0.8px] text-[var(--lw-text-tertiary)] uppercase">Output Device</div>
-      {#each featuresStore.devices as dev (dev.id)}
-        {@const selected = dev.id === featuresStore.selectedDeviceId}
-        <button
-          type="button"
-          onclick={() => (featuresStore.selectedDeviceId = dev.id)}
-          class="flex w-full cursor-pointer items-center justify-between rounded-[12px] border px-3 py-2.5 text-left transition-colors {selected
-            ? 'border-[var(--lw-accent)] bg-[var(--lw-wash-pressed)]'
-            : 'border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] hover:bg-[var(--lw-wash-hover)]'}"
-        >
-          <div class="min-w-0">
-            <div class="truncate text-[12.5px] font-semibold">{dev.name}</div>
-            <div class="text-[11px] text-[var(--lw-text-tertiary)]">
-              {dev.driver} · up to {dev.maxBitDepth}-bit / {(dev.maxSampleRateHz / 1000).toFixed(0)} kHz
+      {#if featuresStore.devices.length === 0}
+        <div class="rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] px-3 py-3 text-[12px] text-[var(--lw-text-secondary)]">
+          No audio devices available.
+        </div>
+      {:else}
+        {#each featuresStore.devices as dev (dev.id)}
+          {@const selected = dev.id === featuresStore.selectedDeviceId}
+          <button
+            type="button"
+            onclick={() => (featuresStore.selectedDeviceId = dev.id)}
+            class="flex w-full cursor-pointer items-center justify-between rounded-[12px] border px-3 py-2.5 text-left transition-colors {selected
+              ? 'border-[var(--lw-accent)] bg-[var(--lw-wash-pressed)]'
+              : 'border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] hover:bg-[var(--lw-wash-hover)]'}"
+          >
+            <div class="min-w-0">
+              <div class="truncate text-[12.5px] font-semibold">{dev.name}</div>
+              <div class="text-[11px] text-[var(--lw-text-tertiary)]">
+                {dev.driver} · up to {dev.maxBitDepth}-bit / {(dev.maxSampleRateHz / 1000).toFixed(0)} kHz
+              </div>
             </div>
-          </div>
-          {#if selected}
-            <WaveIcon name="check" size={15} class="text-[var(--lw-accent)]" />
-          {/if}
-        </button>
-      {/each}
+            {#if selected}
+              <WaveIcon name="check" size={15} class="text-[var(--lw-accent)]" />
+            {/if}
+          </button>
+        {/each}
+      {/if}
     </div>
 
     <label class="flex cursor-pointer items-center justify-between rounded-[12px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] px-3 py-2.5">

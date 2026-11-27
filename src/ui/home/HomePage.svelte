@@ -7,6 +7,7 @@
   import { settingsStore } from '$src/state/settings.svelte';
   import Artwork from '$src/ui/components/Artwork.svelte';
   import { contextMenu } from '$src/ui/components/contextMenuState.svelte';
+  import States from '$src/ui/components/States.svelte';
   import { goAlbum, goArtist, goGenre, goPlaylist } from '$src/ui/navigation/waveNav';
   import WaveEntrance from '$src/ui/theme/WaveEntrance.svelte';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
@@ -55,6 +56,14 @@
       </button>
     </header>
   </WaveEntrance>
+
+  {#if !featured && libraryStore.albums.length === 0 && libraryStore.artists.length === 0}
+    <States
+      icon="music"
+      title="Your library is empty"
+      description="Sign in to YouTube Music or add local music folders in Settings to start listening."
+    />
+  {/if}
 
   {#if featured}
     <WaveEntrance index={1}>
@@ -143,7 +152,7 @@
     </WaveEntrance>
   {/if}
 
-  {#if visibleIds.has('quick_picks')}
+  {#if visibleIds.has('quick_picks') && quickPicks.length > 0}
     <WaveEntrance index={2}>
       <section class="space-y-2.5">
         <div class="flex items-end justify-between">
@@ -197,7 +206,7 @@
     </WaveEntrance>
   {/if}
 
-  {#if visibleIds.has('albums')}
+  {#if visibleIds.has('albums') && libraryStore.albums.length > 0}
     <WaveEntrance index={3}>
       <section class="space-y-2.5">
         <div class="flex items-end justify-between">
@@ -238,7 +247,7 @@
     </WaveEntrance>
   {/if}
 
-  {#if visibleIds.has('personal_mix')}
+  {#if visibleIds.has('personal_mix') && libraryStore.artists.length > 0}
     <WaveEntrance index={4}>
       <section class="space-y-2.5">
         <div class="flex items-end justify-between">
@@ -274,7 +283,7 @@
     </WaveEntrance>
   {/if}
 
-  {#if visibleIds.has('recent_plays')}
+  {#if visibleIds.has('recent_plays') && charts.length > 0}
     <WaveEntrance index={5}>
       <section class="space-y-2">
         <div>

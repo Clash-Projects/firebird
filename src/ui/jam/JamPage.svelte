@@ -46,7 +46,7 @@
       <div class="rounded-[20px] border border-[var(--lw-outline)] bg-[var(--lw-surface)] p-6">
         <h2 class="text-[16px] font-bold">Join by Code</h2>
         <div class="mt-3 flex gap-2">
-          <Input bind:value={joinCode} placeholder="WAVE-7429" />
+          <Input bind:value={joinCode} placeholder="Enter room code" />
           <Buttons
             variant="secondary"
             onclick={() => {

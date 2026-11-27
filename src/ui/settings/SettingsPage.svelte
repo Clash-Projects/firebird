@@ -13,7 +13,6 @@
   import WaveIcon, { type WaveIconName } from '$src/ui/theme/WaveIcon.svelte';
   import BackupSettings from './BackupSettings.svelte';
   import CacheSettings from './CacheSettings.svelte';
-  import DiagnosticsActions from './DiagnosticsActions.svelte';
   import DownloadLayoutSettings from './DownloadLayoutSettings.svelte';
   import LibrarySettings from './LibrarySettings.svelte';
   import PerformanceModeCard from './PerformanceModeCard.svelte';
@@ -317,8 +316,10 @@
       <div class="space-y-3">
         <div class="flex items-center justify-between rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
           <div>
-            <div class="text-[13.5px] font-semibold">Last.fm ({settingsStore.lastfmUser})</div>
-            <div class="text-[12px] text-[var(--lw-text-secondary)]">Serialized offline scrobble queue active</div>
+            <div class="text-[13.5px] font-semibold">Last.fm {settingsStore.lastfmUser ? `(${settingsStore.lastfmUser})` : ''}</div>
+            <div class="text-[12px] text-[var(--lw-text-secondary)]">
+              {settingsStore.lastfmConnected ? 'Serialized offline scrobble queue active' : 'Not connected'}
+            </div>
           </div>
           <Buttons variant="ghost" size="sm" onclick={() => (keyGuideOpen = true)}>API Key Guide</Buttons>
         </div>
@@ -358,7 +359,6 @@
           <div class="text-[15px] font-bold">LastWave Desktop · Firebird UI</div>
           <div class="mt-1 text-[12.5px] text-[var(--lw-text-secondary)]">Version 2.6.0 · Svelte 5 + Tailwind CSS v4</div>
         </div>
-        <DiagnosticsActions />
       </div>
     {/if}
     </div>

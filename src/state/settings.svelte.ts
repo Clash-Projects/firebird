@@ -37,13 +37,13 @@ class SettingsStore {
   listenBrainzConnected = $state(false);
   libreFmConnected = $state(false);
 
-  ytConnected = $state(true);
-  ytAccountName = $state('Ajisth');
-  ytAccountEmail = $state('ajisth@lastwave.local');
-  spotifyConnected = $state(true);
-  spotifyUser = $state('ajisth.wav');
-  lastfmConnected = $state(true);
-  lastfmUser = $state('ajisth69');
+  ytConnected = $state(false);
+  ytAccountName = $state('');
+  ytAccountEmail = $state('');
+  spotifyConnected = $state(false);
+  spotifyUser = $state('');
+  lastfmConnected = $state(false);
+  lastfmUser = $state('');
 
   downloadFolderTemplate = $state('{artist}/{album}/{track_num} - {title}');
   embedLyrics = $state(true);

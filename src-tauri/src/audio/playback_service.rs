@@ -1,6 +1,5 @@
 //! Desktop playback service built on deferred-loaded libmpv.
 //!
-//! Ported 1:1 from `lib/features/player/playback_service.dart`:
 //! - Dual-deck libmpv (`_player` + `_standbyPlayer`) with deferred initialization,
 //!   pinned mpv cache dir, extended demuxer buffering, and ffmpeg reconnect.
 //! - Resolution fast path: local download -> lossless backend -> YouTube race ->

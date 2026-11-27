@@ -1,24 +1,16 @@
-import {
-  MOCK_ALBUMS,
-  MOCK_ARTISTS,
-  MOCK_DOWNLOADS,
-  MOCK_GENRES,
-  MOCK_PLAYLISTS,
-  MOCK_TRACKS,
-} from './mockData';
 import type { Album, Artist, DownloadItem, GenreItem, Playlist, Track } from './types';
 
 class LibraryStore {
-  tracks = $state<Track[]>([...MOCK_TRACKS]);
-  albums = $state<Album[]>([...MOCK_ALBUMS]);
-  artists = $state<Artist[]>([...MOCK_ARTISTS]);
-  playlists = $state<Playlist[]>([...MOCK_PLAYLISTS]);
-  genres = $state<GenreItem[]>([...MOCK_GENRES]);
-  likedIds = $state<string[]>(['trk-01', 'trk-03', 'trk-04', 'trk-08']);
-  historyIds = $state<string[]>(['trk-01', 'trk-02', 'trk-03', 'trk-04', 'trk-05', 'trk-06', 'trk-07', 'trk-08']);
-  searchHistory = $state<string[]>(['Kairo Vance', 'Analog Horizons', 'Dolby Atmos', 'Nocturne Sessions']);
-  localFolders = $state<string[]>(['C:\\Users\\Ajisth\\Music\\FLAC Archive', 'D:\\Audio\\Hi-Res Masters']);
-  downloads = $state<DownloadItem[]>([...MOCK_DOWNLOADS]);
+  tracks = $state<Track[]>([]);
+  albums = $state<Album[]>([]);
+  artists = $state<Artist[]>([]);
+  playlists = $state<Playlist[]>([]);
+  genres = $state<GenreItem[]>([]);
+  likedIds = $state<string[]>([]);
+  historyIds = $state<string[]>([]);
+  searchHistory = $state<string[]>([]);
+  localFolders = $state<string[]>([]);
+  downloads = $state<DownloadItem[]>([]);
 
   trackById(id: string): Track | undefined {
     return this.tracks.find((t) => t.id === id);
@@ -48,7 +40,7 @@ class LibraryStore {
       id,
       name: name.trim() || 'Untitled Playlist',
       description,
-      artworkUrl: MOCK_PLAYLISTS[1].artworkUrl,
+      artworkUrl: '',
       accentColor: '#7ca7db',
       trackIds: [],
       source: 'local',
@@ -122,11 +114,11 @@ class LibraryStore {
     this.downloads = [
       {
         trackId: track.id,
-        status: 'completed',
-        progress: 1,
-        sizeMb: 42.6,
+        status: 'queued',
+        progress: 0,
+        sizeMb: 0,
         format: `${track.codec} ${track.bitDepth}-bit / ${(track.sampleRateHz / 1000).toFixed(1)} kHz`,
-        localPath: `Music/${track.artist}/${track.album}/${track.title}.flac`,
+        localPath: '',
       },
       ...this.downloads,
     ];

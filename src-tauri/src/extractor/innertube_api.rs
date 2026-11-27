@@ -45,9 +45,7 @@ use super::potoken_engine::{PoTokenEngine, PoTokenResult};
 use super::signature_decipher::{PlayerScript, SignatureDecipher};
 use super::yt_auth_store::YtAuthStore;
 
-// ---------------------------------------------------------------------------
 // Constants & Stream Logging
-// ---------------------------------------------------------------------------
 
 pub const MUSIC_API: &str = "https://music.youtube.com/youtubei/v1";
 pub const YOUTUBE_API: &str = "https://www.youtube.com/youtubei/v1";
@@ -134,9 +132,7 @@ fn log_stream(
     DiagnosticsLog::detail(&line);
 }
 
-// ---------------------------------------------------------------------------
 // Errors
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Error)]
 pub enum InnerTubeError {
@@ -159,9 +155,7 @@ pub enum InnerTubeError {
     Transport(String),
 }
 
-// ---------------------------------------------------------------------------
 // Public Models
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -439,9 +433,7 @@ pub struct TranscriptCue {
     pub text: String,
 }
 
-// ---------------------------------------------------------------------------
 // Player Client Table (14 clients)
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum YtClientKind {
@@ -736,9 +728,7 @@ pub const PLAYER_CLIENTS: &[PlayerClient] = &[
     },
 ];
 
-// ---------------------------------------------------------------------------
 // Local HTTP Loopback Stream Proxy
-// ---------------------------------------------------------------------------
 
 #[derive(Clone)]
 struct LoopbackProxyState {
@@ -868,9 +858,7 @@ async fn proxy_stream_handler(
     (status, out_headers, body).into_response()
 }
 
-// ---------------------------------------------------------------------------
 // Internal Cache & State Types
-// ---------------------------------------------------------------------------
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -982,9 +970,7 @@ impl<V> OrderedMap<V> {
 type CookieRotationCallback = Arc<dyn Fn(&str, &str) + Send + Sync>;
 type AuthStaleCallback = Arc<dyn Fn(bool) + Send + Sync>;
 
-// ---------------------------------------------------------------------------
 // InnerTubeMusicApi
-// ---------------------------------------------------------------------------
 
 pub struct InnerTubeMusicApi {
     client: Client,
@@ -1161,9 +1147,7 @@ impl InnerTubeMusicApi {
         Some(arc)
     }
 
-    // -----------------------------------------------------------------------
     // Disk Cache Attachment
-    // -----------------------------------------------------------------------
 
     pub fn attach_disk_cache(self: &Arc<Self>, db: Arc<AppDatabase>) {
         if let Ok(mut guard) = self.disk.write() {
@@ -1287,9 +1271,7 @@ impl InnerTubeMusicApi {
         self.disk.read().ok().and_then(|g| g.clone())
     }
 
-    // -----------------------------------------------------------------------
     // Cookie Normalization & Set-Cookie Rotation
-    // -----------------------------------------------------------------------
 
     /// Merges `Set-Cookie` header lines into a `Cookie` header `jar`.
     /// Only updates keys already present in `jar`, scoped to youtube.com/google.com,
@@ -1558,9 +1540,7 @@ impl InnerTubeMusicApi {
             .join("; "))
     }
 
-    // -----------------------------------------------------------------------
     // Session / Auth Management
-    // -----------------------------------------------------------------------
 
     pub async fn load_persisted_connection(&self) {
         let Some(stored) = self.secure.read_yt_cookies() else {
@@ -1819,9 +1799,7 @@ impl InnerTubeMusicApi {
         format!("account:{}:{digest}", conn.connected_at_millis)
     }
 
-    // -----------------------------------------------------------------------
     // Web Config Bootstrap
-    // -----------------------------------------------------------------------
 
     async fn ensure_config(&self) {
         if self
@@ -1924,9 +1902,7 @@ impl InnerTubeMusicApi {
             })
     }
 
-    // -----------------------------------------------------------------------
     // Request Plumbing
-    // -----------------------------------------------------------------------
 
     #[allow(clippy::too_many_arguments)]
     fn build_context(
@@ -2138,9 +2114,7 @@ impl InnerTubeMusicApi {
         Err(last_err)
     }
 
-    // -----------------------------------------------------------------------
     // Account Surfaces (Liked / History / Playlists / Identity / Channels)
-    // -----------------------------------------------------------------------
 
     pub async fn fetch_liked_songs(&self, limit: usize) -> Vec<YouTubeMusicTrack> {
         if !self.connection().connected {
@@ -2766,9 +2740,7 @@ impl InnerTubeMusicApi {
         out
     }
 
-    // -----------------------------------------------------------------------
     // Search
-    // -----------------------------------------------------------------------
 
     pub async fn search_songs(
         &self,
@@ -3002,9 +2974,7 @@ impl InnerTubeMusicApi {
         out
     }
 
-    // -----------------------------------------------------------------------
     // Browse (Home / Artist / Songs / Album / Related / Details)
-    // -----------------------------------------------------------------------
 
     pub async fn fetch_home_shelves(
         &self,
@@ -3817,9 +3787,7 @@ impl InnerTubeMusicApi {
         })
     }
 
-    // -----------------------------------------------------------------------
     // Playlists
-    // -----------------------------------------------------------------------
 
     pub fn extract_playlist_id(input: &str) -> String {
         let clean = input.trim();
@@ -4269,9 +4237,7 @@ impl InnerTubeMusicApi {
         Ok(out)
     }
 
-    // -----------------------------------------------------------------------
     // Lyrics & Transcripts
-    // -----------------------------------------------------------------------
 
     pub async fn fetch_lyrics_tab_text(&self, video_id: &str) -> Option<String> {
         let id = video_id.trim();
@@ -4439,9 +4405,7 @@ impl InnerTubeMusicApi {
         }
     }
 
-    // -----------------------------------------------------------------------
     // Podcasts
-    // -----------------------------------------------------------------------
 
     async fn podcast_browse(&self, browse_id: &str) -> Result<Value, InnerTubeError> {
         if self.connection().connected {
@@ -4572,9 +4536,7 @@ impl InnerTubeMusicApi {
             .collect()
     }
 
-    // -----------------------------------------------------------------------
     // Remote Playlist Mutations & Owned Playlist Fetch
-    // -----------------------------------------------------------------------
 
     pub async fn create_remote_playlist(&self, title: &str) -> Option<String> {
         if !self.connection().connected {
@@ -4895,9 +4857,7 @@ impl InnerTubeMusicApi {
         }
     }
 
-    // -----------------------------------------------------------------------
     // Matching & Scoring
-    // -----------------------------------------------------------------------
 
     pub fn normalize(s: &str) -> String {
         static RE_SINGLE_Q: OnceLock<Regex> = OnceLock::new();
@@ -5606,9 +5566,7 @@ impl InnerTubeMusicApi {
         }
     }
 
-    // -----------------------------------------------------------------------
     // Stream Resolution & Caching
-    // -----------------------------------------------------------------------
 
     pub fn prefetch_stream(self: &Arc<Self>, video_id: &str) {
         self.prefetch_next_track(video_id);
@@ -6880,9 +6838,7 @@ impl InnerTubeMusicApi {
         valid
     }
 
-    // -----------------------------------------------------------------------
     // Stream Format & URL Helpers
-    // -----------------------------------------------------------------------
 
     pub fn has_video_codec(mime: &str) -> bool {
         let lower = mime.to_lowercase();
@@ -7060,9 +7016,7 @@ impl InnerTubeMusicApi {
         }
     }
 
-    // -----------------------------------------------------------------------
     // JSON Renderer Parsers
-    // -----------------------------------------------------------------------
 
     fn parse_two_row_song(&self, r: &Map<String, Value>) -> Option<YouTubeMusicTrack> {
         let video_id = r
@@ -7883,9 +7837,7 @@ impl AlbumLookupApi for InnerTubeMusicApi {
     }
 }
 
-// ---------------------------------------------------------------------------
 // Standalone Utility Helpers
-// ---------------------------------------------------------------------------
 
 fn add_cookie_pair(pairs: &mut BTreeMap<String, String>, name: &str, value: &str) {
     let n = name.trim();
@@ -8557,9 +8509,7 @@ fn parse_playlist_summary(r: &Map<String, Value>) -> Option<YouTubePlaylistSumma
     })
 }
 
-// ---------------------------------------------------------------------------
 // Unit Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {

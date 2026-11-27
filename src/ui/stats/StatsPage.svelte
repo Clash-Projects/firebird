@@ -29,16 +29,27 @@
   let tab = $state<StatsTab>('overview');
 
   const weeklyBars = [
-    { day: 'Mon', hrs: 3.2 },
-    { day: 'Tue', hrs: 4.5 },
-    { day: 'Wed', hrs: 2.8 },
-    { day: 'Thu', hrs: 5.1 },
-    { day: 'Fri', hrs: 6.4 },
-    { day: 'Sat', hrs: 4.9 },
-    { day: 'Sun', hrs: 3.7 },
+    { day: 'Mon', hrs: 0 },
+    { day: 'Tue', hrs: 0 },
+    { day: 'Wed', hrs: 0 },
+    { day: 'Thu', hrs: 0 },
+    { day: 'Fri', hrs: 0 },
+    { day: 'Sat', hrs: 0 },
+    { day: 'Sun', hrs: 0 },
   ];
 
   const rankColors = ['#E0A030', '#C0C4CC', '#CD7F32'];
+
+  let totalPlays = $derived(libraryStore.historyIds.length);
+  let totalMinutes = $derived(
+    Math.round(libraryStore.tracksByIds(libraryStore.historyIds).reduce((sum, t) => sum + t.durationSec, 0) / 60)
+  );
+  let losslessPct = $derived.by(() => {
+    const played = libraryStore.tracksByIds(libraryStore.historyIds);
+    if (played.length === 0) return 0;
+    const hiRes = played.filter((t) => t.qualityTier !== 'high').length;
+    return Math.round((hiRes / played.length) * 100);
+  });
 </script>
 
 <div class="w-full space-y-5 px-6 pt-[22px] pb-12">
@@ -79,15 +90,15 @@
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
       <div class="rounded-[18px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-5">
         <div class="text-[11px] font-semibold text-[var(--lw-text-tertiary)] uppercase">Plays · {period.toUpperCase()}</div>
-        <div class="mt-2 text-[28px] font-bold tracking-[-0.6px] lw-tabular">842</div>
+        <div class="mt-2 text-[28px] font-bold tracking-[-0.6px] lw-tabular">{totalPlays}</div>
       </div>
       <div class="rounded-[18px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-5">
         <div class="text-[11px] font-semibold text-[var(--lw-text-tertiary)] uppercase">Listening Time</div>
-        <div class="mt-2 text-[28px] font-bold tracking-[-0.6px] lw-tabular">48h 12m</div>
+        <div class="mt-2 text-[28px] font-bold tracking-[-0.6px] lw-tabular">{Math.floor(totalMinutes / 60)}h {totalMinutes % 60}m</div>
       </div>
       <div class="rounded-[18px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-5">
         <div class="text-[11px] font-semibold text-[var(--lw-text-tertiary)] uppercase">Lossless / Hi-Res</div>
-        <div class="mt-2 text-[28px] font-bold tracking-[-0.6px] lw-tabular">74%</div>
+        <div class="mt-2 text-[28px] font-bold tracking-[-0.6px] lw-tabular">{losslessPct}%</div>
       </div>
     </div>
 
@@ -120,7 +131,6 @@
                 <div class="truncate text-[13px] font-semibold">{track.title}</div>
                 <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{track.artist}</div>
               </div>
-              <span class="text-[11.5px] text-[var(--lw-text-tertiary)] lw-tabular">{120 - i * 17} plays</span>
             </div>
           {/each}
         </div>

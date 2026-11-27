@@ -1,25 +1,73 @@
 import { ipcInvoke, ipcListen, isTauriRuntime } from '$src/lib/ipc';
-import { MOCK_TRACKS } from './mockData';
 import type { RepeatMode, Track } from './types';
 
+interface BackendPlayableTrack {
+  title: string;
+  artist: string;
+  album: string;
+  artworkUrl: string;
+  videoId: string;
+  playbackUrl: string;
+  playbackMimeType: string;
+  durationMs: number;
+}
+
 interface BackendPlayerSnapshot {
-  is_playing?: boolean;
-  position_ms?: number;
-  duration_ms?: number;
+  current?: BackendPlayableTrack | null;
+  queue?: BackendPlayableTrack[];
+  currentIndex?: number;
+  isPlaying?: boolean;
+  positionMs?: number;
+  durationMs?: number;
   volume?: number;
-  shuffle?: boolean;
-  repeat_mode?: string;
-  current_index?: number;
+  shuffleEnabled?: boolean;
+  repeatMode?: RepeatMode;
+  speed?: number;
+  sleepMinutes?: number | null;
+}
+
+function toPlayableTrack(track: Track): BackendPlayableTrack {
+  return {
+    title: track.title,
+    artist: track.artist,
+    album: track.album,
+    artworkUrl: track.artworkUrl,
+    videoId: track.videoId,
+    playbackUrl: '',
+    playbackMimeType: '',
+    durationMs: Math.round(track.durationSec * 1000)
+  };
+}
+
+function fromPlayableTrack(item: BackendPlayableTrack, fallbackIdx: number): Track {
+  const id = item.videoId || item.playbackUrl || `track-${fallbackIdx}`;
+  return {
+    id,
+    videoId: item.videoId,
+    title: item.title || 'Unknown Title',
+    artist: item.artist || 'Unknown Artist',
+    artists: item.artist ? item.artist.split(/,\s*/).filter(Boolean) : ['Unknown Artist'],
+    album: item.album || '',
+    durationSec: Math.max(0, Math.round((item.durationMs || 0) / 1000)),
+    artworkUrl: item.artworkUrl || '',
+    accentColor: '#7c9bff',
+    qualityTier: 'high',
+    sampleRateHz: 48000,
+    bitDepth: 16,
+    codec: 'OPUS',
+    bitrateKbps: 256,
+    isLocal: Boolean(item.playbackUrl)
+  };
 }
 
 export type PlayerEventType = 'trackChange' | 'playState' | 'progress' | 'queueUpdate';
 type Listener<T = unknown> = (payload: T) => void;
 
 class PlayerStore {
-  queue = $state<Track[]>([...MOCK_TRACKS]);
+  queue = $state<Track[]>([]);
   currentIndex = $state(0);
   isPlaying = $state(false);
-  positionSec = $state(18);
+  positionSec = $state(0);
   volume = $state(0.82);
   muted = $state(false);
   shuffle = $state(false);
@@ -30,30 +78,37 @@ class PlayerStore {
   skipSilence = $state(false);
   sleepTimerMin = $state<number | null>(null);
   private preMuteVolume = 0.82;
-  private ticker: ReturnType<typeof setInterval> | null = null;
   private listeners = new Map<PlayerEventType, Set<Listener>>();
 
   currentTrack = $derived<Track | null>(this.queue[this.currentIndex] ?? null);
   durationSec = $derived(this.currentTrack?.durationSec ?? 0);
   progress = $derived(this.durationSec > 0 ? Math.min(1, this.positionSec / this.durationSec) : 0);
 
-  constructor() {
-    this.startTicker();
-  }
-
   async connectBackend(): Promise<() => void> {
     if (!isTauriRuntime()) return () => {};
     const applySnap = (snap: BackendPlayerSnapshot | null) => {
       if (!snap) return;
-      if (typeof snap.is_playing === 'boolean') this.isPlaying = snap.is_playing;
-      if (typeof snap.position_ms === 'number') this.positionSec = snap.position_ms / 1000;
-      if (typeof snap.volume === 'number') this.volume = Math.max(0, Math.min(1, snap.volume / 100));
-      if (typeof snap.shuffle === 'boolean') this.shuffle = snap.shuffle;
-      if (typeof snap.current_index === 'number' && snap.current_index >= 0 && snap.current_index < this.queue.length) {
-        this.currentIndex = snap.current_index;
+      if (Array.isArray(snap.queue) && snap.queue.length > 0) {
+        this.queue = snap.queue.map(fromPlayableTrack);
       }
-      if (snap.repeat_mode === 'off' || snap.repeat_mode === 'all' || snap.repeat_mode === 'one') {
-        this.repeat = snap.repeat_mode;
+      if (typeof snap.isPlaying === 'boolean') this.isPlaying = snap.isPlaying;
+      if (typeof snap.positionMs === 'number') this.positionSec = snap.positionMs / 1000;
+      if (typeof snap.volume === 'number') {
+        this.volume = Math.max(0, Math.min(1, snap.volume));
+        this.muted = this.volume === 0;
+      }
+      if (typeof snap.shuffleEnabled === 'boolean') this.shuffle = snap.shuffleEnabled;
+      if (typeof snap.speed === 'number' && snap.speed > 0) this.speed = snap.speed;
+      if (snap.sleepMinutes !== undefined) this.sleepTimerMin = snap.sleepMinutes;
+      if (
+        typeof snap.currentIndex === 'number' &&
+        snap.currentIndex >= 0 &&
+        snap.currentIndex < this.queue.length
+      ) {
+        this.currentIndex = snap.currentIndex;
+      }
+      if (snap.repeatMode === 'off' || snap.repeatMode === 'all' || snap.repeatMode === 'one') {
+        this.repeat = snap.repeatMode;
       }
     };
 
@@ -63,24 +118,6 @@ class PlayerStore {
     return () => {
       unlisten?.();
     };
-  }
-
-  private startTicker() {
-    if (this.ticker) clearInterval(this.ticker);
-    this.ticker = setInterval(() => {
-      if (!this.isPlaying || !this.currentTrack) return;
-      const nextPos = this.positionSec + 0.25 * this.speed;
-      if (nextPos >= this.currentTrack.durationSec) {
-        if (this.repeat === 'one') {
-          this.positionSec = 0;
-        } else {
-          this.next();
-        }
-      } else {
-        this.positionSec = nextPos;
-      }
-      this.emit('progress', { positionSec: this.positionSec, durationSec: this.durationSec });
-    }, 250);
   }
 
   on(event: PlayerEventType, fn: Listener): () => void {
@@ -115,6 +152,10 @@ class PlayerStore {
       const idx = this.queue.findIndex((t) => t.id === track.id);
       this.currentIndex = idx >= 0 ? idx : 0;
       this.emit('queueUpdate', this.queue);
+      void ipcInvoke('player_play_queue', {
+        tracks: this.queue.map(toPlayableTrack),
+        startIndex: this.currentIndex
+      });
     } else {
       const idx = this.queue.findIndex((t) => t.id === track.id);
       if (idx >= 0) {
@@ -124,6 +165,7 @@ class PlayerStore {
         this.currentIndex = 0;
         this.emit('queueUpdate', this.queue);
       }
+      void ipcInvoke('player_play', { track: toPlayableTrack(track) });
     }
     this.positionSec = 0;
     this.isPlaying = true;
@@ -196,7 +238,7 @@ class PlayerStore {
     this.volume = clamped;
     this.muted = clamped === 0;
     if (clamped > 0) this.preMuteVolume = clamped;
-    void ipcInvoke('player_set_volume', { volume: Math.round(clamped * 100) });
+    void ipcInvoke('player_set_volume', { volume: clamped });
   }
 
   toggleMute() {
@@ -208,7 +250,7 @@ class PlayerStore {
       this.muted = true;
       this.volume = 0;
     }
-    void ipcInvoke('player_set_volume', { volume: Math.round(this.volume * 100) });
+    void ipcInvoke('player_set_volume', { volume: this.volume });
   }
 
   toggleShuffle() {
@@ -225,11 +267,13 @@ class PlayerStore {
     const copy = [...this.queue];
     copy.splice(this.currentIndex + 1, 0, track);
     this.queue = copy;
+    void ipcInvoke('player_play_next', { track: toPlayableTrack(track) });
     this.emit('queueUpdate', this.queue);
   }
 
   addToQueue(track: Track) {
     this.queue = [...this.queue, track];
+    void ipcInvoke('player_add_to_queue', { track: toPlayableTrack(track) });
     this.emit('queueUpdate', this.queue);
   }
 
@@ -240,6 +284,7 @@ class PlayerStore {
     this.queue = copy;
     if (index < this.currentIndex) this.currentIndex -= 1;
     if (this.currentIndex >= this.queue.length) this.currentIndex = Math.max(0, this.queue.length - 1);
+    void ipcInvoke('player_remove_at', { index });
     this.emit('queueUpdate', this.queue);
   }
 
@@ -250,11 +295,13 @@ class PlayerStore {
     copy.splice(to, 0, item);
     if (this.currentIndex === from) this.currentIndex = to;
     this.queue = copy;
+    void ipcInvoke('player_move_in_queue', { oldIndex: from, newIndex: to });
     this.emit('queueUpdate', this.queue);
   }
 
   clearUpcoming() {
     this.queue = this.queue.slice(0, this.currentIndex + 1);
+    void ipcInvoke('player_clear_upcoming');
     this.emit('queueUpdate', this.queue);
   }
 }

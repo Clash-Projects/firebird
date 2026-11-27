@@ -131,9 +131,7 @@ pub trait LoginWebviewHost: Send + Sync {
     ) -> BoxFuture<'_, Result<Arc<dyn LoginWebviewSession>, String>>;
 }
 
-// ---------------------------------------------------------------------------
 // Production Tauri Webview Implementation
-// ---------------------------------------------------------------------------
 
 pub struct TauriLoginWebviewHost {
     app: AppHandle,
@@ -433,9 +431,7 @@ async fn run_login_loopback(
     }
 }
 
-// ---------------------------------------------------------------------------
 // YtWebLogin Coordinator
-// ---------------------------------------------------------------------------
 
 /// In-app YouTube Music sign-in and silent cookie rotation coordinator.
 pub struct YtWebLogin {

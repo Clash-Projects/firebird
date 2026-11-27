@@ -14,9 +14,7 @@ use crate::models::performance_controller::{
 use crate::storage::diagnostics_log::DiagnosticsLog;
 use crate::storage::log_bundle::LogBundle;
 
-// ---------------------------------------------------------------------------
 // Preferences
-// ---------------------------------------------------------------------------
 
 #[tauri::command]
 pub fn prefs_get(state: State<'_, AppState>, key: String) -> Option<Value> {
@@ -102,9 +100,7 @@ pub fn prefs_get_all_settings(state: State<'_, AppState>) -> Value {
     Value::Object(m)
 }
 
-// ---------------------------------------------------------------------------
 // SecureStore
-// ---------------------------------------------------------------------------
 
 #[tauri::command]
 pub fn secure_read(state: State<'_, AppState>, key: String) -> Option<String> {
@@ -126,9 +122,7 @@ pub fn secure_clear_all(state: State<'_, AppState>) {
     state.secure.clear_all();
 }
 
-// ---------------------------------------------------------------------------
 // AppLanguage
-// ---------------------------------------------------------------------------
 
 #[tauri::command]
 pub fn language_get(state: State<'_, AppState>) -> AppLanguage {
@@ -149,9 +143,7 @@ pub fn language_effective(state: State<'_, AppState>) -> AppLanguage {
         .effective_language()
 }
 
-// ---------------------------------------------------------------------------
 // Performance Mode
-// ---------------------------------------------------------------------------
 
 #[tauri::command]
 pub fn performance_get_state(state: State<'_, AppState>) -> PerformanceState {
@@ -181,9 +173,7 @@ pub fn performance_get_optimizations(
     performance_optimizations(state.prefs.performance_mode())
 }
 
-// ---------------------------------------------------------------------------
 // DiagnosticsLog & LogBundle
-// ---------------------------------------------------------------------------
 
 #[tauri::command]
 pub fn diagnostics_is_verbose() -> bool {
