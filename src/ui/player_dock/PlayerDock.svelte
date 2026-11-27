@@ -757,7 +757,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 10px;
-    color: var(--lw-text-secondary);
+    color: color-mix(in srgb, var(--lw-text-primary) 78%, transparent);
     cursor: pointer;
     transition:
       color var(--lw-motion-fast) ease,
@@ -783,11 +783,10 @@
     align-items: center;
     justify-content: center;
     margin-inline: 2px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    border: none;
     border-radius: 50%;
     background: var(--lw-accent);
     color: var(--lw-on-accent);
-    box-shadow: var(--lw-shadow-transport);
     cursor: pointer;
     transition:
       transform var(--lw-motion-fast) var(--ease-wave),
@@ -841,7 +840,7 @@
     width: 38px;
     flex: none;
     font-size: 11px;
-    color: var(--lw-text-tertiary);
+    color: color-mix(in srgb, var(--lw-text-primary) 72%, transparent);
   }
   .dock-time-pos {
     text-align: right;
@@ -937,12 +936,12 @@
 
   /* Rectangular overline quality badge matching _QualityFlyout in player_dock.dart */
   .dock-quality-badge {
-    padding: 3px 6px;
+    padding: 3.5px 7px;
     margin-right: 4px;
-    border: 1px solid var(--lw-outline);
+    border: 1px solid color-mix(in srgb, var(--lw-text-primary) 12%, transparent);
     border-radius: 6px;
-    background: transparent;
-    color: var(--lw-text-secondary);
+    background: color-mix(in srgb, var(--lw-text-primary) 6%, transparent);
+    color: color-mix(in srgb, var(--lw-text-primary) 82%, transparent);
     font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.8px;

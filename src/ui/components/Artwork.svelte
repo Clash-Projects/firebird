@@ -10,6 +10,7 @@
     artist?: string;
     album?: string;
     upgrade?: boolean;
+    preserveAspect?: boolean;
     size?: number;
     radius?: number;
     circle?: boolean;
@@ -29,6 +30,7 @@
     artist = '',
     album = '',
     upgrade = true,
+    preserveAspect = false,
     size,
     radius = 12,
     circle = false,
@@ -69,6 +71,8 @@
       lower.includes('mzstatic.com') ||
       lower.includes('dzcdn.net') ||
       lower.includes('lastfm.freetls.fastly.net') ||
+      lower.includes('lh3.googleusercontent.com') ||
+      lower.includes('yt3.ggpht.com') ||
       lower.startsWith('asset:') ||
       lower.startsWith('data:')
     );
@@ -154,7 +158,7 @@
 <div
   data-lw="artwork"
   class="relative shrink-0 overflow-hidden bg-[var(--lw-surface-overlay)] {className}"
-  style:width={size ? `${size}px` : undefined}
+  style:width={preserveAspect ? (activeUrl && loaded ? 'auto' : size ? `${size}px` : undefined) : size ? `${size}px` : undefined}
   style:height={size ? `${size}px` : undefined}
   style:border-radius={circle ? '999px' : `${radius}px`}
   style:box-shadow={shadowStyle}
@@ -163,11 +167,10 @@
     <img
       src={activeUrl}
       {alt}
-      loading="lazy"
       decoding="async"
       onload={() => (loaded = true)}
       onerror={handleError}
-      class="h-full w-full object-cover"
+      class={preserveAspect ? 'block h-full w-auto max-w-none' : 'h-full w-full object-cover'}
       style:opacity={skipFade || loaded ? 1 : 0}
       style:transition={skipFade ? 'none' : 'opacity var(--lw-motion-fast) var(--ease-native)'}
     />

@@ -28,15 +28,15 @@
 
   const variantClasses: Record<string, string> = {
     primary:
-      'bg-[var(--lw-accent)] text-[var(--lw-on-accent)] font-semibold hover:opacity-90',
+      'bg-[var(--lw-accent)] text-[var(--lw-on-accent)] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.22)] hover:brightness-105',
     secondary:
-      'bg-[var(--lw-surface-raised)] text-[var(--lw-text-primary)] border border-[var(--lw-outline)] hover:bg-[var(--lw-surface-overlay)]',
+      'bg-[var(--lw-surface-raised)] text-[var(--lw-text-primary)] border border-[var(--lw-outline)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] hover:bg-[var(--lw-surface-overlay)]',
     ghost:
       'bg-transparent text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]',
     danger:
-      'bg-[var(--lw-danger)]/15 text-[var(--lw-danger)] border border-[var(--lw-danger)]/35 hover:bg-[var(--lw-danger)]/25',
+      'bg-[var(--lw-danger)]/14 text-[var(--lw-danger)] border border-[var(--lw-danger)]/28 hover:bg-[var(--lw-danger)]/22',
     chip:
-      'rounded-full border border-[var(--lw-outline)] bg-[var(--lw-surface)] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]',
+      'rounded-full border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]',
   };
 
   const sizeClasses: Record<string, string> = {

@@ -67,9 +67,9 @@
             <button
               type="button"
               onclick={() => playHero(false)}
-              class="lw-press inline-flex h-9 cursor-pointer items-center gap-2 rounded-full bg-[var(--lw-accent)] px-5 text-[13px] font-bold text-[var(--lw-on-accent)] transition-all hover:brightness-105"
+              class="lw-press inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border border-transparent bg-[var(--lw-accent)] px-4 text-[13px] font-semibold text-[var(--lw-on-accent)] transition-all hover:brightness-105"
             >
-              <WaveIcon name="play" size={14} filled />
+              <WaveIcon name="play" size={15} filled />
               Play
             </button>
             <button
@@ -77,7 +77,7 @@
               onclick={() => playHero(true)}
               class="lw-press inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border border-[var(--lw-outline)] bg-[var(--lw-surface-overlay)] px-4 text-[13px] font-semibold text-[var(--lw-text-primary)] transition-colors hover:bg-[var(--lw-wash-hover)]"
             >
-              <WaveIcon name="radio" size={14} />
+              <WaveIcon name="radio" size={15} />
               Radio
             </button>
           </div>

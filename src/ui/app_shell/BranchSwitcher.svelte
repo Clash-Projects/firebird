@@ -44,7 +44,7 @@
 >
   {#key routeKey}
     <div
-      class="lw-route-enter w-full {fillHeight ? 'h-full' : 'min-h-full'}"
+      class="lw-route-enter w-full {fillHeight ? 'h-full overflow-hidden' : 'min-h-full'}"
       style:padding-bottom={hasDockSpacer ? 'var(--lw-dock-h, 68px)' : undefined}
     >
       {@render children()}

@@ -126,20 +126,21 @@
     height: 40px;
     align-items: center;
     padding: 0;
-    border: 1px solid transparent;
-    border-radius: 10px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    box-shadow: none;
     cursor: pointer;
     color: var(--lw-text-secondary);
     text-align: left;
     transition:
       background-color var(--lw-motion-fast) ease,
-      border-color var(--lw-motion-fast) ease,
       color var(--lw-motion-fast) ease;
   }
 
   .rail-item::before {
     position: absolute;
-    left: 0;
+    left: 2px;
     width: 3px;
     height: 16px;
     border-radius: 6px;
@@ -164,8 +165,8 @@
   }
 
   .rail-item:focus-visible {
-    outline: none;
-    border-color: color-mix(in srgb, var(--lw-accent) 60%, transparent);
+    outline: 2px solid color-mix(in srgb, var(--lw-accent) 45%, transparent);
+    outline-offset: -2px;
   }
 
   .rail-icon {
@@ -173,11 +174,7 @@
     width: 46px;
     flex: none;
     place-items: center;
-    transition: transform var(--lw-motion-fast) var(--ease-wave), color var(--lw-motion-fast) ease;
-  }
-
-  .rail-item[data-active="true"] .rail-icon {
-    transform: scale(1.06);
+    transition: color var(--lw-motion-fast) ease;
   }
 
   .rail-label {

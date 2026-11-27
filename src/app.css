@@ -211,30 +211,37 @@
 
 :root[data-glass="true"] {
   --lw-bg: transparent;
-  --lw-rail-translucent: transparent;
-  --lw-surface: rgba(255, 255, 255, 0.06);
-  --lw-surface-overlay: rgba(255, 255, 255, 0.09);
-  --lw-panel-translucent: rgba(22, 22, 22, 0.72);
-  --lw-dock-translucent: rgba(0, 0, 0, 0.36);
-  --lw-outline: rgba(255, 255, 255, 0.16);
-  --lw-outline-soft: rgba(255, 255, 255, 0.08);
-  --lw-divider: rgba(255, 255, 255, 0.08);
+  --lw-rail-translucent: rgba(12, 12, 16, 0.52);
+  --lw-surface: rgba(255, 255, 255, 0.055);
+  --lw-surface-overlay: rgba(255, 255, 255, 0.085);
+  --lw-panel-translucent: rgba(18, 18, 22, 0.84);
+  --lw-dock-translucent: rgba(12, 12, 16, 0.78);
+  --lw-outline: rgba(255, 255, 255, 0.08);
+  --lw-outline-soft: rgba(255, 255, 255, 0.05);
+  --lw-divider: rgba(255, 255, 255, 0.06);
 }
 
 :root[data-liquid-glass="true"]:not([data-haze-material="solid"]):not([data-performance="true"]) {
-  --lw-panel-translucent: color-mix(in srgb, var(--lw-surface-raised) 72%, transparent);
-  --lw-dock-translucent: color-mix(in srgb, var(--lw-surface) 78%, transparent);
-  --lw-rail-translucent: color-mix(in srgb, var(--lw-bg) 76%, transparent);
+  --lw-panel-translucent: rgba(18, 18, 22, 0.78);
+  --lw-dock-translucent: rgba(12, 12, 16, 0.74);
+  --lw-rail-translucent: rgba(12, 12, 16, 0.56);
 }
 
 :root[data-theme="light"][data-glass="true"] {
   --lw-surface: rgba(0, 0, 0, 0.04);
   --lw-surface-overlay: rgba(0, 0, 0, 0.06);
-  --lw-panel-translucent: rgba(255, 255, 255, 0.72);
-  --lw-dock-translucent: rgba(255, 255, 255, 0.36);
+  --lw-panel-translucent: rgba(255, 255, 255, 0.82);
+  --lw-dock-translucent: rgba(255, 255, 255, 0.80);
+  --lw-rail-translucent: rgba(243, 243, 243, 0.65);
   --lw-outline: rgba(0, 0, 0, 0.12);
   --lw-outline-soft: rgba(0, 0, 0, 0.07);
   --lw-divider: rgba(0, 0, 0, 0.07);
+}
+
+:root[data-theme="light"][data-liquid-glass="true"]:not([data-haze-material="solid"]):not([data-performance="true"]) {
+  --lw-panel-translucent: rgba(255, 255, 255, 0.78);
+  --lw-dock-translucent: rgba(255, 255, 255, 0.76);
+  --lw-rail-translucent: rgba(243, 243, 243, 0.68);
 }
 
 html,
