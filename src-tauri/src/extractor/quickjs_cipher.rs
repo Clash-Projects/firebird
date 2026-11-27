@@ -7,13 +7,11 @@ use std::time::{Duration, Instant};
 use regex::Regex;
 use reqwest::Client;
 use rquickjs::{qjs, Context, Runtime};
-use serde_json::json;
 use thiserror::Error;
 use tokio::sync::Mutex as AsyncMutex;
 use url::{form_urlencoded, Url};
 
-const SOLVER_LIB_JS: &str = include_str!("../../assets/ejs/yt.solver.lib.min.js");
-const SOLVER_CORE_JS: &str = include_str!("../../assets/ejs/yt.solver.core.min.js");
+use super::player_registry::{instrument_player_script, PlayerRecipe, PlayerRegistry};
 
 const PLAYER_CACHE_TTL: Duration = Duration::from_secs(3600);
 const QUICKJS_STACK_SIZE: usize = 64 << 20;
@@ -65,7 +63,7 @@ struct CachedPlayer {
     loaded_at: Instant,
 }
 
-/// In-process QuickJS cipher engine embedding yt-dlp's EJS solver.
+/// In-process QuickJS cipher engine using per-player-hash closure instrumentation.
 pub struct QuickJsCipher;
 
 impl QuickJsCipher {
@@ -74,27 +72,9 @@ impl QuickJsCipher {
         true
     }
 
-    /// Preprocesses `base.js` using the embedded EJS solver (`yt.solver.lib` + `yt.solver.core`).
-    pub fn preprocess(base_js: &str) -> Result<String, QuickJsCipherError> {
-        let rt = new_runtime()?;
-        let ctx = Context::full(&rt)?;
-        ctx.with(|ctx| {
-            let input = json!({
-                "type": "player",
-                "player": base_js,
-                "output_preprocessed": true,
-                "requests": []
-            });
-            let src = format!(
-                "{SOLVER_LIB_JS}\nObject.assign(globalThis, lib);\n{SOLVER_CORE_JS}\nJSON.stringify(jsc({input}))"
-            );
-            let out: String = ctx.eval(src).map_err(|e| capture_js_err(&ctx, e))?;
-            let parsed: serde_json::Value = serde_json::from_str(&out)?;
-            parsed["preprocessed_player"]
-                .as_str()
-                .map(str::to_owned)
-                .ok_or(QuickJsCipherError::MissingPreprocessedPlayer)
-        })
+    /// Instruments `base.js` with closure hooks from a validated [`PlayerRecipe`].
+    pub fn prepare_with_recipe(base_js: &str, recipe: &PlayerRecipe) -> String {
+        instrument_player_script(base_js, recipe)
     }
 
     /// Compiles preprocessed solver JS into stripped QuickJS bytecode.
@@ -182,11 +162,12 @@ impl QuickJsCipher {
     }
 }
 
-/// Manages player bytecode disk caching (`.qbc`/`.sts`), background preparation on
-/// blocking threads, and URL deciphering.
+/// Manages player bytecode disk caching (`.qbc`/`.sts`), per-player recipe registry,
+/// background preparation on blocking threads, and URL deciphering.
 pub struct QuickJsCipherWorker {
     client: Client,
     cache_dir: PathBuf,
+    registry: PlayerRegistry,
     active: RwLock<Option<CachedPlayer>>,
     prepare_lock: AsyncMutex<()>,
 }
@@ -197,16 +178,18 @@ impl QuickJsCipherWorker {
     }
 
     pub fn with_cache_dir(client: Client, cache_dir: PathBuf) -> Self {
+        let registry = PlayerRegistry::new(client.clone(), cache_dir.clone());
         Self {
             client,
             cache_dir,
+            registry,
             active: RwLock::new(None),
             prepare_lock: AsyncMutex::new(()),
         }
     }
 
     pub fn default_cache_dir() -> PathBuf {
-        std::env::temp_dir().join("lastwave_ejs")
+        std::env::temp_dir().join("lastwave_cipher")
     }
 
     /// Returns the currently loaded [`QuickJsPlayer`] if cached in memory.
@@ -289,6 +272,10 @@ impl QuickJsCipherWorker {
             }
         }
 
+        let Some(recipe) = self.registry.resolve(&id).await else {
+            return Ok(None);
+        };
+
         let base_js_url =
             format!("https://www.youtube.com/s/player/{id}/player_ias.vflset/en_US/base.js");
         let base_js = self
@@ -302,14 +289,17 @@ impl QuickJsCipherWorker {
             return Ok(None);
         }
 
-        let Some(sts) = extract_signature_timestamp(&base_js).filter(|&s| s > 0) else {
+        let Some(sts) = extract_signature_timestamp(&base_js)
+            .or(recipe.sts)
+            .filter(|&s| s > 0)
+        else {
             return Ok(None);
         };
 
         let compiled = tokio::task::spawn_blocking(move || {
-            let pre = QuickJsCipher::preprocess(&base_js)?;
-            let bc = QuickJsCipher::compile(&pre)?;
-            Ok::<_, QuickJsCipherError>((pre, bc))
+            let instrumented = QuickJsCipher::prepare_with_recipe(&base_js, &recipe);
+            let bc = QuickJsCipher::compile(&instrumented)?;
+            Ok::<_, QuickJsCipherError>((instrumented, bc))
         })
         .await;
 
@@ -538,7 +528,7 @@ fn prune_stale_player_cache(cache_dir: &Path, current_id: &str) {
         let keep = path
             .file_name()
             .and_then(|n| n.to_str())
-            .is_some_and(|name| name.contains(current_id));
+            .is_some_and(|name| name == "player_recipes.json" || name.contains(current_id));
         if !keep {
             let _ = fs::remove_file(path);
         }
@@ -570,6 +560,25 @@ mod tests {
         let direct = QuickJsCipher::solve(fake_solver, Some("123"), None).expect("solve direct");
         assert_eq!(direct.n.as_deref(), Some("321"));
         assert_eq!(direct.sig, None);
+    }
+
+    #[test]
+    fn quickjs_recipe_instrumentation_roundtrip() {
+        let player_stub = "var _yt_player={};(function(g){\
+            function Ii(a,b,s){return 'sig_' + s.split('').reverse().join('');}\
+            g.as=function(url){this._n='n_' + url.split('n=')[1];};\
+            g.as.prototype.get=function(){return this._n;};\
+        })(_yt_player);";
+        let recipe = PlayerRecipe {
+            sts: Some(20670),
+            sig_call: "Ii(25,558,INPUT)".to_string(),
+            n_ctor: "as".to_string(),
+        };
+        let instrumented = QuickJsCipher::prepare_with_recipe(player_stub, &recipe);
+        let bc = QuickJsCipher::compile(&instrumented).expect("compile instrumented");
+        let solved = QuickJsCipher::solve_bytecode(&bc, Some("abc"), Some("xyz")).expect("solve");
+        assert_eq!(solved.n.as_deref(), Some("n_abc"));
+        assert_eq!(solved.sig.as_deref(), Some("sig_zyx"));
     }
 
     #[test]

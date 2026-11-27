@@ -6,6 +6,7 @@ pub mod challenge_parser;
 pub mod ephemeral_webview_broker;
 pub mod http_client;
 pub mod innertube_api;
+pub mod player_registry;
 pub mod potoken_engine;
 pub mod quickjs_cipher;
 pub mod signature_decipher;

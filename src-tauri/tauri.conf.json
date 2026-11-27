@@ -31,9 +31,7 @@
       "icons/icon.png"
     ],
     "resources": [
-      "assets/po_token.html",
-      "assets/ejs/yt.solver.core.min.js",
-      "assets/ejs/yt.solver.lib.min.js"
+      "assets/po_token.html"
     ]
   }
 }

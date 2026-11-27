@@ -5901,99 +5901,7 @@ impl InnerTubeMusicApi {
             }
         }
 
-        // Last-resort yt-dlp fallback when all InnerTube clients fail.
-        if let Some(stream) = Self::resolve_via_yt_dlp(video_id).await {
-            log_stream(
-                "yt-dlp-fallback",
-                video_id,
-                "yt-dlp",
-                -1,
-                &stream.mime_type,
-                Self::expiry_state(stream.expires_at),
-                0,
-                0,
-                "",
-            );
-            return Some(stream);
-        }
-
         None
-    }
-
-    pub async fn resolve_via_yt_dlp(video_id: &str) -> Option<ResolvedStream> {
-        let watch_url = format!("https://www.youtube.com/watch?v={video_id}");
-        let mut cmd = tokio::process::Command::new("yt-dlp");
-        cmd.args([
-            "-f",
-            "bestaudio/best",
-            "--no-playlist",
-            "--no-warnings",
-            "-j",
-            &watch_url,
-        ]);
-        #[cfg(windows)]
-        {
-            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-            cmd.creation_flags(CREATE_NO_WINDOW);
-        }
-
-        let output = tokio::time::timeout(Duration::from_secs(15), cmd.output())
-            .await
-            .ok()?
-            .ok()?;
-        if !output.status.success() {
-            return None;
-        }
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        Self::parse_yt_dlp_json_output(video_id, &stdout)
-    }
-
-    pub fn parse_yt_dlp_json_output(video_id: &str, json_str: &str) -> Option<ResolvedStream> {
-        let first_line = json_str.lines().find(|l| !l.trim().is_empty())?;
-        let obj: Value = serde_json::from_str(first_line).ok()?;
-        let url = obj.get("url").and_then(Value::as_str)?.trim().to_string();
-        if url.is_empty() || url.starts_with("sabr:") {
-            return None;
-        }
-        let ext = obj.get("ext").and_then(Value::as_str).unwrap_or("");
-        let acodec = obj.get("acodec").and_then(Value::as_str).unwrap_or("");
-        let abr = obj.get("abr").and_then(Value::as_f64).unwrap_or(128.0);
-        let mime_type = if ext == "webm" || acodec.contains("opus") {
-            "audio/webm".to_string()
-        } else if ext == "m4a" || ext == "mp4" || acodec.contains("mp4a") {
-            "audio/mp4".to_string()
-        } else {
-            "audio/webm".to_string()
-        };
-        let audio_codec = if acodec.to_lowercase().contains("opus") {
-            "OPUS".to_string()
-        } else if acodec.to_lowercase().contains("mp4a") || acodec.to_lowercase().contains("aac") {
-            "AAC".to_string()
-        } else {
-            "AUDIO".to_string()
-        };
-        let mut request_headers = HashMap::new();
-        if let Some(hdrs) = obj.get("http_headers").and_then(Value::as_object) {
-            for (k, v) in hdrs {
-                if let Some(vs) = v.as_str() {
-                    request_headers.insert(k.clone(), vs.to_string());
-                }
-            }
-        }
-        let expires_at = Self::url_expiry_ms(&url)
-            .and_then(DateTime::from_timestamp_millis)
-            .or_else(|| DateTime::from_timestamp_millis(now_unix_ms() + UNKNOWN_EXPIRY_TTL_MS));
-
-        Some(ResolvedStream {
-            url,
-            mime_type,
-            bitrate_kbps: abr.round() as i32,
-            audio_codec,
-            cache_key: format!("youtube:{video_id}:yt-dlp:-1:anonymous"),
-            request_headers,
-            expires_at,
-            ..Default::default()
-        })
     }
 
     pub async fn resolve_music_video(&self, video_id: &str) -> Vec<MusicVideoStream> {
@@ -8731,20 +8639,6 @@ mod tests {
         InnerTubeMusicApi::sort_stream_candidates(&mut list, true);
         assert_eq!(list[0].itag, 249);
         assert_eq!(list[1].itag, 251);
-    }
-
-    #[test]
-    fn parse_yt_dlp_json_extracts_stream_and_headers() {
-        let json = r#"{"url":"https://rr1---sn.googlevideo.com/videoplayback?expire=2000000000","ext":"webm","acodec":"opus","abr":134.2,"http_headers":{"User-Agent":"Mozilla/5.0"}}"#;
-        let stream = InnerTubeMusicApi::parse_yt_dlp_json_output("dQw4w9WgXcQ", json)
-            .expect("should parse yt-dlp json");
-        assert_eq!(stream.audio_codec, "OPUS");
-        assert_eq!(stream.mime_type, "audio/webm");
-        assert_eq!(stream.bitrate_kbps, 134);
-        assert_eq!(
-            stream.request_headers.get("User-Agent").map(String::as_str),
-            Some("Mozilla/5.0")
-        );
     }
 
     #[test]
