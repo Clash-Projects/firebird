@@ -13,11 +13,13 @@
   interface Props {
     lyricsVisible?: boolean;
     videoUrls: readonly string[];
+    ambientArtworkUrl: string;
+    onArtworkLoad: (url: string) => void;
     onToggleLyrics?: () => void;
     onClose?: () => void;
   }
 
-  let { lyricsVisible = true, videoUrls, onToggleLyrics, onClose }: Props = $props();
+  let { lyricsVisible = true, videoUrls, ambientArtworkUrl, onArtworkLoad, onToggleLyrics, onClose }: Props = $props();
 
   let track = $derived(playerStore.currentTrack);
   let doc = $derived(track ? featuresStore.getLyrics(track.id) : null);
@@ -30,7 +32,7 @@
   <div class="relative h-full w-full overflow-hidden">
     <!-- 1. Backdrop -->
     {#if ambientEnabled}
-      <AmbientStage color={track.accentColor} intensity={0.38} />
+      <AmbientStage artworkUrl={ambientArtworkUrl} intensity={0.38} />
     {/if}
 
     <!-- 2. Main Layout: Centers cover smoothly when lyrics are hidden or unavailable -->
@@ -54,6 +56,7 @@
                 title={track.title}
                 artist={track.artist}
                 album={track.album}
+                {onArtworkLoad}
                 videoUrls={ambientEnabled ? videoUrls : []}
                 radius={2}
                 class="h-full w-full"

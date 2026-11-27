@@ -10,7 +10,13 @@
   import { immersiveState } from './immersive.svelte';
   import NowPlayingOverflowMenu from './NowPlayingOverflowMenu.svelte';
 
-  let { videoUrls }: { videoUrls: readonly string[] } = $props();
+  interface Props {
+    videoUrls: readonly string[];
+    ambientArtworkUrl: string;
+    onArtworkLoad: (url: string) => void;
+  }
+
+  let { videoUrls, ambientArtworkUrl, onArtworkLoad }: Props = $props();
 
   let track = $derived(playerStore.currentTrack);
   let doc = $derived(track ? featuresStore.getLyrics(track.id) : null);
@@ -20,7 +26,7 @@
 {#if track}
   <div class="relative h-full w-full overflow-hidden">
     <!-- 0. Full-Stage Color-Adaptive Ambient Backdrop -->
-    <AmbientStage color={track.accentColor} intensity={0.42} />
+    <AmbientStage artworkUrl={ambientArtworkUrl} intensity={0.42} />
 
     <!-- 1. Left Full-Bleed Canvas / Hi-Res Cover with Wide Smoothstep Feather -->
     <div
@@ -59,6 +65,7 @@
           title={track.title}
           artist={track.artist}
           album={track.album}
+          {onArtworkLoad}
           {videoUrls}
           radius={0}
           class="h-full w-full"

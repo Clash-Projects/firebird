@@ -10,9 +10,10 @@
     size?: number;
     radius?: number;
     class?: string;
+    onArtworkLoad?: (url: string) => void;
   }
 
-  let { posterUrl, title, artist, album, videoUrls = [], size, radius = 12, class: className = '' }: Props = $props();
+  let { posterUrl, title, artist, album, videoUrls = [], size, radius = 12, class: className = '', onArtworkLoad }: Props = $props();
   let failedUrls = $state<string[]>([]);
   let playingUrl = $state('');
   let activeUrl = $derived(videoUrls.find((url) => !failedUrls.includes(url)));
@@ -32,6 +33,7 @@
     {album}
     {size}
     {radius}
+    {onArtworkLoad}
     highResolution
     class="h-full w-full"
   />

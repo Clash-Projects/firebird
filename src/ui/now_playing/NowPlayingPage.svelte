@@ -24,6 +24,10 @@
   let lyricsVisible = $state(true);
   let focusMode = $state(false);
   let ambientEnabled = $state(true);
+  let loadedCover = $state<{ trackId: string; url: string } | null>(null);
+  let ambientArtworkUrl = $derived(
+    track && loadedCover?.trackId === track.id ? loadedCover.url : track?.artworkUrl ?? ''
+  );
   let albumMotion = $state<{ trackId: string; urls: string[] } | null>(null);
   let spotifyMotion = $state<{ trackId: string; url?: string } | null>(null);
   let albumVideoUrls = $derived(albumMotion && albumMotion.trackId === track?.id ? albumMotion.urls : []);
@@ -82,6 +86,10 @@
     focusMode = !focusMode;
   }
 
+  function rememberCover(url: string) {
+    if (track) loadedCover = { trackId: track.id, url };
+  }
+
   onMount(() => {
     immersiveState.ping();
     const onKeyDown = (e: KeyboardEvent) => {
@@ -118,17 +126,19 @@
       </button>
     </div>
   {:else if settingsStore.nowPlayingStyle === 'fullBleed'}
-    <NowPlayingFullBleedView videoUrls={fullBleedVideoUrls} />
+    <NowPlayingFullBleedView videoUrls={fullBleedVideoUrls} {ambientArtworkUrl} onArtworkLoad={rememberCover} />
   {:else if settingsStore.nowPlayingStyle === 'minimal'}
     <NowPlayingMinimalView
       {lyricsVisible}
       videoUrls={albumVideoUrls}
+      {ambientArtworkUrl}
+      onArtworkLoad={rememberCover}
       onToggleLyrics={toggleLyrics}
       onClose={close}
     />
   {:else}
     {#if ambientEnabled}
-      <AmbientStage color={track.accentColor} intensity={0.32} />
+      <AmbientStage artworkUrl={ambientArtworkUrl} intensity={0.32} />
     {/if}
 
     <header
@@ -174,6 +184,7 @@
                   title={track.title}
                   artist={track.artist}
                   album={track.album}
+                  onArtworkLoad={rememberCover}
                   videoUrls={ambientEnabled ? albumVideoUrls : []}
                   radius={18}
                   class="aspect-square w-full"

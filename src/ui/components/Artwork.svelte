@@ -17,6 +17,7 @@
     circle?: boolean;
     shadow?: 'none' | 'lift' | 'artwork';
     class?: string;
+    onArtworkLoad?: (url: string) => void;
   }
 
   // Session cache of studio-upgraded URLs so tiles across routes swap instantaneously.
@@ -38,6 +39,7 @@
     circle = false,
     shadow = 'none',
     class: className = '',
+    onArtworkLoad,
   }: Props = $props();
 
   let failedPrimary = $state(false);
@@ -206,7 +208,10 @@
       {alt}
       loading={highResolution ? 'eager' : undefined}
       decoding="async"
-      onload={() => (loaded = true)}
+      onload={(event) => {
+        loaded = true;
+        onArtworkLoad?.((event.currentTarget as HTMLImageElement).currentSrc);
+      }}
       onerror={handleError}
       class={preserveAspect ? 'block h-full w-auto max-w-none' : 'h-full w-full object-cover'}
       style:opacity={skipFade || loaded ? 1 : 0}
