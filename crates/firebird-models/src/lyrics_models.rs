@@ -5,6 +5,7 @@
 use std::collections::HashSet;
 use std::sync::OnceLock;
 
+use quick_xml::{events::Event, Reader};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -905,9 +906,17 @@ fn normalize_syllables(
     line_start_ms: i64,
     line_duration_ms: i64,
 ) -> Vec<LyricSyllable> {
-    if raw.is_empty() {
-        return Vec::new();
-    }
+    // Preserve lyric text order when a backing vocal overlaps the lead.
+    raw.chunk_by(|a, b| a.is_background == b.is_background)
+        .flat_map(|group| normalize_vocal_syllables(group, line_start_ms, line_duration_ms))
+        .collect()
+}
+
+fn normalize_vocal_syllables(
+    raw: &[LyricSyllable],
+    line_start_ms: i64,
+    line_duration_ms: i64,
+) -> Vec<LyricSyllable> {
     let mut sorted = raw.to_vec();
     sorted.sort_by_key(|s| s.time_ms);
     let line_end = line_start_ms + line_duration_ms;
@@ -1594,24 +1603,14 @@ pub fn lyrics_plausible_duration(lines: &[LyricLine], duration_seconds: Option<i
 /// Parse TTML (`<p begin end>` lines, `<span begin end>` words).
 pub fn parse_ttml(ttml: &str) -> Vec<LyricLine> {
     static P_TAG: OnceLock<Regex> = OnceLock::new();
-    static SPAN_TAG: OnceLock<Regex> = OnceLock::new();
-    static XML_TAG: OnceLock<Regex> = OnceLock::new();
     static BEGIN_ATTR: OnceLock<Regex> = OnceLock::new();
     static END_ATTR: OnceLock<Regex> = OnceLock::new();
     static AGENT_ATTR: OnceLock<Regex> = OnceLock::new();
-    static INTER_SPACE: OnceLock<Regex> = OnceLock::new();
 
     let p_tag = P_TAG.get_or_init(|| {
         Regex::new(r"(?is)<(?:[a-zA-Z0-9_-]+:)?p\b([^>]*?)>(.*?)</(?:[a-zA-Z0-9_-]+:)?p>")
             .expect("p_tag")
     });
-    let span_tag = SPAN_TAG.get_or_init(|| {
-        Regex::new(
-            r"(?is)<(?:[a-zA-Z0-9_-]+:)?span\b([^>]*?)>(.*?)</(?:[a-zA-Z0-9_-]+:)?span>(\s*)",
-        )
-        .expect("span_tag")
-    });
-    let xml_tag = XML_TAG.get_or_init(|| Regex::new(r"<[^>]+>").expect("xml_tag"));
     let begin_attr = BEGIN_ATTR.get_or_init(|| {
         Regex::new(r#"(?i)(?:begin|start|startTime|from)=["']([^"']+)["']"#).expect("begin_attr")
     });
@@ -1620,185 +1619,160 @@ pub fn parse_ttml(ttml: &str) -> Vec<LyricLine> {
     });
     let agent_attr =
         AGENT_ATTR.get_or_init(|| Regex::new(r#"(?i)agent=["']([^"']+)["']"#).expect("agent_attr"));
-    let inter_space = INTER_SPACE.get_or_init(|| Regex::new(r"</span>\s+<span").expect("inter"));
 
     let mut raw = ttml.to_string();
     if raw.contains(r"\n") && !raw.contains('\n') {
         raw = raw.replace(r"\r\n", "\n").replace(r"\n", "\n");
     }
 
-    const MAX_MS: i64 = 1_i64 << 31;
     let mut lines = Vec::new();
-
     for p in p_tag.captures_iter(&raw) {
-        let p_attrs = p.get(1).map_or("", |m| m.as_str());
-        let inner = p.get(2).map_or("", |m| m.as_str());
-
+        let attrs = &p[1];
         let start = begin_attr
-            .captures(p_attrs)
-            .and_then(|c| c.get(1))
-            .map_or(0, |m| parse_ttml_time(m.as_str()));
+            .captures(attrs)
+            .map_or(0, |c| parse_ttml_time(&c[1]));
         let end = end_attr
-            .captures(p_attrs)
-            .and_then(|c| c.get(1))
-            .map_or(0, |m| parse_ttml_time(m.as_str()));
-        let agent = agent_attr
-            .captures(p_attrs)
-            .and_then(|c| c.get(1))
-            .map(|m| m.as_str().to_string());
-        let duration = (end - start).clamp(0, MAX_MS);
-        let spans: Vec<regex::Captures<'_>> = span_tag.captures_iter(inner).collect();
+            .captures(attrs)
+            .map_or(0, |c| parse_ttml_time(&c[1]));
+        let agent = agent_attr.captures(attrs).map(|c| c[1].to_string());
+        let Some((text, syllables)) = parse_ttml_paragraph(&p[2], begin_attr, end_attr) else {
+            continue;
+        };
 
-        if spans.is_empty() {
-            let stripped = xml_tag.replace_all(inner, "");
-            let text = unescape_xml(stripped.trim());
-            if text.is_empty() {
-                continue;
-            }
-            lines.push(LyricLine {
-                time_ms: start,
-                duration_ms: if duration > 0 { duration } else { 4000 },
-                text,
-                syllables: Vec::new(),
-                transliteration: String::new(),
-                agent,
-            });
-        } else {
-            let mut syllables = Vec::new();
-            let mut buf = String::new();
-            let has_explicit_inter_tag_spaces = inter_space.is_match(inner);
-
-            // Pre-span text before spans.first
-            let first_whole = spans[0].get(0).unwrap();
-            if first_whole.start() > 0 {
-                let pre_span_raw = xml_tag.replace_all(&inner[..first_whole.start()], "");
-                let pre_span_text = unescape_xml(&pre_span_raw);
-                if !pre_span_text.trim().is_empty() {
-                    let f_attrs = spans[0].get(1).map_or("", |m| m.as_str());
-                    let fb_time = begin_attr
-                        .captures(f_attrs)
-                        .and_then(|c| c.get(1))
-                        .map_or(start, |m| parse_ttml_time(m.as_str()));
-                    let pre_dur = (fb_time - start).max(0);
-                    let syl_text = if pre_span_text.ends_with(' ') {
-                        pre_span_text
-                    } else {
-                        format!("{pre_span_text} ")
-                    };
-                    syllables.push(LyricSyllable {
-                        time_ms: start,
-                        duration_ms: if pre_dur > 0 { pre_dur } else { 500 },
-                        text: syl_text.clone(),
-                        is_background: false,
-                    });
-                    buf.push_str(&syl_text);
-                }
-            }
-
-            for (i, s) in spans.iter().enumerate() {
-                let is_last = i == spans.len() - 1;
-                let attrs = s.get(1).map_or("", |m| m.as_str());
-                let raw_content = s.get(2).map_or("", |m| m.as_str());
-                let trailing_space = s.get(3).map_or("", |m| m.as_str());
-
-                let begin_match = begin_attr.captures(attrs).and_then(|c| c.get(1));
-                let end_match = end_attr.captures(attrs).and_then(|c| c.get(1));
-
-                if begin_match.is_none() || end_match.is_none() {
-                    let inner_spans: Vec<regex::Captures<'_>> =
-                        span_tag.captures_iter(raw_content).collect();
-                    let is_bg = attrs.contains(r#"role="x-bg""#);
-                    for (j, ispan) in inner_spans.iter().enumerate() {
-                        let is_inner_last = is_last && j == inner_spans.len() - 1;
-                        let iattrs = ispan.get(1).map_or("", |m| m.as_str());
-                        let Some(ib_match) = begin_attr.captures(iattrs).and_then(|c| c.get(1))
-                        else {
-                            continue;
-                        };
-                        let Some(ie_match) = end_attr.captures(iattrs).and_then(|c| c.get(1))
-                        else {
-                            continue;
-                        };
-                        let ws = parse_ttml_time(ib_match.as_str());
-                        let we = parse_ttml_time(ie_match.as_str());
-                        let wt_raw = xml_tag.replace_all(
-                            ispan.get(2).map_or("", |m| m.as_str()),
-                            "",
-                        );
-                        let wt = unescape_xml(&wt_raw);
-                        let itrailing = ispan.get(3).map_or("", |m| m.as_str());
-                        let add_space = if has_explicit_inter_tag_spaces {
-                            wt.ends_with(' ') || !itrailing.is_empty()
-                        } else {
-                            !is_inner_last && !wt.ends_with(' ')
-                        };
-                        let syl_text = if add_space {
-                            format!("{} ", wt.trim_end())
-                        } else {
-                            wt.clone()
-                        };
-                        syllables.push(LyricSyllable {
-                            time_ms: ws,
-                            duration_ms: (we - ws).clamp(0, MAX_MS),
-                            text: if has_explicit_inter_tag_spaces {
-                                syl_text.clone()
-                            } else {
-                                wt.trim().to_string()
-                            },
-                            is_background: is_bg,
-                        });
-                        buf.push_str(&syl_text);
-                    }
-                    continue;
-                }
-
-                let ws = parse_ttml_time(begin_match.unwrap().as_str());
-                let we = parse_ttml_time(end_match.unwrap().as_str());
-                let wt_raw = xml_tag.replace_all(raw_content, "");
-                let wt = unescape_xml(&wt_raw);
-                let is_bg = attrs.contains(r#"role="x-bg""#);
-                let add_space = if has_explicit_inter_tag_spaces {
-                    wt.ends_with(' ') || !trailing_space.is_empty()
-                } else {
-                    !is_last && !wt.ends_with(' ')
-                };
-                let syl_text = if add_space {
-                    format!("{} ", wt.trim_end())
-                } else {
-                    wt.clone()
-                };
-                syllables.push(LyricSyllable {
-                    time_ms: ws,
-                    duration_ms: (we - ws).clamp(0, MAX_MS),
-                    text: if has_explicit_inter_tag_spaces {
-                        syl_text.clone()
-                    } else {
-                        wt.trim().to_string()
-                    },
-                    is_background: is_bg,
-                });
-                buf.push_str(&syl_text);
-            }
-
-            let text = buf.trim().to_string();
-            if text.is_empty() {
-                continue;
-            }
-            lines.push(LyricLine {
-                time_ms: start,
-                duration_ms: duration,
-                text,
-                syllables,
-                transliteration: String::new(),
-                agent,
-            });
+        if text.is_empty() {
+            continue;
         }
+        let duration = ttml_duration(start, end);
+        lines.push(LyricLine {
+            time_ms: start,
+            duration_ms: if syllables.is_empty() && duration == 0 {
+                4000
+            } else {
+                duration
+            },
+            text,
+            syllables,
+            transliteration: String::new(),
+            agent,
+        });
     }
 
     lines.sort_by_key(|l| l.time_ms);
     lines
 }
 
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+struct TtmlSpan {
+    timing: Option<usize>,
+    is_background: bool,
+}
+
+fn parse_ttml_paragraph(
+    inner: &str,
+    begin_attr: &Regex,
+    end_attr: &Regex,
+) -> Option<(String, Vec<LyricSyllable>)> {
+    let mut reader = Reader::from_str(inner);
+    let mut stack = Vec::<TtmlSpan>::new();
+    let mut timings = Vec::new();
+    let mut runs = Vec::<(TtmlSpan, String)>::new();
+
+    loop {
+        let current = stack.last().copied().unwrap_or_default();
+        let text = match reader.read_event().ok()? {
+            Event::Start(element) => {
+                let mut span = current;
+                if element.local_name().as_ref().eq_ignore_ascii_case(b"span") {
+                    span.is_background |= element.attributes().flatten().any(|attr| {
+                        attr.key.local_name().as_ref() == b"role" && attr.value.as_ref() == b"x-bg"
+                    });
+                    let attrs = String::from_utf8_lossy(element.attributes_raw());
+                    if let (Some(begin), Some(end)) =
+                        (begin_attr.captures(&attrs), end_attr.captures(&attrs))
+                    {
+                        span.timing = Some(timings.len());
+                        timings.push((parse_ttml_time(&begin[1]), parse_ttml_time(&end[1])));
+                    }
+                }
+                stack.push(span);
+                continue;
+            }
+            Event::End(_) => {
+                stack.pop();
+                continue;
+            }
+            Event::Text(text) => text
+                .unescape()
+                .unwrap_or_else(|_| unescape_xml(&String::from_utf8_lossy(&text)).into())
+                .into_owned(),
+            Event::CData(text) => String::from_utf8_lossy(&text).into_owned(),
+            Event::Empty(element) if element.local_name().as_ref() == b"br" => " ".into(),
+            Event::Eof => break,
+            _ => continue,
+        };
+        if let Some((_, previous_text)) = runs.last_mut().filter(|(span, _)| *span == current) {
+            previous_text.push_str(&text);
+        } else {
+            runs.push((current, text));
+        }
+    }
+
+    static WHITESPACE: OnceLock<Regex> = OnceLock::new();
+    let whitespace = WHITESPACE.get_or_init(|| Regex::new(r"\s+").expect("whitespace"));
+    let has_explicit_gaps = runs.windows(3).any(|w| {
+        w[0].0.timing.is_some()
+            && w[1].0.timing.is_none()
+            && w[1].1.contains(char::is_whitespace)
+            && w[2].0.timing.is_some()
+    });
+    // Some providers omit spaces between whole words. Backing vocal groups
+    // can contain adjacent syllables within one word, so keep their spacing.
+    let add_implicit_gaps = !has_explicit_gaps && runs.iter().all(|(span, _)| !span.is_background);
+    let mut syllables = Vec::<LyricSyllable>::new();
+    let mut pending = String::new();
+    for (span, text) in runs {
+        let Some(timing) = span.timing else {
+            pending.push_str(&text);
+            continue;
+        };
+        if let Some(previous) = syllables.last() {
+            let needs_gap = previous.is_background != span.is_background || add_implicit_gaps;
+            if needs_gap
+                && pending.is_empty()
+                && !previous.text.ends_with(char::is_whitespace)
+                && !text.starts_with(char::is_whitespace)
+            {
+                pending.push(' ');
+            }
+        }
+        pending.push_str(&text);
+        let (start, end) = timings[timing];
+        syllables.push(LyricSyllable {
+            time_ms: start,
+            duration_ms: ttml_duration(start, end),
+            text: std::mem::take(&mut pending),
+            is_background: span.is_background,
+        });
+    }
+
+    let text = if let Some(last) = syllables.last_mut() {
+        last.text.push_str(&pending);
+        syllables
+            .iter_mut()
+            .map(|syllable| {
+                syllable.text = whitespace.replace_all(&syllable.text, " ").into_owned();
+                syllable.text.as_str()
+            })
+            .collect::<String>()
+    } else {
+        pending
+    };
+    Some((whitespace.replace_all(text.trim(), " ").into_owned(), syllables))
+}
+
+fn ttml_duration(start: i64, end: i64) -> i64 {
+    end.saturating_sub(start).clamp(0, 1_i64 << 31)
+}
 fn parse_ttml_time(s: &str) -> i64 {
     let mut str_val = s.trim();
     if str_val.is_empty() {
@@ -2004,5 +1978,39 @@ mod tests {
         assert_eq!(stanzas.len(), 2);
         assert_eq!(stanzas[0].groups[0].background_sublines.len(), 1);
         assert_eq!(stanzas[1].groups[0].role, VocalRole::DuetRight);
+    }
+
+    #[test]
+    fn ttml_preserves_nested_backing_vocals_and_overlapping_timing() {
+        let ttml = r#"<p begin="1000ms" end="4500ms"><span begin="1000ms" end="2000ms">Lead</span> <span begin="2000ms" end="3200ms">line</span><span ttm:role='x-bg'><span begin="1800ms" end="2200ms">(ba</span><span begin="2200ms" end="2600ms">ck</span> <span begin="2600ms" end="4500ms">up)</span></span></p>"#;
+        let parsed = parse_ttml(ttml);
+        assert_eq!(parsed[0].text, "Lead line (back up)");
+        assert_eq!(parsed[0].syllables.len(), 5);
+
+        let normalized = normalize_karaoke_timings(
+            &LyricsResult {
+                lines: parsed,
+                is_synced: true,
+                is_word_synced: true,
+                ..Default::default()
+            },
+            "Example title",
+            "Example artist",
+        );
+        let words = &normalized.lines[0].syllables;
+        assert_eq!(words[1].text.trim(), "line");
+        assert_eq!(words[1].duration_ms, 1200);
+        assert_eq!(words[2].text.trim(), "(ba");
+        assert_eq!(words[2].time_ms, 1800);
+        assert!(words[2..].iter().all(|word| word.is_background));
+        assert_eq!(words[4].text.trim(), "up)");
+    }
+
+    #[test]
+    fn ttml_preserves_punctuation_outside_timed_spans() {
+        let ttml = r#"<p begin="1000ms" end="4000ms"><span begin="1000ms" end="2000ms">Lead &amp; echo</span> &#40;<span begin="2000ms" end="4000ms">again</span>)</p>"#;
+        let lines = parse_ttml(ttml);
+        assert_eq!(lines[0].text, "Lead & echo (again)");
+        assert_eq!(lines[0].syllables[1].text.trim(), "(again)");
     }
 }

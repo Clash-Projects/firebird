@@ -71,6 +71,7 @@ class PlayerStore {
   isPlaying = $state(false);
   isBuffering = $state(false);
   positionSec = $state(0);
+  seekRevision = $state(0);
   backendDurationSec = $state(0);
   seeking = $state(false);
   lastError = $state<string | null>(null);
@@ -260,6 +261,7 @@ class PlayerStore {
   seek(sec: number) {
     const clamped = Math.max(0, Math.min(this.durationSec, sec));
     this.positionSec = clamped;
+    this.seekRevision += 1;
     this.snapAnchorMs = Math.round(clamped * 1000);
     this.snapAnchorTime = performance.now();
     void ipcInvoke('player_seek', { positionMs: this.snapAnchorMs });

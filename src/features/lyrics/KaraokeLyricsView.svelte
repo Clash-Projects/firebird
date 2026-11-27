@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { AmLyrics } from '@uimaxbai/am-lyrics';
+  import { untrack } from 'svelte';
   import { featuresStore } from '$src/state/features.svelte';
   import { playerStore } from '$src/state/player.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
@@ -19,34 +20,80 @@
   let doc = $derived(track ? featuresStore.getLyrics(track.id) : null);
   let offsetMs = $derived(track ? featuresStore.getLyricsOffset(track.id) : 0);
 
-  // 60fps interpolated audio clock (mirrors OG Flutter WaveKaraokeLyricsView Ticker)
-  let baseAudioMs = $state(playerStore.positionSec * 1000);
-  let baseSyncPerf = $state(typeof performance !== 'undefined' ? performance.now() : 0);
-  let rafTickMs = $state(playerStore.positionSec * 1000);
-
-  $effect(() => {
-    baseAudioMs = playerStore.positionSec * 1000;
-    baseSyncPerf = performance.now();
-    rafTickMs = baseAudioMs;
-  });
-
-  $effect(() => {
-    if (!playerStore.isPlaying || playerStore.isBuffering || !doc?.synced) return;
-    let frameId = 0;
-    const step = () => {
-      rafTickMs = baseAudioMs + (performance.now() - baseSyncPerf) * playerStore.speed;
-      frameId = requestAnimationFrame(step);
-    };
-    frameId = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(frameId);
-  });
-
-  let posMs = $derived(Math.max(0, rafTickMs + offsetMs));
-  let activeIdx = $derived(doc ? activeLineIndex(doc.lines, posMs) : 0);
-  let activeLine = $derived(doc?.lines[activeIdx]);
   let durationMs = $derived(playerStore.durationSec * 1000);
   let timedText = $derived(doc ? toTimedText(doc, durationMs, featuresStore.wordByWord) : null);
   let enhancedReady = $state(false);
+  let paused = $derived(!playerStore.isPlaying || playerStore.isBuffering);
+  let rendererOwnsClock = $derived(enhancedReady && !!timedText && playerStore.speed === 1);
+  let playbackSample = $state.raw({
+    trackId: null as string | null,
+    seekRevision: 0,
+    positionMs: 0,
+    sampledAt: 0,
+    advancing: false,
+    speed: 1,
+    revision: 0,
+  });
+  let fallbackFrame = $state.raw<{ positionMs: number; revision: number } | null>(null);
+
+  $effect(() => {
+    const trackId = track?.id ?? null;
+    const seekRevision = playerStore.seekRevision;
+    const speed = playerStore.speed;
+    const advancing = !paused;
+    const positionMs = playerStore.positionSec * 1000;
+    const sampledAt = performance.now();
+    const previous = untrack(() => playbackSample);
+    const expected = previous.positionMs +
+      (previous.advancing ? (sampledAt - previous.sampledAt) * previous.speed : 0);
+    const reset = trackId !== previous.trackId || seekRevision !== previous.seekRevision ||
+      advancing !== previous.advancing || speed !== previous.speed ||
+      Math.abs(positionMs - expected) > 500;
+
+    playbackSample = {
+      trackId,
+      seekRevision,
+      positionMs: advancing && !reset ? Math.max(positionMs, previous.positionMs) : positionMs,
+      sampledAt,
+      advancing,
+      speed,
+      revision: previous.revision + Number(reset),
+    };
+  });
+
+  $effect(() => {
+    // am-lyrics handles interpolation and native word animations at normal speed.
+    if (rendererOwnsClock || paused || !doc?.synced) return;
+    let previousFrame = performance.now();
+    const step = (now: number) => {
+      const sample = playbackSample;
+      const target = sample.positionMs + Math.max(0, now - sample.sampledAt) * sample.speed;
+      let positionMs = target;
+      if (fallbackFrame?.revision === sample.revision) {
+        const advance = Math.max(0, now - previousFrame) * sample.speed;
+        const predicted = fallbackFrame.positionMs + advance;
+        // Let regular timing corrections catch up without rewinding the highlight.
+        const correction = Math.max(-advance * 0.2, Math.min(advance * 0.2, target - predicted));
+        positionMs = predicted + correction;
+      }
+      fallbackFrame = { positionMs, revision: sample.revision };
+      previousFrame = now;
+      frameId = requestAnimationFrame(step);
+    };
+    let frameId = requestAnimationFrame(step);
+    return () => {
+      cancelAnimationFrame(frameId);
+      fallbackFrame = null;
+    };
+  });
+
+  let posMs = $derived(Math.max(0, offsetMs + (
+    !rendererOwnsClock && !paused && fallbackFrame?.revision === playbackSample.revision
+      ? fallbackFrame.positionMs
+      : playbackSample.positionMs
+  )));
+  let activeIdx = $derived(doc ? activeLineIndex(doc.lines, posMs) : 0);
+  let activeLine = $derived(doc?.lines[activeIdx]);
   let lyricsView = $state<HTMLDivElement | null>(null);
   let lastManualScroll = $state(-Infinity);
   let userScrolled = $derived(typeof performance !== 'undefined' && performance.now() - lastManualScroll < 3000);
@@ -185,8 +232,8 @@
         ttml={timedText}
         currentTime={posMs}
         duration={durationMs || undefined}
-        paused={!playerStore.isPlaying || playerStore.isBuffering}
-        interpolate={playerStore.speed === 1}
+        {paused}
+        interpolate={rendererOwnsClock}
         noAutoAlternates={true}
         noBlur={settingsStore.reduceMotion}
         reducedMotion={settingsStore.reduceMotion}

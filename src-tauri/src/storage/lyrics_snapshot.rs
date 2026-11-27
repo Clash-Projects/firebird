@@ -10,10 +10,10 @@ use serde_json::{json, Map, Value};
 
 use crate::models::lyrics_models::{LyricLine, LyricSyllable, LyricsResult};
 
-const VERSION: i64 = 2;
+const VERSION: i64 = 3;
 
 /// Bump both versions when the stored shape or timing normalization changes.
-pub const LYRICS_CACHE_KEY_PREFIX: &str = "lyr2|";
+pub const LYRICS_CACHE_KEY_PREFIX: &str = "lyr3|";
 
 /// How long a stored result is trusted before the race runs again (90 days).
 pub const LYRICS_CACHE_MAX_AGE: Duration = Duration::from_secs(90 * 24 * 60 * 60);
@@ -169,7 +169,7 @@ mod tests {
 
         let empty_json = encode_lyrics(&LyricsResult::empty());
         assert_eq!(decode_lyrics(&empty_json), None);
-        assert_eq!(decode_lyrics("{\"v\":1,\"pl\":\"hi\"}"), None);
+        assert_eq!(decode_lyrics(&encoded.replacen("\"v\":3", "\"v\":2", 1)), None);
         assert_eq!(decode_lyrics("not json"), None);
     }
 }
