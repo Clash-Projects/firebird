@@ -342,20 +342,7 @@ pub async fn yt_check_auth(state: State<'_, AppState>) -> Result<bool, String> {
     Ok(ok)
 }
 
-#[tauri::command]
-pub async fn yt_connect_cookies(
-    state: State<'_, AppState>,
-    cookies: String,
-    profile_email: Option<String>,
-    page_id: Option<String>,
-) -> Result<YtConnection, String> {
-    let pid = page_id.as_deref().unwrap_or("");
-    let initial_email = profile_email.as_deref().unwrap_or("");
-    state
-        .tube
-        .connect_as(&cookies, initial_email, pid)
-        .await
-        .map_err(|e| e.to_string())?;
+async fn enrich_and_persist_yt_profile(state: &AppState, pid: &str) -> YtConnection {
     let mut conn = state.tube.connection();
     if let Some(acc) = state.tube.fetch_account_info(true, pid).await {
         if conn.account_name.is_empty() && !acc.name.is_empty() {
@@ -372,7 +359,12 @@ pub async fn yt_connect_cookies(
         }
     }
     if !conn.profile_email.is_empty() {
-        let mut profiles = yt_list_profiles(state.clone());
+        let raw = state.secure.read_yt_profiles().unwrap_or_default();
+        let mut profiles = if raw.is_empty() {
+            Vec::new()
+        } else {
+            YtProfile::list_from_json(&raw)
+        };
         let now = chrono::Utc::now().timestamp_millis();
         if let Some(existing) = profiles.iter_mut().find(|p| p.email == conn.profile_email) {
             existing.cookies = conn.cookies.clone();
@@ -390,6 +382,24 @@ pub async fn yt_connect_cookies(
         let encoded = YtProfile::list_to_json(&profiles);
         state.secure.write_yt_profiles(Some(&encoded));
     }
+    conn
+}
+
+#[tauri::command]
+pub async fn yt_connect_cookies(
+    state: State<'_, AppState>,
+    cookies: String,
+    profile_email: Option<String>,
+    page_id: Option<String>,
+) -> Result<YtConnection, String> {
+    let pid = page_id.as_deref().unwrap_or("");
+    let initial_email = profile_email.as_deref().unwrap_or("");
+    state
+        .tube
+        .connect_as(&cookies, initial_email, pid)
+        .await
+        .map_err(|e| e.to_string())?;
+    let conn = enrich_and_persist_yt_profile(&state, pid).await;
     state.emit_event("yt-connection-changed", conn.clone());
     state.yt_library_sync.kick();
     Ok(conn)
@@ -442,16 +452,26 @@ pub async fn yt_switch_identity(
     page_id: String,
 ) -> Result<YtConnection, String> {
     let profiles = yt_list_profiles(state.clone());
-    let target = profiles
-        .into_iter()
-        .find(|p| p.email == profile_email)
-        .ok_or_else(|| format!("Profile not found: {profile_email}"))?;
+    let (cookies, email) = if let Some(target) = profiles.into_iter().find(|p| p.email == profile_email) {
+        (target.cookies, target.email)
+    } else {
+        let active = state.tube.connection();
+        if !active.connected || active.cookies.is_empty() {
+            return Err(format!("Profile not found: {profile_email}"));
+        }
+        let resolved_email = if active.profile_email.is_empty() {
+            profile_email
+        } else {
+            active.profile_email
+        };
+        (active.cookies, resolved_email)
+    };
     state
         .tube
-        .connect_as(&target.cookies, &target.email, &page_id)
+        .connect_as(&cookies, &email, &page_id)
         .await
         .map_err(|e| e.to_string())?;
-    let conn = state.tube.connection();
+    let conn = enrich_and_persist_yt_profile(&state, &page_id).await;
     state.emit_event("yt-connection-changed", conn.clone());
     state.yt_library_sync.kick();
     Ok(conn)
@@ -606,7 +626,7 @@ pub async fn yt_web_sign_in(
         .connect_as(&cookies, &email, &page_id)
         .await
         .map_err(|e| e.to_string())?;
-    let conn = state.tube.connection();
+    let conn = enrich_and_persist_yt_profile(&state, &page_id).await;
     state.emit_event("yt-connection-changed", conn.clone());
     state.yt_library_sync.kick();
     Ok(conn)

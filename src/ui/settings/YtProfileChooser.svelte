@@ -4,6 +4,7 @@
   import { featuresStore } from '$src/state/features.svelte';
   import { libraryStore } from '$src/state/library.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
+  import Artwork from '$src/ui/components/Artwork.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import BrandIcon from '$src/ui/theme/BrandIcon.svelte';
 
@@ -11,6 +12,15 @@
     connected?: boolean;
     accountName?: string;
     profileEmail?: string;
+    activePageId?: string;
+    photoUrl?: string;
+  }
+
+  interface YtChannelItem {
+    pageId: string;
+    name: string;
+    handle?: string;
+    photoUrl?: string;
   }
 
   interface YtProfileItem {
@@ -22,6 +32,10 @@
   let showCookieForm = $state(false);
   let cookiesInput = $state('');
   let cookieError = $state('');
+  let activePageId = $state('');
+  let activePhotoUrl = $state('');
+  let channels = $state<YtChannelItem[]>([]);
+  let loadingChannels = $state(false);
   let profiles = $state<YtProfileItem[]>([]);
   let cookieFileInput: HTMLInputElement | undefined = $state();
 
@@ -33,8 +47,31 @@
     }
   }
 
+  async function refreshChannels() {
+    if (!isTauriRuntime() || !settingsStore.ytConnected) {
+      channels = [];
+      return;
+    }
+    loadingChannels = true;
+    try {
+      const list = await ipcInvoke<YtChannelItem[]>('yt_fetch_available_channels');
+      channels = Array.isArray(list) ? list : [];
+    } finally {
+      loadingChannels = false;
+    }
+  }
+
   onMount(() => {
     void refreshProfiles();
+    if (isTauriRuntime()) {
+      void ipcInvoke<YtConnectionResult>('yt_get_connection').then((conn) => {
+        if (conn?.connected) {
+          activePageId = conn.activePageId ?? '';
+          activePhotoUrl = conn.photoUrl ?? '';
+          void refreshChannels();
+        }
+      });
+    }
   });
 
   function applyConnected(conn: YtConnectionResult | null) {
@@ -42,11 +79,15 @@
     settingsStore.ytConnected = true;
     settingsStore.ytAccountName = conn.accountName || '';
     settingsStore.ytAccountEmail = conn.profileEmail || '';
+    activePageId = conn.activePageId ?? '';
+    activePhotoUrl = conn.photoUrl ?? '';
     showCookieForm = false;
     cookiesInput = '';
     cookieError = '';
     void libraryStore.loadHomeFeed(true);
+    void libraryStore.loadLocalStorage();
     void refreshProfiles();
+    void refreshChannels();
     featuresStore.showToast({ title: 'YouTube Music connected', severity: 'success' });
   }
 
@@ -122,6 +163,41 @@
     }
   }
 
+  async function handleSwitchChannel(pageId: string) {
+    if (busy || pageId === activePageId) return;
+    busy = true;
+    try {
+      const conn = await ipcInvoke<YtConnectionResult>('yt_switch_identity', {
+        profileEmail: settingsStore.ytAccountEmail,
+        pageId,
+      });
+      if (conn?.connected) {
+        settingsStore.ytAccountName = conn.accountName || '';
+        settingsStore.ytAccountEmail = conn.profileEmail || settingsStore.ytAccountEmail;
+        activePageId = conn.activePageId ?? pageId;
+        activePhotoUrl =
+          conn.photoUrl ||
+          channels.find((c) => c.pageId === pageId)?.photoUrl ||
+          '';
+        void libraryStore.loadHomeFeed(true);
+        void libraryStore.loadLocalStorage();
+        featuresStore.showToast({
+          title: 'Switched YouTube channel',
+          subtitle: conn.accountName || 'Primary account',
+          severity: 'success',
+        });
+      }
+    } catch (err) {
+      featuresStore.showToast({
+        title: 'Could not switch channel',
+        subtitle: err instanceof Error ? err.message : String(err),
+        severity: 'error',
+      });
+    } finally {
+      busy = false;
+    }
+  }
+
   async function handleSignOut() {
     if (busy) return;
     busy = true;
@@ -130,6 +206,9 @@
       settingsStore.ytConnected = false;
       settingsStore.ytAccountName = '';
       settingsStore.ytAccountEmail = '';
+      activePageId = '';
+      activePhotoUrl = '';
+      channels = [];
       void refreshProfiles();
       featuresStore.showToast({ title: 'Signed out of YouTube Music', severity: 'info' });
     } finally {
@@ -141,7 +220,11 @@
 <div class="space-y-3 rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
   <div class="flex items-center justify-between gap-3">
     <div class="flex items-center gap-3">
-      <BrandIcon name="youtube" size={24} />
+      {#if settingsStore.ytConnected && activePhotoUrl}
+        <Artwork src={activePhotoUrl} alt={settingsStore.ytAccountName || 'YouTube Music'} size={28} circle />
+      {:else}
+        <BrandIcon name="youtube" size={24} />
+      {/if}
       <div>
         <div class="text-[13.5px] font-semibold">YouTube Music</div>
         <div class="text-[12px] text-[var(--lw-text-secondary)]">
@@ -228,6 +311,44 @@
           {busy ? 'Verifying...' : 'Connect with Cookies'}
         </Buttons>
       </div>
+    </div>
+  {/if}
+
+  {#if settingsStore.ytConnected && (channels.length > 0 || loadingChannels)}
+    <div class="space-y-2 border-t border-[var(--lw-outline-soft)] pt-3">
+      <div class="flex items-center justify-between">
+        <span class="text-[11.5px] font-semibold text-[var(--lw-text-secondary)]">
+          Channel / Brand Account
+        </span>
+        {#if loadingChannels}
+          <span class="text-[11px] text-[var(--lw-text-tertiary)]">Loading channels...</span>
+        {/if}
+      </div>
+      {#if channels.length > 0}
+        <div class="flex flex-wrap gap-2">
+          {#if !channels.some((c) => c.pageId === '')}
+            <Buttons
+              variant={activePageId === '' ? 'primary' : 'secondary'}
+              size="sm"
+              disabled={busy}
+              onclick={() => void handleSwitchChannel('')}
+            >
+              Primary Account
+            </Buttons>
+          {/if}
+          {#each channels as ch (ch.pageId)}
+            <Buttons
+              variant={activePageId === ch.pageId ? 'primary' : 'secondary'}
+              size="sm"
+              disabled={busy}
+              onclick={() => void handleSwitchChannel(ch.pageId)}
+            >
+              <Artwork src={ch.photoUrl} alt={ch.name} size={18} circle />
+              <span>{ch.name}{ch.handle ? ` (${ch.handle})` : ''}</span>
+            </Buttons>
+          {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 
