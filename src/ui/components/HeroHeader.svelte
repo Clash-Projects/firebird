@@ -30,11 +30,13 @@
       label={title}
       kind={circleArt ? 'artist' : 'album'}
       artist={circleArt ? title : subtitle ?? ''}
+      preserveAspect={!circleArt}
       alt={title}
       size={168}
       radius={12}
       circle={circleArt}
       shadow="artwork"
+      class={!circleArt ? 'max-w-[260px]' : ''}
     />
   {/if}
   <div class="min-w-0 flex-1">

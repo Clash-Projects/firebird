@@ -40,7 +40,7 @@
   bind:this={scroller}
   onscroll={onScroll}
   use:waveSmoothScroll={{ axis: 'y' }}
-  class="lw-scroll stage-scroll relative z-10 h-full w-full"
+  class="{fillHeight ? 'overflow-hidden' : 'lw-scroll'} stage-scroll relative z-10 h-full w-full"
 >
   {#key routeKey}
     <div

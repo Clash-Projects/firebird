@@ -168,9 +168,9 @@
         100% { transform: scale(1.03); }
       }
       @keyframes lw-warp {
-        0% { transform: scale(0.94); letter-spacing: -0.02em; }
-        60% { transform: scale(1.05); letter-spacing: 0.03em; }
-        100% { transform: scale(1.03); letter-spacing: 0.015em; }
+        0% { transform: scale(0.95); }
+        60% { transform: scale(1.04); }
+        100% { transform: scale(1.025); }
       }
       @keyframes lw-glitch {
         0%, 100% { transform: translateX(0); text-shadow: -2px 0 rgba(255, 45, 85, 0.8), 2px 0 rgba(0, 229, 255, 0.8); }
@@ -179,6 +179,7 @@
       }
       :host .lyrics-line.active {
         transform-origin: left center;
+        will-change: transform;
         transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), text-shadow 260ms ease, filter 260ms ease;
       }
       :host([data-animation="karaoke_bounce"]) .lyrics-line.active { animation: lw-bounce 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }

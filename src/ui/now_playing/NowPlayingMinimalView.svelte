@@ -79,7 +79,7 @@
           style:opacity={showLyrics ? 1 : 0}
           class:pointer-events-none={!showLyrics}
         >
-          <div use:waveSmoothScroll class="lw-scroll h-full min-w-[320px] overflow-y-auto">
+          <div class="h-full min-h-0 min-w-[320px] overflow-hidden">
             <KaraokeLyricsView fontSize={34} showHeaderControls={false} />
           </div>
         </div>
