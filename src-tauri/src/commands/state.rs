@@ -244,6 +244,12 @@ impl AppState {
             None,
         );
         let spectrum = Arc::new(SpectrumStreamController::new());
+        {
+            let spectrum_cb = Arc::clone(&spectrum);
+            playback.add_snapshot_listener(Arc::new(move |snap| {
+                spectrum_cb.update_playback(snap);
+            }));
+        }
         let jam_sync = Arc::new(JamSyncBridge::new(
             Arc::clone(&jam),
             Arc::clone(&playback),

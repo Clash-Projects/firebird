@@ -152,6 +152,7 @@ export interface LastWaveAPI {
     readonly play: () => void;
     readonly pause: () => void;
     readonly togglePlay: () => void;
+    readonly playAt: (index: number) => void;
     readonly next: () => void;
     readonly previous: () => void;
     readonly seek: (sec: number) => void;
@@ -184,6 +185,7 @@ export interface LastWaveAPI {
     readonly toggleRail: () => void;
     readonly toggleMiniPlayer: () => void;
     readonly toggleRightPanel: (panel: 'queue' | 'eq' | 'output') => void;
+    readonly getRightPanel: () => 'none' | 'queue' | 'eq' | 'output';
   };
   readonly events: {
     readonly on: (event: PlayerEventType, fn: (payload: unknown) => void) => () => void;

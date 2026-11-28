@@ -275,13 +275,29 @@
   }
 
   let { name, size = 18, filled = false, class: className = '' }: Props = $props();
+  let customMaskUrl = $derived(uiSlots.iconMaskUrls[name]);
   let customSvg = $derived(uiSlots.iconOverrides[name]);
   let spec = $derived(GLYPHS[name] ?? GLYPHS.music);
   let codePoint = $derived(filled && spec.filledCode ? spec.filledCode : spec.code);
   let solidTransport = $derived(filled ? SOLID_TRANSPORT[name] : undefined);
 </script>
 
-{#if customSvg}
+{#if customMaskUrl}
+  <span
+    class="inline-block shrink-0 bg-current {className}"
+    style:width="{size}px"
+    style:height="{size}px"
+    style:-webkit-mask-image={customMaskUrl}
+    style:mask-image={customMaskUrl}
+    style:-webkit-mask-repeat="no-repeat"
+    style:mask-repeat="no-repeat"
+    style:-webkit-mask-position="center"
+    style:mask-position="center"
+    style:-webkit-mask-size="contain"
+    style:mask-size="contain"
+    aria-hidden="true"
+  ></span>
+{:else if customSvg}
   <span
     class="inline-flex shrink-0 items-center justify-center [&>svg]:h-full [&>svg]:w-full {className}"
     style:width="{size}px"

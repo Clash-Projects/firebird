@@ -22,6 +22,22 @@ let cachedApi: LastWaveAPI | null = null;
 const spectrumListeners = new Set<(frame: SpectrumFrame) => void>();
 let spectrumSubId: number | null = null;
 let spectrumSubscribing = false;
+let pendingSpectrumFrame: SpectrumFrame | null = null;
+let spectrumRafId: number | null = null;
+
+function flushSpectrumFrame() {
+  spectrumRafId = null;
+  const frame = pendingSpectrumFrame;
+  pendingSpectrumFrame = null;
+  if (!frame || (typeof document !== 'undefined' && document.hidden)) return;
+  for (const listener of spectrumListeners) {
+    try {
+      listener(frame);
+    } catch {
+      // Isolate plugin visualizer errors.
+    }
+  }
+}
 
 function subscribeSpectrum(fn: (frame: SpectrumFrame) => void): () => void {
   spectrumListeners.add(fn);
@@ -30,12 +46,11 @@ function subscribeSpectrum(fn: (frame: SpectrumFrame) => void): () => void {
     spectrumSubscribing = true;
     const channel = new Channel<SpectrumFrame>();
     channel.onmessage = (frame) => {
-      for (const listener of spectrumListeners) {
-        try {
-          listener(frame);
-        } catch {
-          // Isolate plugin visualizer errors.
-        }
+      if (spectrumListeners.size === 0) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      pendingSpectrumFrame = frame;
+      if (spectrumRafId === null) {
+        spectrumRafId = requestAnimationFrame(flushSpectrumFrame);
       }
     };
     void ipcInvoke<number>('spectrum_subscribe', { channel }).then((id) => {
@@ -52,10 +67,17 @@ function subscribeSpectrum(fn: (frame: SpectrumFrame) => void): () => void {
 
   return () => {
     spectrumListeners.delete(fn);
-    if (spectrumListeners.size === 0 && spectrumSubId !== null) {
-      const id = spectrumSubId;
-      spectrumSubId = null;
-      void ipcInvoke('spectrum_unsubscribe', { subscriptionId: id });
+    if (spectrumListeners.size === 0) {
+      pendingSpectrumFrame = null;
+      if (spectrumRafId !== null) {
+        cancelAnimationFrame(spectrumRafId);
+        spectrumRafId = null;
+      }
+      if (spectrumSubId !== null) {
+        const id = spectrumSubId;
+        spectrumSubId = null;
+        void ipcInvoke('spectrum_unsubscribe', { subscriptionId: id });
+      }
     }
   };
 }
@@ -66,9 +88,21 @@ export function installLastWaveApi(): LastWaveAPI {
   const api: LastWaveAPI = Object.freeze({
     version: '2.6.0',
     player: Object.freeze({
-      play: () => playerStore.play(),
+      play: () => {
+        if (!playerStore.currentTrack && playerStore.queue.length > 0) {
+          playerStore.playTrack(playerStore.queue[0]);
+          return;
+        }
+        playerStore.play();
+      },
       pause: () => playerStore.pause(),
       togglePlay: () => playerStore.togglePlay(),
+      playAt: (index: number) => {
+        const q = playerStore.queue;
+        if (index >= 0 && index < q.length) {
+          playerStore.playTrack(q[index]);
+        }
+      },
       next: () => playerStore.next(),
       previous: () => playerStore.previous(),
       seek: (sec: number) => playerStore.seek(sec),
@@ -102,7 +136,16 @@ export function installLastWaveApi(): LastWaveAPI {
     window: Object.freeze({
       toggleRail: () => windowState.toggleRail(),
       toggleMiniPlayer: () => windowState.toggleMiniPlayer(),
-      toggleRightPanel: (panel: 'queue' | 'eq' | 'output') => windowState.toggleRightPanel(panel),
+      toggleRightPanel: (panel: 'queue' | 'eq' | 'output' | string) => {
+        if (panel === 'lyrics') {
+          router.navigate('/now-playing');
+          return;
+        }
+        if (panel === 'queue' || panel === 'eq' || panel === 'output') {
+          windowState.toggleRightPanel(panel);
+        }
+      },
+      getRightPanel: () => windowState.activeRightPanel,
     }),
     events: Object.freeze({
       on: (event: PlayerEventType, fn: (payload: unknown) => void) => playerStore.on(event, fn),

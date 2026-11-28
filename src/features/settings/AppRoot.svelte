@@ -45,6 +45,10 @@
     void settingsStore.appFont;
     void settingsStore.uiScale;
     void playerStore.currentTrack?.accentColor;
+    void pluginManager.activeThemeId;
+    void pluginManager.activePaletteId;
+    void pluginManager.safeMode;
+    void pluginManager.allDisabled;
     syncThemeDocument();
   });
 

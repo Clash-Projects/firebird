@@ -1,3 +1,4 @@
+import { pluginManager } from '$src/lib/plugins/pluginManager.svelte';
 import { playerStore } from '$src/state/player.svelte';
 import { settingsStore, type ThemeMode } from '$src/state/settings.svelte';
 import { applyWaveThemeToDocument } from '$src/ui/theme/fluentTheme';
@@ -11,6 +12,9 @@ export function syncThemeDocument() {
   if (resolvedFont && isWebFont(resolvedFont)) {
     void ensureWebFontLoaded(resolvedFont);
   }
+  const active = !pluginManager.safeMode && !pluginManager.allDisabled;
+  const pluginTheme = active && Boolean(pluginManager.activeThemeId);
+  const pluginOverride = active && Boolean(pluginManager.activeThemeId || pluginManager.activePaletteId);
   applyWaveThemeToDocument({
     mode: settingsStore.themeMode,
     customBase: settingsStore.customThemeBase,
@@ -23,6 +27,8 @@ export function syncThemeDocument() {
     hazeIntensity: settingsStore.hazeIntensity,
     liquidGlass: settingsStore.liquidGlass,
     performanceMode: false,
+    pluginOverride,
+    pluginTheme,
   });
 }
 

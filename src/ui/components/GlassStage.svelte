@@ -1,10 +1,14 @@
 <script lang="ts">
+  import { pluginManager } from '$src/lib/plugins/pluginManager.svelte';
   import { playerStore } from '$src/state/player.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
 
   let artwork = $derived(playerStore.currentTrack?.artworkUrl ?? '');
   let accent = $derived(playerStore.currentTrack?.accentColor || 'var(--lw-accent)');
-  let glassActive = $derived(!settingsStore.performanceMode && settingsStore.glassmorphism);
+  let pluginThemeActive = $derived(
+    !pluginManager.safeMode && !pluginManager.allDisabled && Boolean(pluginManager.activeThemeId)
+  );
+  let glassActive = $derived(!pluginThemeActive && !settingsStore.performanceMode && settingsStore.glassmorphism);
 </script>
 
 {#if glassActive}

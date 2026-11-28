@@ -3,6 +3,7 @@
   import { windowState } from '$src/app/window.svelte';
   import OutputPathSheet from '$src/features/audio_output/OutputPathSheet.svelte';
   import EqualizerPanel from '$src/features/equalizer/EqualizerPanel.svelte';
+  import { pluginManager } from '$src/lib/plugins/pluginManager.svelte';
   import { uiSlots } from '$src/lib/plugins/uiSlots.svelte';
   import WidgetSandboxHost from '$src/lib/plugins/WidgetSandboxHost.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
@@ -51,7 +52,10 @@
   let customApp = $derived(uiSlots.customAppRoutes.find((a) => a.route === router.path) ?? null);
   let isNowPlaying = $derived(router.path === '/now-playing');
   let isImmersive = $derived(isNowPlaying && immersiveState.isImmersive);
-  let floatDock = $derived(settingsStore.glassmorphism && !isImmersive);
+  let pluginThemeActive = $derived(
+    !pluginManager.safeMode && !pluginManager.allDisabled && Boolean(pluginManager.activeThemeId)
+  );
+  let floatDock = $derived(!pluginThemeActive && settingsStore.glassmorphism && !isImmersive);
   let hasOpenedMiniPlayer = $state(false);
   let openPanels = $derived(
     windowState.activeRightPanel === 'none' ? [] : [windowState.activeRightPanel]

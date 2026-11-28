@@ -1,3 +1,4 @@
+import { pluginManager } from '$src/lib/plugins/pluginManager.svelte';
 import { settingsStore } from '$src/state/settings.svelte';
 
 export type LwHazeLevel = 'l0' | 'l1' | 'l2' | 'l3';
@@ -11,6 +12,7 @@ export const lwHazeSpecs: Record<LwHazeLevel, { blurSigma: number; darkAlpha: nu
 
 export function resolveHazeBlur(level: LwHazeLevel, enableBlur = true): number {
   if (!enableBlur || level === 'l0') return 0;
+  if (!pluginManager.safeMode && !pluginManager.allDisabled && pluginManager.activeThemeId) return 0;
   if (settingsStore.performanceMode || settingsStore.hazeMaterial === 'solid') return 0;
   if (level === 'l1' && settingsStore.hazeIntensity === 'low') return 0;
   const intensityScale =

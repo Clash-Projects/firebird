@@ -12,6 +12,15 @@ function sanitizeSvg(raw: string): string {
     .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
 }
 
+function buildSvgMaskUrl(svg: string): string | null {
+  if (!/fill\s*=\s*["']currentColor["']/i.test(svg)) return null;
+  if (/stroke\s*=\s*["']#(?!000|fff)/i.test(svg)) return null;
+  const encoded = encodeURIComponent(
+    svg.replace(/fill\s*=\s*["']currentColor["']/gi, 'fill="#000"')
+  );
+  return `url("data:image/svg+xml,${encoded}")`;
+}
+
 class UiSlotsRegistry {
   sidebarItems = $state<SidebarSlotItem[]>([]);
   playerBarControls = $state<PlayerBarControlSlot[]>([]);
@@ -23,6 +32,7 @@ class UiSlotsRegistry {
   sideRailOverride = $state<OverrideViewSlot | null>(null);
   iconPackPluginId = $state<string | null>(null);
   iconOverrides = $state<Record<string, string>>({});
+  iconMaskUrls = $state<Record<string, string>>({});
 
   registerSidebarItem(item: SidebarSlotItem): () => void {
     this.sidebarItems = [...this.sidebarItems.filter((x) => x.id !== item.id), item];
@@ -90,17 +100,23 @@ class UiSlotsRegistry {
 
   registerIconPack(icons: Record<string, string>, pluginId: string): () => void {
     const clean: Record<string, string> = {};
+    const masks: Record<string, string> = {};
     for (const [k, v] of Object.entries(icons || {})) {
       if (typeof v === 'string' && v.trim()) {
-        clean[k] = sanitizeSvg(v.trim());
+        const sanitized = sanitizeSvg(v.trim());
+        const maskUrl = buildSvgMaskUrl(sanitized);
+        if (maskUrl) masks[k] = maskUrl;
+        else clean[k] = sanitized;
       }
     }
     this.iconPackPluginId = pluginId;
     this.iconOverrides = clean;
+    this.iconMaskUrls = masks;
     return () => {
       if (this.iconPackPluginId === pluginId) {
         this.iconPackPluginId = null;
         this.iconOverrides = {};
+        this.iconMaskUrls = {};
       }
     };
   }
@@ -125,6 +141,7 @@ class UiSlotsRegistry {
     if (this.iconPackPluginId === pluginId) {
       this.iconPackPluginId = null;
       this.iconOverrides = {};
+      this.iconMaskUrls = {};
     }
   }
 }

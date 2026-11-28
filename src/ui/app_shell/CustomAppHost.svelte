@@ -11,9 +11,18 @@
   $effect(() => {
     if (!hostEl) return;
     hostEl.innerHTML = '';
-    const cleanup = app.mount(hostEl);
+    let cleanup: void | (() => void);
+    try {
+      cleanup = app.mount(hostEl);
+    } catch (err) {
+      console.error('[LastWave] Plugin view mount error:', err);
+    }
     return () => {
-      if (typeof cleanup === 'function') cleanup();
+      try {
+        if (typeof cleanup === 'function') cleanup();
+      } catch {
+        // Ignore plugin view teardown errors.
+      }
     };
   });
 </script>
