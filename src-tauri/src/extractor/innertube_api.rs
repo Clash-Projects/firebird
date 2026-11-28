@@ -3549,7 +3549,8 @@ impl InnerTubeMusicApi {
     ) -> (Vec<YouTubeMusicTrack>, bool) {
         let mut shelves = Vec::new();
         collect_objects(root, "musicPlaylistShelfRenderer", &mut shelves);
-        if shelves.is_empty() {
+        let has_playlist_shelf = !shelves.is_empty();
+        if !has_playlist_shelf {
             collect_objects(root, "musicShelfRenderer", &mut shelves);
         }
         let mut primary: Option<&Map<String, Value>> = None;
@@ -3566,25 +3567,52 @@ impl InnerTubeMusicApi {
                 }
             }
         }
-        if primary.is_none() {
-            primary = shelves.first();
+
+        let mut known_ids: HashSet<String> = HashSet::new();
+        let mut songs: Vec<YouTubeMusicTrack> = Vec::new();
+        if let Some(p) = primary {
+            for s in self.parse_song_renderers(&Value::Object(p.clone())) {
+                if known_ids.insert(s.video_id.clone()) {
+                    songs.push(s);
+                }
+            }
+        } else if !shelves.is_empty() {
+            let targets: &[Map<String, Value>] = if has_playlist_shelf {
+                &shelves[..1]
+            } else {
+                &shelves
+            };
+            for shelf in targets {
+                for s in self.parse_song_renderers(&Value::Object(shelf.clone())) {
+                    if known_ids.insert(s.video_id.clone()) {
+                        songs.push(s);
+                    }
+                }
+            }
+        } else {
+            for s in self.parse_song_renderers(root) {
+                if known_ids.insert(s.video_id.clone()) {
+                    songs.push(s);
+                }
+            }
         }
 
-        let mut songs = match primary {
-            Some(p) => self.parse_song_renderers(&Value::Object(p.clone())),
-            None => self.parse_song_renderers(root),
-        };
-
-        let Some(primary_obj) = primary else {
+        if shelves.is_empty() {
             let take = limit.unwrap_or(songs.len());
             songs.truncate(take);
             return (songs, false);
-        };
+        }
 
-        let primary_val = Value::Object(primary_obj.clone());
-        let mut token = self.playlist_track_continuation_token(&primary_val);
+        let mut token = if let Some(p) = primary {
+            self.playlist_track_continuation_token(&Value::Object(p.clone()))
+        } else {
+            shelves
+                .iter()
+                .rev()
+                .find_map(|s| self.playlist_track_continuation_token(&Value::Object(s.clone())))
+                .or_else(|| self.playlist_track_continuation_token(root))
+        };
         let mut seen_tokens = HashSet::new();
-        let mut known_ids: HashSet<String> = songs.iter().map(|s| s.video_id.clone()).collect();
         let max_pages = limit.map(|l| (l / 20 + 1).min(8)).unwrap_or(6);
         let mut page = 0;
 
