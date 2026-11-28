@@ -9,7 +9,7 @@
 interface ScrollOptions {
   axis?: 'y' | 'x';
   drag?: boolean;
-  snap?: () => void;
+  snap?: (projected: number, direction?: -1 | 0 | 1) => number;
 }
 
 export function waveSmoothScroll(node: HTMLElement, opts: ScrollOptions = {}) {
@@ -21,18 +21,22 @@ export function waveSmoothScroll(node: HTMLElement, opts: ScrollOptions = {}) {
   let rafId = 0;
   let lastTime = 0;
   let target = axis === 'x' ? node.scrollLeft : node.scrollTop;
+  let rawTarget = target;
   let glidePosition = target;
   let activeGlide = false;
   let dragging = false;
   let precisionTimer = 0;
   let manualScroll = false;
 
+  const isReducedMotion = () =>
+    document.documentElement.hasAttribute('data-reduced-motion') ||
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   const updateSnap = () => {
     const scrolling = Boolean(snap) && (activeGlide || dragging || precisionTimer !== 0);
     if (scrolling === manualScroll) return;
     manualScroll = scrolling;
     node.toggleAttribute('data-manual-scroll', scrolling);
-    if (!scrolling) snap?.();
   };
 
   const stopGlide = () => {
@@ -54,6 +58,35 @@ export function waveSmoothScroll(node: HTMLElement, opts: ScrollOptions = {}) {
   const setCurrent = (v: number) => {
     if (axis === 'x') node.scrollLeft = v;
     else node.scrollTop = v;
+  };
+
+  const startGlide = (nextTarget: number) => {
+    const max = getMax();
+    target = Math.max(0, Math.min(max, nextTarget));
+    if (!activeGlide) {
+      glidePosition = getCurrent();
+      activeGlide = true;
+      updateSnap();
+      lastTime = 0;
+      rafId = requestAnimationFrame(step);
+    } else {
+      updateSnap();
+    }
+  };
+
+  const snapToCurrent = () => {
+    if (!snap) {
+      updateSnap();
+      return;
+    }
+    const cur = getCurrent();
+    const snapped = Math.max(0, Math.min(getMax(), snap(cur, 0)));
+    if (isReducedMotion() || Math.abs(snapped - cur) < 0.6) {
+      setCurrent(snapped);
+      updateSnap();
+      return;
+    }
+    startGlide(snapped);
   };
 
   const step = (now: number) => {
@@ -83,7 +116,7 @@ export function waveSmoothScroll(node: HTMLElement, opts: ScrollOptions = {}) {
     // Keep vertical wheel gestures available to the page when the pointer is over a shelf.
     const horizontal = e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY);
     if (horizontal !== (axis === 'x')) {
-      if (axis === 'x') stopGlide();
+      if (axis === 'x' && activeGlide && !snap) stopGlide();
       return;
     }
 
@@ -96,9 +129,7 @@ export function waveSmoothScroll(node: HTMLElement, opts: ScrollOptions = {}) {
       e.composedPath().some((element) => element instanceof Element && element.classList.contains('lw-scroll-x'))
     );
     const isNotchedWheel = e.deltaMode !== 0 || (Number.isInteger(rawDelta) && Math.abs(rawDelta) >= 40);
-    const reduceMotion = document.documentElement.hasAttribute('data-reduced-motion') ||
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const glide = isNotchedWheel && !reduceMotion;
+    const glide = isNotchedWheel && !isReducedMotion();
     if (!glide && !lockAxis) return;
 
     const pageSize = horizontal ? node.clientWidth : node.clientHeight;
@@ -121,23 +152,17 @@ export function waveSmoothScroll(node: HTMLElement, opts: ScrollOptions = {}) {
         window.clearTimeout(precisionTimer);
         precisionTimer = window.setTimeout(() => {
           precisionTimer = 0;
-          updateSnap();
-        }, 120);
+          snapToCurrent();
+        }, 140);
         updateSnap();
       }
       node.scrollBy(horizontal ? { left: pixelDelta, behavior: 'instant' } : { top: pixelDelta, behavior: 'instant' });
       return;
     }
-    if (!activeGlide) {
-      target = cur + pixelDelta;
-      glidePosition = cur;
-      activeGlide = true;
-      updateSnap();
-      lastTime = 0;
-      rafId = requestAnimationFrame(step);
-    } else {
-      target = Math.max(0, Math.min(max, target + pixelDelta));
-    }
+    rawTarget = activeGlide ? Math.max(0, Math.min(max, rawTarget + pixelDelta)) : cur + pixelDelta;
+    const dir = pixelDelta > 0 ? 1 : -1;
+    const next = snap ? snap(rawTarget, dir) : rawTarget;
+    startGlide(next);
   };
 
   // Optional mouse drag for horizontal shelves
@@ -168,7 +193,6 @@ export function waveSmoothScroll(node: HTMLElement, opts: ScrollOptions = {}) {
     const dx = e.clientX - dragStartX;
     if (!moved && Math.abs(dx) > 5) {
       moved = true;
-      node.style.scrollBehavior = 'auto';
       try {
         node.setPointerCapture(e.pointerId);
         capturedPointerId = e.pointerId;
@@ -211,21 +235,16 @@ export function waveSmoothScroll(node: HTMLElement, opts: ScrollOptions = {}) {
       setTimeout(() => node.removeEventListener('click', swallow, { capture: true }), 40);
 
       const stale = performance.now() - prevMoveTime > 90;
-      const reducedMotion =
-        window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
-        document.documentElement.hasAttribute('data-reduced-motion');
-      if (!stale && !reducedMotion && Math.abs(velocityX) > 60) {
-        target = Math.max(0, Math.min(getMax(), node.scrollLeft + velocityX * 0.14));
-        glidePosition = node.scrollLeft;
-        activeGlide = true;
-        updateSnap();
-        lastTime = 0;
-        rafId = requestAnimationFrame(step);
+      if (!stale && !isReducedMotion() && Math.abs(velocityX) > 60) {
+        const projected = Math.max(0, Math.min(getMax(), node.scrollLeft + velocityX * 0.14));
+        const dir = velocityX > 0 ? 1 : -1;
+        const next = snap ? snap(projected, dir) : projected;
+        startGlide(next);
       } else {
-        updateSnap();
+        snapToCurrent();
       }
     } else {
-      updateSnap();
+      snapToCurrent();
     }
     moved = false;
     velocityX = 0;

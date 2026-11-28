@@ -38,7 +38,7 @@
     canGoForward = offset < viewport.scrollWidth - viewport.clientWidth - 2;
   }
 
-  function move(direction: -1 | 0 | 1) {
+  function move(direction: -1 | 1) {
     if (!viewport) return;
     const sign = getComputedStyle(viewport).direction === 'rtl' ? -1 : 1;
     const stride = cardWidth + cardGap;
@@ -48,6 +48,21 @@
       left: sign * destination * stride,
       behavior: prefersReducedMotion.current || settingsStore.reduceMotion ? 'instant' : 'smooth',
     });
+  }
+
+  function snapTarget(projected: number, direction: -1 | 0 | 1 = 0): number {
+    if (!viewport) return projected;
+    const sign = getComputedStyle(viewport).direction === 'rtl' ? -1 : 1;
+    const stride = cardWidth + cardGap;
+    if (stride <= 0) return projected;
+    const max = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+    const currentIdx = Math.round(Math.abs(viewport.scrollLeft) / stride);
+    let targetIdx = Math.round(Math.abs(projected) / stride);
+    if (direction !== 0 && targetIdx === currentIdx) {
+      targetIdx = currentIdx + direction * sign;
+    }
+    const clamped = Math.max(0, Math.min(max, targetIdx * stride));
+    return sign * clamped;
   }
 
   function fitCards() {
@@ -114,7 +129,7 @@
     <div
       id={`${id}-rail`}
       bind:this={viewport}
-      use:waveSmoothScroll={{ axis: 'x', drag: true, snap: () => move(0) }}
+      use:waveSmoothScroll={{ axis: 'x', drag: true, snap: snapTarget }}
       class="lw-scroll-x shelf-viewport"
       style:--shelf-card-width={`${cardWidth || preferredCardWidth}px`}
       style:--shelf-gap={`${cardGap}px`}
