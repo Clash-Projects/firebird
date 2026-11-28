@@ -15,13 +15,16 @@
   }
 
   let { albumId }: Props = $props();
-  let loading = $state(false);
+  let loading = $state(isTauriRuntime());
   let fetchedAlbum = $state<Album | null>(null);
   let fetchedTracks = $state<Track[]>([]);
 
   $effect(() => {
     const id = albumId;
-    if (!id || !isTauriRuntime()) return;
+    if (!id || !isTauriRuntime()) {
+      loading = false;
+      return;
+    }
     let cancelled = false;
     loading = true;
     void ipcInvoke<{
@@ -90,33 +93,37 @@
 
 <div class="px-8 py-8 pb-10">
   {#if album}
-    <HeroHeader
-      overline={album.type}
-      title={album.title}
-      subtitle={album.artist}
-      meta="{album.year ? `${album.year} · ` : ''}{tracks.length} tracks"
-      artworkUrl={album.artworkUrl}
-    >
-      {#snippet actions()}
-        <Buttons variant="primary" disabled={tracks.length === 0} onclick={() => tracks[0] && playTrackNow(tracks[0], tracks)}>
-          <WaveIcon name="play" size={15} filled /> Play Album
-        </Buttons>
-        <Buttons variant="secondary" disabled={tracks.length === 0} onclick={shuffleAlbum}>
-          <WaveIcon name="shuffle" size={14} /> Shuffle
-        </Buttons>
-        <Buttons variant="ghost" disabled={tracks.length === 0} onclick={downloadAlbum}>
-          <WaveIcon name="download" size={14} /> Save offline
-        </Buttons>
-      {/snippet}
-    </HeroHeader>
+    <div class="lw-enter" style:--lw-rise="4px">
+      <HeroHeader
+        overline={album.type}
+        title={album.title}
+        subtitle={album.artist}
+        meta="{album.year ? `${album.year} · ` : ''}{tracks.length} tracks"
+        artworkUrl={album.artworkUrl}
+      >
+        {#snippet actions()}
+          <Buttons variant="primary" disabled={tracks.length === 0} onclick={() => tracks[0] && playTrackNow(tracks[0], tracks)}>
+            <WaveIcon name="play" size={15} filled /> Play Album
+          </Buttons>
+          <Buttons variant="secondary" disabled={tracks.length === 0} onclick={shuffleAlbum}>
+            <WaveIcon name="shuffle" size={14} /> Shuffle
+          </Buttons>
+          <Buttons variant="ghost" disabled={tracks.length === 0} onclick={downloadAlbum}>
+            <WaveIcon name="download" size={14} /> Save offline
+          </Buttons>
+        {/snippet}
+      </HeroHeader>
+    </div>
     {#if loading && tracks.length === 0}
       <Skeletons variant="rows" rows={8} />
     {:else}
-      <DesktopTable {tracks} showAlbum={false} />
+      <div class="lw-route-enter">
+        <DesktopTable {tracks} showAlbum={false} />
+      </div>
     {/if}
   {:else if loading}
-    <Skeletons variant="feature" />
-    <div class="mt-6">
+    <Skeletons variant="feature" featureSize={168} />
+    <div class="mt-5">
       <Skeletons variant="rows" rows={8} />
     </div>
   {/if}

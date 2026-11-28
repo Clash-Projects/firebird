@@ -194,11 +194,13 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     opacity: 0;
-    transition: opacity var(--lw-motion-normal) var(--ease-wave);
+    transform: translateX(calc(-4px * var(--lw-motion-factor)));
+    transition: opacity var(--lw-motion-normal) var(--ease-wave), transform var(--lw-motion-normal) var(--ease-wave);
   }
 
   :global([data-lw="sidebar"].rail.expanded) .rail-label {
     opacity: 1;
+    transform: none;
   }
 
   .rail-item[data-active="true"] .rail-label {

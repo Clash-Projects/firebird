@@ -14,11 +14,36 @@ export function entranceDelayMs(index: number): number {
   return Math.min(Math.max(0, index), WAVE_ENTRANCE_MAX_STAGGER) * WAVE_ENTRANCE_STEP_MS;
 }
 
-export function waveSlide(node: Element, { x = 0, y = 0, duration = WaveMotion.normalMs }: {
+function reduceMotion() {
+  return settingsStore.reduceMotion || prefersReducedMotion.current;
+}
+
+export function waveSlide(node: Element, { x = 0, y = 0, opacity = 0, duration = WaveMotion.normalMs }: {
   x?: number;
   y?: number;
+  opacity?: number;
   duration?: number;
 }) {
-  const reduced = settingsStore.reduceMotion || prefersReducedMotion.current;
-  return fly(node, { x, y, duration: reduced ? 0 : duration, easing: cubicOut });
+  return fly(node, { x, y, opacity, duration: reduceMotion() ? 0 : duration, easing: cubicOut });
+}
+
+// The surface stays mounted so changing player modes does not reset its media or controls.
+export function waveModeTransition(node: HTMLElement, mode: string) {
+  let previousMode = mode;
+  let animation: Animation | undefined;
+
+  return {
+    update(next: string) {
+      if (next === previousMode) return;
+      previousMode = next;
+      const from = animation?.playState === 'running' ? getComputedStyle(node).opacity : 0.78;
+      animation?.cancel();
+      if (reduceMotion()) return;
+      animation = node.animate([{ opacity: from }, { opacity: 1 }], {
+        duration: WaveMotion.normalMs,
+        easing: WaveMotion.easing,
+      });
+    },
+    destroy() { animation?.cancel(); },
+  };
 }

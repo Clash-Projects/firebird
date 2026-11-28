@@ -73,7 +73,7 @@
   <h1 class="text-[22px] font-bold tracking-[-0.4px] leading-tight text-[var(--lw-text-primary)]">Search</h1>
   <form onsubmit={submitSearch} class="flex flex-wrap items-center gap-3">
     <div class="w-full max-w-[460px]">
-      <Input bind:value={query} ariaLabel="Search songs, albums, and artists" placeholder="Search songs, albums, artists…" autofocus />
+      <Input type="search" bind:value={query} ariaLabel="Search songs, albums, and artists" placeholder="Search songs, albums, artists…" autofocus />
     </div>
     {#if q}
       <div class="flex items-center gap-1.5">

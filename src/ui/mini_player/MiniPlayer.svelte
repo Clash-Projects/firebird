@@ -1,17 +1,15 @@
 <script lang="ts">
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { windowState } from '$src/app/window.svelte';
-  import { activeLineIndex } from '$src/features/lyrics/lyricAdapter';
   import { isTauriRuntime } from '$src/lib/ipc';
-  import { featuresStore } from '$src/state/features.svelte';
   import { formatDuration, playerStore } from '$src/state/player.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
   import Artwork from '$src/ui/components/Artwork.svelte';
   import WaveSlider from '$src/ui/components/WaveSlider.svelte';
   import { waveTooltip } from '$src/ui/components/tooltip';
-  import { waveSlide } from '$src/ui/theme/motion';
-  import { WaveMotion } from '$src/ui/theme/tokens';
+  import { waveModeTransition, waveSlide } from '$src/ui/theme/motion';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
+  import MiniPlayerLyrics from './MiniPlayerLyrics.svelte';
 
   const appWindow = isTauriRuntime() ? getCurrentWindow() : null;
 
@@ -22,16 +20,7 @@
   let duration = $derived(playerStore.durationSec);
   let seekPosition = $derived(seekPreview ?? playerStore.positionSec);
 
-  let lyricsDoc = $derived(track ? featuresStore.getLyrics(track.id) : null);
-  let hasSyncedLyrics = $derived(Boolean(lyricsDoc && lyricsDoc.synced && lyricsDoc.lines.length > 0));
-  let showLyrics = $derived(style === 'lyrics' && hasSyncedLyrics);
-
-  let activeLyricText = $derived.by(() => {
-    if (!lyricsDoc || !hasSyncedLyrics) return '';
-    const offsetMs = track ? featuresStore.getLyricsOffset(track.id) : 0;
-    const tMs = Math.max(0, playerStore.positionSec * 1000 + offsetMs);
-    return lyricsDoc.lines[activeLineIndex(lyricsDoc.lines, tMs)]?.text ?? '';
-  });
+  let showLyrics = $derived(style === 'lyrics');
 
   $effect(() => {
     track?.id;
@@ -40,9 +29,7 @@
   });
 
   $effect(() => {
-    if (windowState.isMiniPlayer && style === 'lyrics') {
-      windowState.syncMiniPlayerBounds(hasSyncedLyrics);
-    }
+    windowState.syncMiniPlayerBounds(style);
   });
 
   function expand() {
@@ -112,8 +99,9 @@
   onmouseenter={() => (hover = true)}
   onmouseleave={() => (hover = false)}
   ondblclick={onSurfaceDblClick}
+  use:waveModeTransition={style}
   data-tauri-drag-region
-  class="relative flex h-full w-full flex-col overflow-hidden border select-none {track && (style === 'card' || style === 'ambient' || style === 'lyrics')
+  class="lw-route-enter relative flex h-full w-full flex-col overflow-hidden border select-none {track && (style === 'card' || style === 'ambient' || style === 'lyrics')
     ? 'border-white/10 bg-black text-white'
     : 'border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] text-[var(--lw-text-primary)]'}"
 >
@@ -232,19 +220,7 @@
           </div>
 
           {#if showLyrics}
-            {@const lyric = activeLyricText || '♪'}
-            {@const duration = playerStore.isPlaying && !playerStore.isBuffering ? WaveMotion.fastMs : 0}
-            <div class="mini-lyrics-line overflow-hidden rounded-[6px] bg-white/10 px-2 py-1 text-[11.5px] font-medium leading-4 text-white/95">
-              <span class="sr-only">{lyric}</span>
-              {#key lyric}
-                <span
-                  aria-hidden="true"
-                  class="truncate"
-                  in:waveSlide={{ y: 3, duration }}
-                  out:waveSlide={{ y: -3, duration }}
-                >{lyric}</span>
-              {/key}
-            </div>
+            <MiniPlayerLyrics trackId={track.id} {seekPreview} />
           {/if}
         </div>
       </div>
@@ -382,9 +358,6 @@
     --lw-text-primary: #fff;
     --lw-outline: rgb(255 255 255 / 28%);
   }
-
-  .mini-lyrics-line { display: grid; }
-  .mini-lyrics-line > .truncate { min-width: 0; grid-area: 1 / 1; }
 
   .mini-glyph {
     display: flex;

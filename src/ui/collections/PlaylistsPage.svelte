@@ -89,7 +89,7 @@
   {:else}
     <div class="playlist-toolbar">
       <div class="playlist-search">
-        <Input bind:value={filter} prefixIcon="search" ariaLabel="Search playlists" placeholder="Search playlists" />
+        <Input type="search" bind:value={filter} prefixIcon="search" ariaLabel="Search playlists" placeholder="Search playlists" />
       </div>
       {#if availableSources.length > 1}
         <div class="playlist-filters" role="group" aria-label="Filter playlists by source">

@@ -92,9 +92,8 @@
     <!-- 3. Top-Left Exit Fullscreen button (only in immersive fullscreen, fades on idle) -->
     {#if immersiveState.isImmersive}
       <div
-        class="absolute top-[18px] left-[20px] z-30 transition-opacity duration-350"
-        class:pointer-events-none={immersiveState.controlsIdle}
-        style:opacity={immersiveState.controlsIdle ? 0 : 1}
+        class="lw-player-controls absolute top-[18px] left-[20px] z-30"
+        data-idle={immersiveState.controlsIdle}
       >
         <button
           type="button"
@@ -113,9 +112,8 @@
 
     <!-- 4. Unified Top-Right Control Bar (Ambient, Fullscreen, Overflow — fades on idle) -->
     <div
-      class="absolute top-[18px] right-[20px] z-30 transition-opacity duration-350"
-      class:pointer-events-none={immersiveState.controlsIdle}
-      style:opacity={immersiveState.controlsIdle ? 0 : 1}
+      class="lw-player-controls absolute top-[18px] right-[20px] z-30"
+      data-idle={immersiveState.controlsIdle}
     >
       <NowPlayingOverflowMenu
         showAmbientToggle={true}

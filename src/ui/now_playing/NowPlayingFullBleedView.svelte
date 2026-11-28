@@ -83,8 +83,8 @@
     >
       {#if lyricsMissing}
         <div
-          class="flex h-full items-center justify-center transition-opacity duration-350"
-          style:opacity={immersiveState.controlsIdle ? 0 : 1}
+          class="lw-player-controls flex h-full items-center justify-center"
+          data-idle={immersiveState.controlsIdle}
         >
           <span class="text-[16px] font-medium tracking-[-0.1px] text-[var(--lw-text-secondary)]">
             {isInstrumental ? 'Instrumental' : 'Lyrics not found'}
@@ -100,9 +100,8 @@
     <!-- 3. Top-Left Exit Fullscreen button (only in immersive fullscreen, fades on idle) -->
     {#if immersiveState.isImmersive}
       <div
-        class="absolute top-[18px] left-[20px] z-30 transition-opacity duration-350"
-        class:pointer-events-none={immersiveState.controlsIdle}
-        style:opacity={immersiveState.controlsIdle ? 0 : 1}
+        class="lw-player-controls absolute top-[18px] left-[20px] z-30"
+        data-idle={immersiveState.controlsIdle}
       >
         <button
           type="button"
@@ -121,9 +120,8 @@
 
     <!-- 4. Unified Top-Right Control Bar (fades on idle) -->
     <div
-      class="absolute top-[18px] right-[20px] z-30 transition-opacity duration-350"
-      class:pointer-events-none={immersiveState.controlsIdle}
-      style:opacity={immersiveState.controlsIdle ? 0 : 1}
+      class="lw-player-controls absolute top-[18px] right-[20px] z-30"
+      data-idle={immersiveState.controlsIdle}
     >
       <NowPlayingOverflowMenu showAmbientToggle={false} />
     </div>

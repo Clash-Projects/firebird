@@ -45,16 +45,21 @@
   import CustomAppHost from './CustomAppHost.svelte';
   import TitleBar from './TitleBar.svelte';
   import WaveResizeArea from './WaveResizeArea.svelte';
-  import { WaveDensity } from '$src/ui/theme/tokens';
+  import { WaveDensity, WaveMotion } from '$src/ui/theme/tokens';
   import { waveSlide } from '$src/ui/theme/motion';
 
   let customApp = $derived(uiSlots.customAppRoutes.find((a) => a.route === router.path) ?? null);
   let isNowPlaying = $derived(router.path === '/now-playing');
   let isImmersive = $derived(isNowPlaying && immersiveState.isImmersive);
   let floatDock = $derived(settingsStore.glassmorphism && !isImmersive);
+  let hasOpenedMiniPlayer = $state(false);
   let openPanels = $derived(
     windowState.activeRightPanel === 'none' ? [] : [windowState.activeRightPanel]
   );
+
+  $effect(() => {
+    if (windowState.isMiniPlayer) hasOpenedMiniPlayer = true;
+  });
 
   function onShellContextMenu(e: MouseEvent) {
     if (e.defaultPrevented) return;
@@ -81,6 +86,7 @@
     <div
       data-lw="app-shell"
       class="flex h-full w-full flex-col bg-[var(--lw-bg)] text-[var(--lw-text-primary)]"
+      class:lw-route-enter={hasOpenedMiniPlayer}
       style:--lw-shell-rail-width="{windowState.railExpanded ? WaveDensity.railExpanded : WaveDensity.railCollapsed}px"
     >
       {#if !isImmersive}
@@ -167,21 +173,19 @@
           </BranchSwitcher>
 
           <!-- Overlay drawers slide over content without squeezing main-stage width -->
-          {#if openPanels.length > 0}
-            <div class="shell-panels" style:bottom={floatDock ? 'var(--lw-dock-h, 68px)' : '0'}>
-              {#each openPanels as panel (panel)}
-                <div class="shell-panel" transition:waveSlide={{ x: 24 }}>
-                  {#if panel === 'queue'}
-                    <QueuePanel />
-                  {:else if panel === 'eq'}
-                    <EqualizerPanel />
-                  {:else if panel === 'output'}
-                    <OutputPathSheet />
-                  {/if}
-                </div>
-              {/each}
-            </div>
-          {/if}
+          <div class="shell-panels" style:bottom={floatDock ? 'var(--lw-dock-h, 68px)' : '0'}>
+            {#each openPanels as panel (panel)}
+              <div class="shell-panel" transition:waveSlide={{ x: 28, duration: WaveMotion.slowMs }}>
+                {#if panel === 'queue'}
+                  <QueuePanel />
+                {:else if panel === 'eq'}
+                  <EqualizerPanel />
+                {:else if panel === 'output'}
+                  <OutputPathSheet />
+                {/if}
+              </div>
+            {/each}
+          </div>
 
           {#if floatDock}
             <div class="pointer-events-auto absolute inset-x-0 bottom-0 z-20">
@@ -225,12 +229,14 @@
     display: grid;
     grid-template-rows: minmax(0, 1fr);
     max-width: 100%;
+    pointer-events: none;
   }
 
   .shell-panel {
     grid-area: 1 / 1;
     min-height: 0;
     height: 100%;
+    pointer-events: auto;
   }
 
   .shell-panel :global(.lw-scroll) {

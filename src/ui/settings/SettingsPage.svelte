@@ -409,7 +409,7 @@
       case 'ambient':
         return 'Wide panel glowing with the blurred artwork and a timed scrubber.';
       case 'lyrics':
-        return 'Ambient panel that widens to show the current lyric line when the song has synced lyrics.';
+        return 'Ambient panel with space for the current synced lyric line.';
       default:
         return 'Bar with artwork, transport and window buttons.';
     }
@@ -1907,6 +1907,7 @@
   <div class="relative z-20 px-6 pt-3.5">
     <div class="relative max-w-[640px]">
       <Input
+        type="search"
         bind:value={query}
         prefixIcon="search"
         placeholder="Search settings"

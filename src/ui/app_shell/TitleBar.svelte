@@ -328,7 +328,7 @@
       <form onsubmit={submitSearch} class="relative flex items-center">
         <WaveIcon name="search" size={15} class="pointer-events-none absolute left-2 text-[var(--lw-text-tertiary)]" />
         <input
-          type="text"
+          type="search"
           data-lw="title-search"
           bind:value={searchQuery}
           oninput={() => {
@@ -338,7 +338,7 @@
           onkeydown={onSearchKeyDown}
           aria-label="Search songs, albums and artists"
           placeholder="Search"
-          class="title-search-input"
+          class="lw-text-field title-search-input"
         />
         {#if searchQuery}
           <button
@@ -362,20 +362,18 @@
       <div
         data-open={showSearchSuggestions}
         inert={!showSearchSuggestions}
-        class="lw-popover lw-flyout-surface absolute top-9 left-0 z-50 w-full min-w-[320px]"
+        class="lw-popover lw-flyout-surface absolute inset-x-0 top-full z-50 mt-1"
         style:--lw-popover-origin="top left"
       >
         {#each searchHits as hit (hit.key)}
           {@const track = hit.track}
-          <div class="relative">
+          <div class="title-search-result-row" class:highlighted={selectedKey === hit.key}>
             <button
               type="button"
               data-search-result={hit.kind}
               onclick={hit.onSelect}
               oncontextmenu={(e) => track && openSearchTrackMenu(e, track)}
-              class="flex w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 py-1.5 text-left transition-colors {track ? 'pr-10' : ''} {selectedKey === hit.key
-                ? 'bg-[var(--lw-wash-pressed)]'
-                : 'hover:bg-[var(--lw-wash-hover)]'}"
+              class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-[8px] px-1.5 py-1.5 text-left"
             >
               <span class="flex h-7 w-7 shrink-0 items-center justify-center">
                 {#if hit.kind === 'recent'}
@@ -386,10 +384,10 @@
                   <Artwork src={hit.art} label={hit.label} size={28} radius={8} circle={hit.kind === 'artist'} />
                 {/if}
               </span>
-              <div class="min-w-0 flex-1">
-                <div class="truncate text-[13px] font-semibold text-[var(--lw-text-primary)]">{hit.label}</div>
-                <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{hit.sub}</div>
-              </div>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-[13px] leading-tight font-semibold text-[var(--lw-text-primary)]">{hit.label}</span>
+                <span class="mt-0.5 block truncate text-[11.5px] leading-tight text-[var(--lw-text-secondary)]">{hit.sub}</span>
+              </span>
             </button>
             {#if track}
               <button
@@ -399,7 +397,7 @@
                 use:waveTooltip={'Track options'}
                 onclick={(e) => openSearchTrackMenu(e, track)}
                 oncontextmenu={(e) => openSearchTrackMenu(e, track)}
-                class="bar-btn absolute right-1 top-1/2 -translate-y-1/2 text-[var(--lw-text-secondary)]"
+                class="bar-btn title-search-result-options"
               >
                 <WaveIcon name="more" size={14} />
               </button>
@@ -700,6 +698,29 @@
     transform: scale(0.93);
   }
 
+  .title-search-result-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    border-radius: 8px;
+    transition: background-color var(--lw-motion-fast) var(--ease-wave);
+  }
+
+  .title-search-result-row:hover {
+    background: var(--lw-wash-hover);
+  }
+
+  .title-search-result-row.highlighted {
+    background: var(--lw-wash-pressed);
+  }
+
+  .bar-btn.title-search-result-options {
+    width: 28px;
+    height: 28px;
+    margin-inline-end: 2px;
+    border-radius: 6px;
+  }
+
   .title-search-input {
     width: 100%;
     height: 30px;
@@ -707,23 +728,16 @@
     border: 1px solid rgba(255, 255, 255, 0.071);
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.059);
-    box-shadow: inset 0 -1.25px 0 0 rgba(255, 255, 255, 0.545);
     color: var(--lw-text-primary);
     font-size: 13px;
     outline: none;
     transition:
       background-color var(--lw-motion-fast) var(--ease-wave),
-      border-color var(--lw-motion-fast) var(--ease-wave),
-      box-shadow var(--lw-motion-fast) var(--ease-wave);
+      border-color var(--lw-motion-fast) var(--ease-wave);
   }
 
   .title-search-input:hover:not(:focus) {
     background: rgba(255, 255, 255, 0.082);
-  }
-
-  .title-search-input:focus {
-    background: rgba(30, 30, 30, 0.702);
-    box-shadow: inset 0 -2px 0 0 var(--lw-accent);
   }
 
   .title-search-input::placeholder {
@@ -734,19 +748,13 @@
     color: rgba(255, 255, 255, 0.545);
   }
 
-  :global(:root[data-theme="light"]) .title-search-input {
+  :global(:where(:root[data-theme="light"])) .title-search-input {
     border-color: rgba(0, 0, 0, 0.059);
     background: rgba(255, 255, 255, 0.702);
-    box-shadow: inset 0 -1.25px 0 0 rgba(0, 0, 0, 0.447);
   }
 
   :global(:root[data-theme="light"]) .title-search-input:hover:not(:focus) {
     background: rgba(249, 249, 249, 0.502);
-  }
-
-  :global(:root[data-theme="light"]) .title-search-input:focus {
-    background: #ffffff;
-    box-shadow: inset 0 -2px 0 0 var(--lw-accent);
   }
 
   :global(:root[data-theme="light"]) .title-search-input::placeholder {

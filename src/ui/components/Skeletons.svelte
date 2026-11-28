@@ -2,14 +2,15 @@
   interface Props {
     variant?: 'rows' | 'rail' | 'feature';
     rows?: number;
+    featureSize?: number;
   }
 
-  let { variant = 'rows', rows = 6 }: Props = $props();
+  let { variant = 'rows', rows = 6, featureSize = 220 }: Props = $props();
 </script>
 
 {#if variant === 'feature'}
   <div class="flex flex-col gap-6 sm:flex-row sm:items-start" aria-busy="true">
-    <div class="lw-skeleton h-[220px] w-[220px] shrink-0 rounded-[12px]"></div>
+    <div class="lw-skeleton shrink-0 rounded-[12px]" style:width="{featureSize}px" style:height="{featureSize}px"></div>
     <div class="flex-1 space-y-2.5 pt-1">
       <div class="lw-skeleton h-3 w-28 rounded-[6px]"></div>
       <div class="lw-skeleton h-7 w-64 max-w-full rounded-[6px]"></div>

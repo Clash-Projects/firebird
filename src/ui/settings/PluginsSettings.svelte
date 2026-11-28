@@ -485,7 +485,7 @@
 
     <div class="flex flex-wrap items-center justify-between gap-2.5">
       <div class="min-w-[220px] flex-1">
-        <Input bind:value={search} placeholder="Search name, tags, or @github..." />
+        <Input type="search" bind:value={search} placeholder="Search name, tags, or @github..." />
       </div>
 
       <Select

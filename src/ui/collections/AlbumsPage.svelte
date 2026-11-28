@@ -20,7 +20,7 @@
   <CommandBar title="Albums" subtitle="{libraryStore.albums.length} albums in your library" />
   {#if libraryStore.albums.length > 0}
     <div class="flex max-w-[360px] items-center gap-3">
-      <Input bind:value={filter} placeholder="Filter albums…" />
+      <Input type="search" bind:value={filter} placeholder="Filter albums…" />
       <span class="shrink-0 text-[12px] text-[var(--lw-text-tertiary)] lw-tabular">{filtered.length} shown</span>
     </div>
   {/if}

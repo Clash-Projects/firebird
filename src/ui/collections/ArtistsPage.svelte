@@ -18,7 +18,7 @@
   <CommandBar title="Artists" subtitle="{libraryStore.artists.length} followed & library artists" />
   {#if libraryStore.artists.length > 0}
     <div class="flex max-w-[360px] items-center gap-3">
-      <Input bind:value={filter} placeholder="Filter artists…" />
+      <Input type="search" bind:value={filter} placeholder="Filter artists…" />
       <span class="shrink-0 text-[12px] text-[var(--lw-text-tertiary)] lw-tabular">{filtered.length} shown</span>
     </div>
   {/if}

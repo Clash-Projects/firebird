@@ -191,7 +191,7 @@
   </CommandBar>
 
   <form onsubmit={runSearch} class="flex max-w-[460px] gap-2">
-    <Input bind:value={searchQuery} placeholder="Search podcasts and episodes..." />
+    <Input type="search" bind:value={searchQuery} placeholder="Search podcasts and episodes..." />
     <Buttons type="submit" variant="secondary" size="sm" disabled={searching}>
       {searching ? '...' : 'Search'}
     </Buttons>

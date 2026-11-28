@@ -588,10 +588,12 @@ dialog[open]::backdrop {
   -ms-overflow-style: none;
   max-height: min(380px, 65dvh);
   opacity: 0;
-  transform: translateY(calc(-6px * var(--lw-motion-factor)));
+  --lw-popover-closed-transform: translateY(calc(var(--lw-popover-offset, -4px) * var(--lw-motion-factor)))
+    scale(calc(1 - 0.025 * var(--lw-motion-factor)));
+  transform: var(--lw-popover-closed-transform);
   transform-origin: var(--lw-popover-origin, top right);
-  transition: opacity 90ms var(--ease-native), transform 90ms var(--ease-native),
-    display 90ms;
+  transition: opacity var(--lw-motion-fast) var(--ease-wave), transform var(--lw-motion-fast) var(--ease-wave),
+    display var(--lw-motion-fast), overlay var(--lw-motion-fast);
   transition-behavior: allow-discrete;
 }
 
@@ -605,7 +607,7 @@ dialog[open]::backdrop {
   display: block;
   opacity: 1;
   transform: none;
-  transition-duration: 90ms;
+  transition-duration: var(--lw-motion-normal);
 }
 
 .lw-popover.lw-has-cascade {
@@ -649,7 +651,7 @@ dialog[open]::backdrop {
   }
   .lw-popover[data-open="true"] {
     opacity: 0;
-    transform: translateY(calc(-4px * var(--lw-motion-factor))) scale(calc(1 - 0.025 * var(--lw-motion-factor)));
+    transform: var(--lw-popover-closed-transform);
   }
 }
 
@@ -690,6 +692,20 @@ textarea.lw-text-field:focus {
   box-shadow: inset 0 -1px 0 0 var(--lw-accent);
 }
 
+input.lw-text-field[type="search"] {
+  appearance: none;
+}
+
+input.lw-text-field[type="search"]::-webkit-search-cancel-button {
+  display: none;
+}
+
+input.lw-text-field:where([type="search"]):focus {
+  background-color: var(--lw-surface-overlay);
+  border-color: color-mix(in srgb, var(--lw-text-secondary) 55%, var(--lw-outline));
+  box-shadow: none;
+}
+
 @media (forced-colors: active) {
   input.lw-text-field:focus-visible {
     border-color: Highlight;
@@ -725,6 +741,20 @@ textarea.lw-text-field:focus {
   animation: lw-route-entrance var(--lw-motion-normal) var(--ease-wave);
 }
 
+.lw-player-enter {
+  --lw-rise: 8px;
+  animation: lw-entrance var(--lw-motion-slow) var(--ease-wave) backwards;
+}
+
+.lw-player-controls {
+  transition: opacity var(--lw-motion-normal) var(--ease-wave);
+}
+
+.lw-player-controls[data-idle="true"]:not(:focus-within) {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .lw-display {
   font-family: var(--lw-font-display);
   letter-spacing: -0.02em;
@@ -758,7 +788,7 @@ textarea.lw-text-field:focus {
   --lw-scroll-behavior: auto;
 }
 
-:root[data-reduced-motion] :is(.lw-enter, .lw-route-enter, .lw-eq-bars span, .animate-spin),
+:root[data-reduced-motion] :is(.lw-enter, .lw-route-enter, .lw-player-enter, .lw-eq-bars span, .animate-spin),
 :root[data-reduced-motion] .lw-skeleton::after {
   animation: none;
 }
@@ -772,7 +802,7 @@ textarea.lw-text-field:focus {
     --lw-scroll-behavior: auto;
   }
 
-  :is(.lw-enter, .lw-route-enter, .lw-eq-bars span, .animate-spin), .lw-skeleton::after {
+  :is(.lw-enter, .lw-route-enter, .lw-player-enter, .lw-eq-bars span, .animate-spin), .lw-skeleton::after {
     animation: none;
   }
 }

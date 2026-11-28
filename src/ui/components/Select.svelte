@@ -39,6 +39,7 @@
 
   let triggerEl = $state<HTMLButtonElement | null>(null);
   let menuEl = $state<HTMLDivElement | null>(null);
+  let menuMounted = $state(false);
   let open = $state(false);
   let highlightIdx = $state(-1);
   let menuTop = $state(0);
@@ -99,19 +100,21 @@
 
   async function openMenu() {
     if (disabled || open || options.length === 0) return;
+    menuMounted = true;
     open = true;
     const idx = options.findIndex((o) => o.value === value);
     highlightIdx = idx >= 0 ? idx : 0;
 
     await tick();
-    if (!menuEl) return;
+    if (!open || !menuEl) return;
+    updatePosition();
     try {
       if (!menuEl.matches(':popover-open')) menuEl.showPopover();
     } catch {
       // Fallback when popover API is unavailable
     }
-    updatePosition();
     await tick();
+    if (!open || !menuEl) return;
     updatePosition();
     scrollHighlightedIntoView();
     menuEl.focus({ preventScroll: true });
@@ -236,7 +239,7 @@
   <WaveIcon name="chevronDown" size={10} class="lw-select-chevron" />
 </button>
 
-{#if open}
+{#if menuMounted}
   <div
     bind:this={menuEl}
     popover="manual"
@@ -244,8 +247,10 @@
     aria-label={label}
     tabindex="-1"
     onkeydown={onMenuKeyDown}
-    class="lw-flyout-surface lw-select-flyout"
+    class="lw-popover lw-flyout-surface lw-select-flyout"
     class:upward={openUpward}
+    data-open={open}
+    inert={!open}
     style:left="{menuLeft}px"
     style:top="{menuTop}px"
     style:width="{menuWidth}px"
@@ -334,10 +339,8 @@
   .lw-select-chevron {
     flex-shrink: 0;
     color: var(--lw-text-secondary);
-    transition: transform 120ms var(--ease-native);
   }
 
-  .lw-select-Flyout,
   .lw-select-flyout {
     position: fixed;
     inset: auto;
@@ -345,32 +348,11 @@
     z-index: 9000;
     overflow-y: auto;
     overscroll-behavior: contain;
-    animation: lw-flyout-in 90ms var(--ease-native);
+    --lw-popover-origin: top left;
   }
 
   .lw-select-flyout.upward {
-    animation-name: lw-flyout-in-up;
-  }
-
-  @keyframes lw-flyout-in {
-    from {
-      opacity: 0;
-      transform: translateY(-6px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  @keyframes lw-flyout-in-up {
-    from {
-      opacity: 0;
-      transform: translateY(6px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    --lw-popover-origin: bottom left;
+    --lw-popover-offset: 4px;
   }
 </style>

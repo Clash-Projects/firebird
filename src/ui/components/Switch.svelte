@@ -65,8 +65,8 @@
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.02);
     transition:
-      background-color 120ms var(--ease-native),
-      border-color 120ms var(--ease-native);
+      background-color var(--lw-motion-fast) var(--ease-wave),
+      border-color var(--lw-motion-fast) var(--ease-wave);
   }
 
   :global(:root[data-theme="light"]) .lw-switch-track {
@@ -79,23 +79,13 @@
     border-radius: 999px;
     background: var(--lw-text-secondary);
     transition:
-      transform 150ms var(--ease-wave),
-      inline-size 110ms var(--ease-native),
-      block-size 110ms var(--ease-native),
-      background-color 120ms var(--ease-native);
-  }
-
-  input:not(:disabled):hover + .lw-switch-track {
-    border-color: var(--lw-text-secondary);
-    background: var(--lw-wash-hover);
-  }
-
-  input:not(:disabled):hover + .lw-switch-track .lw-switch-knob {
-    transform: scale(1.1);
+      translate var(--lw-motion-normal) var(--ease-wave),
+      scale var(--lw-motion-fast) var(--ease-wave),
+      background-color var(--lw-motion-fast) var(--ease-wave);
   }
 
   input:not(:disabled):active + .lw-switch-track .lw-switch-knob {
-    inline-size: 15px;
+    scale: calc(1 - 0.12 * var(--lw-motion-factor));
   }
 
   input:checked + .lw-switch-track {
@@ -103,27 +93,28 @@
     background: var(--lw-accent);
   }
 
-  input:checked:not(:disabled):hover + .lw-switch-track {
-    border-color: var(--lw-accent);
-    background: color-mix(in srgb, var(--lw-accent) 90%, transparent);
-  }
-
   input:checked + .lw-switch-track .lw-switch-knob {
-    transform: translateX(20px);
+    translate: 20px;
     background: var(--lw-on-accent);
   }
 
-  input:checked:not(:disabled):hover + .lw-switch-track .lw-switch-knob {
-    transform: translateX(20px) scale(1.1);
-  }
-
-  input:checked:not(:disabled):active + .lw-switch-track .lw-switch-knob {
-    transform: translateX(17px);
-    inline-size: 15px;
+  .lw-switch:dir(rtl) input:checked + .lw-switch-track .lw-switch-knob {
+    translate: -20px;
   }
 
   input:focus-visible + .lw-switch-track {
     outline: 2px solid var(--lw-focus-ring);
     outline-offset: 2px;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    input:not(:disabled):not(:checked):hover + .lw-switch-track {
+      border-color: var(--lw-text-secondary);
+      background: var(--lw-wash-hover);
+    }
+
+    input:checked:not(:disabled):hover + .lw-switch-track {
+      background: color-mix(in srgb, var(--lw-accent) 90%, transparent);
+    }
   }
 </style>

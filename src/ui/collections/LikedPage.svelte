@@ -49,7 +49,7 @@
 
   {#if allTracks.length > 0}
     <div class="max-w-[340px]">
-      <Input bind:value={filter} placeholder="Filter liked songs…" />
+      <Input type="search" bind:value={filter} placeholder="Filter liked songs…" />
     </div>
     <DesktopTable
       {tracks}

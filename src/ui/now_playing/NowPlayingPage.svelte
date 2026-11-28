@@ -9,6 +9,7 @@
   import AmbientStage from '$src/ui/components/AmbientStage.svelte';
   import AnimatedArtworkVideo from '$src/ui/components/AnimatedArtworkVideo.svelte';
   import { waveTooltip } from '$src/ui/components/tooltip';
+  import { waveModeTransition } from '$src/ui/theme/motion';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import { immersiveState } from './immersive.svelte';
   import NowPlayingFullBleedView from './NowPlayingFullBleedView.svelte';
@@ -115,6 +116,7 @@
 <div
   data-lw="now-playing"
   class="now-playing"
+  use:waveModeTransition={`${settingsStore.nowPlayingStyle}:${immersiveState.isImmersive}`}
   style:cursor={immersiveState.controlsIdle ? 'none' : 'default'}
   onpointermove={() => immersiveState.ping()}
   onpointerdown={() => immersiveState.ping()}
@@ -145,9 +147,8 @@
     {/if}
 
     <header
-      class="now-header transition-opacity duration-350"
-      class:pointer-events-none={immersiveState.controlsIdle}
-      style:opacity={immersiveState.controlsIdle ? 0 : 1}
+      class="now-header lw-player-controls"
+      data-idle={immersiveState.controlsIdle}
     >
       <div class="now-label"><WaveIcon name="headphones" size={17} /> Now playing</div>
       <div class="now-actions">
