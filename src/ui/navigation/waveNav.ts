@@ -12,6 +12,10 @@ export function goArtist(id: string) {
   router.navigate(`/artist/${id}`);
 }
 
+export function goArtistPopularTracks(id: string) {
+  router.navigate(`/artist/${id}/popular-tracks`);
+}
+
 export function goPlaylist(id: string, source: 'local' | 'youtube' | 'spotify' | 'generated' = 'local') {
   if (source === 'youtube') router.navigate(`/yt-playlist/${id}`);
   else if (source === 'spotify') router.navigate(`/spotify-playlist/${id}`);

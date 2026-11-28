@@ -267,6 +267,10 @@ impl YtHomeShelf {
 #[serde(rename_all = "camelCase")]
 pub struct YtArtistPage {
     #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub banner_url: String,
+    #[serde(default)]
     pub songs: Vec<YouTubeMusicTrack>,
     #[serde(default)]
     pub shelves: Vec<YtHomeShelf>,
@@ -2977,10 +2981,36 @@ impl InnerTubeMusicApi {
             }
         }
 
-        if songs.is_empty() && shelves.is_empty() {
+        let header = root.get("header").and_then(|header| {
+            [
+                "musicImmersiveHeaderRenderer",
+                "musicVisualHeaderRenderer",
+                "musicDetailHeaderRenderer",
+                "musicResponsiveHeaderRenderer",
+                "musicHeaderRenderer",
+            ]
+            .into_iter()
+            .find_map(|key| header.get(key))
+        });
+        let name = header
+            .and_then(|header| header.get("title"))
+            .and_then(|title| {
+                title
+                    .get("runs")
+                    .and_then(runs_text)
+                    .or_else(|| title.get("simpleText").and_then(Value::as_str).map(str::to_owned))
+            })
+            .unwrap_or_default();
+        let banner_url = header
+            .and_then(|header| header.get("thumbnail"))
+            .and_then(original_thumbnail_url)
+            .map(|url| if url.starts_with("//") { format!("https:{url}") } else { url.to_owned() })
+            .unwrap_or_default();
+
+        if name.is_empty() && songs.is_empty() && shelves.is_empty() {
             return None;
         }
-        Some(YtArtistPage { songs, shelves })
+        Some(YtArtistPage { name, banner_url, songs, shelves })
     }
 
     pub fn kind_for_browse_id(browse_id: &str) -> YouTubeEntityKind {
@@ -8179,6 +8209,10 @@ fn renderer_artwork(r: &Map<String, Value>) -> String {
 }
 
 fn extract_thumbnails_url(renderer: &Value) -> Option<String> {
+    original_thumbnail_url(renderer).map(InnerTubeMusicApi::high_resolution_artwork)
+}
+
+fn original_thumbnail_url(renderer: &Value) -> Option<&str> {
     fn find<'a>(el: &'a Value, arrays: &mut Vec<&'a Vec<Value>>) {
         match el {
             Value::Object(map) => {
@@ -8210,7 +8244,7 @@ fn extract_thumbnails_url(renderer: &Value) -> Option<String> {
     let mut arrays = Vec::new();
     find(node, &mut arrays);
     let arr = arrays.first()?;
-    let url = arr
+    arr
         .iter()
         .rev()
         .find_map(|e| {
@@ -8224,8 +8258,7 @@ fn extract_thumbnails_url(renderer: &Value) -> Option<String> {
                     .and_then(Value::as_str)
                     .filter(|s| !s.is_empty())
             })
-        })?;
-    Some(InnerTubeMusicApi::high_resolution_artwork(url))
+        })
 }
 
 fn duration_from_renderer(r: &Map<String, Value>) -> i64 {

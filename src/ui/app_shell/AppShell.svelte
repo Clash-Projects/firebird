@@ -146,7 +146,7 @@
             {:else if router.path === '/artists'}
               <ArtistsPage />
             {:else if router.matches('/artist')}
-              <ArtistDetailPage artistId={router.segment(1)} />
+              <ArtistDetailPage artistId={router.segment(1)} showPopularTracks={router.segment(2) === 'popular-tracks'} />
             {:else if router.path === '/downloads'}
               <DownloadsPage />
             {:else if router.path === '/history'}

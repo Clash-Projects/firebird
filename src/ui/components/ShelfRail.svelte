@@ -6,13 +6,19 @@
   import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
 
-  let { title, eyebrow, onSeeAll, headerAction, beforeCards, children }: {
+  let {
+    title, eyebrow, onSeeAll, seeAllLabel = 'See all', headerAction, beforeCards, children,
+    preferredCardWidth = 160, maxVisibleCards = Infinity,
+  }: {
     title: string;
     eyebrow?: string;
     onSeeAll?: () => void;
+    seeAllLabel?: string;
     headerAction?: Snippet;
     beforeCards?: Snippet;
     children?: Snippet;
+    preferredCardWidth?: number;
+    maxVisibleCards?: number;
   } = $props();
 
   const id = $props.id();
@@ -22,8 +28,7 @@
   let canGoForward = $state(false);
   const cardGap = 12;
   const railInset = 4;
-  const preferredCardWidth = 160;
-  let cardWidth = $state(preferredCardWidth);
+  let cardWidth = $state(0);
   let visibleCards = $state(1);
 
   function updateEdges() {
@@ -48,7 +53,7 @@
   function fitCards() {
     if (!viewport || viewport.clientWidth <= 2 * railInset) return;
     const width = viewport.clientWidth - 2 * railInset;
-    visibleCards = Math.max(1, Math.round((width + cardGap) / (preferredCardWidth + cardGap)));
+    visibleCards = Math.max(1, Math.min(maxVisibleCards, Math.round((width + cardGap) / (preferredCardWidth + cardGap))));
     cardWidth = (width - (visibleCards - 1) * cardGap) / visibleCards;
     updateEdges();
   }
@@ -76,7 +81,7 @@
     <div class="flex shrink-0 items-center gap-1">
       {@render headerAction?.()}
       {#if onSeeAll}
-        <button type="button" class="lw-press shelf-all" onclick={onSeeAll}>See all</button>
+        <button type="button" class="lw-press shelf-all" onclick={onSeeAll}>{seeAllLabel}</button>
       {/if}
       {#if canGoBack || canGoForward}
         <button
@@ -111,7 +116,7 @@
       bind:this={viewport}
       use:waveSmoothScroll={{ axis: 'x', drag: true, snap: () => move(0) }}
       class="lw-scroll-x shelf-viewport"
-      style:--shelf-card-width={`${cardWidth}px`}
+      style:--shelf-card-width={`${cardWidth || preferredCardWidth}px`}
       style:--shelf-gap={`${cardGap}px`}
       style:--shelf-inset={`${railInset}px`}
       onscroll={updateEdges}

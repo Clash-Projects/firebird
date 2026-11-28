@@ -1,126 +1,589 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { playTrackNow } from '$src/app/trackActions';
   import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
-  import { libraryStore, mapYtAlbum, mapYtTrack } from '$src/state/library.svelte';
+  import { libraryStore, mapYtArtist, mapYtTrack } from '$src/state/library.svelte';
   import type { Album, Track } from '$src/state/types';
   import Artwork from '$src/ui/components/Artwork.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
-  import DesktopTable from '$src/ui/components/DesktopTable.svelte';
-  import HeroHeader from '$src/ui/components/HeroHeader.svelte';
-  import Shelf from '$src/ui/components/Shelf.svelte';
+  import ShelfRail from '$src/ui/components/ShelfRail.svelte';
   import Skeletons from '$src/ui/components/Skeletons.svelte';
-  import { goAlbum } from '$src/ui/navigation/waveNav';
+  import States from '$src/ui/components/States.svelte';
+  import TrackRow from '$src/ui/components/TrackRow.svelte';
+  import { goAlbum, goArtistPopularTracks } from '$src/ui/navigation/waveNav';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
+  import ArtistPopularTracksPage from './ArtistPopularTracksPage.svelte';
+  import { readArtistReleases, selectEssentialAlbums, selectLatestAlbum, type ArtistReleaseShelf } from './artistReleases';
 
-  interface Props {
-    artistId: string;
+  interface ArtistPageResponse {
+    name?: string;
+    bannerUrl?: string;
+    songs?: Parameters<typeof mapYtTrack>[0][];
+    shelves?: ArtistReleaseShelf[];
   }
 
-  let { artistId }: Props = $props();
-  let loading = $state(false);
+  const TRACKS_PER_COLUMN = 3;
+  const TRACK_PREVIEW_COUNT = 18;
+
+  let { artistId, showPopularTracks = false }: { artistId: string; showPopularTracks?: boolean } = $props();
+  const id = $props.id();
+  let loading = $state(true);
   let remoteSongs = $state<Track[]>([]);
-  let remoteAlbums = $state<Album[]>([]);
+  let remoteCatalog = $state<ReturnType<typeof readArtistReleases> | null>(null);
+  let bannerUrl = $state('');
+  let portraitBanner = $state(false);
+  let loadedProfile = $state('');
+
+  let artist = $derived(libraryStore.artists.find((entry) => entry.id === artistId));
+  let profileArtwork = $derived(artist?.bannerUrl || artist?.artworkUrl);
+  let topTracks = $derived(
+    remoteSongs.length ? remoteSongs : libraryStore.tracksByIds(artist?.topTrackIds ?? [])
+  );
+  let discography = $derived(
+    remoteCatalog?.albums.length ? remoteCatalog.albums : libraryStore.albums.filter((album) => artist?.albumIds.includes(album.id))
+  );
+  let trackColumns = $derived.by(() => {
+    const preview = topTracks.slice(0, TRACK_PREVIEW_COUNT);
+    return Array.from({ length: Math.ceil(preview.length / TRACKS_PER_COLUMN) }, (_, index) => {
+      const start = index * TRACKS_PER_COLUMN;
+      return preview.slice(start, start + TRACKS_PER_COLUMN);
+    });
+  });
+  let albums = $derived(discography.filter((release) => release.type === 'Album'));
+  let singles = $derived(discography.filter((release) => release.type !== 'Album'));
+  let essentialAlbums = $derived(selectEssentialAlbums(albums, topTracks, remoteCatalog?.essentialIds ?? []));
+  let featuredTrack = $derived(remoteCatalog?.featuredTrack);
+  let latestAlbum = $derived(
+    discography.find((release) => release.id === remoteCatalog?.featuredAlbumId)
+    ?? (featuredTrack ? undefined : selectLatestAlbum(discography))
+  );
+  let latestRelease = $derived(latestAlbum ?? featuredTrack);
 
   $effect(() => {
-    const id = artistId;
-    if (!id || !isTauriRuntime()) return;
+    const browseId = artistId;
+    const allTracksPage = showPopularTracks;
+    remoteSongs = [];
+    remoteCatalog = null;
+    bannerUrl = '';
+    portraitBanner = false;
+    loadedProfile = '';
+
+    const hasCachedTracks = allTracksPage && untrack(() => topTracks.length > 0);
+    const needsFetch = Boolean(browseId && isTauriRuntime() && !hasCachedTracks);
+    loading = needsFetch;
+    if (!needsFetch) return;
+
     let cancelled = false;
-    loading = true;
-    void ipcInvoke<{
-      songs?: any[];
-      shelves?: Array<{ entities?: any[]; tracks?: any[] }>;
-    } | null>('yt_fetch_artist_page', { browseId: id })
-      .then((res) => {
-        if (cancelled || !res) return;
-        const songs = (res.songs ?? []).map(mapYtTrack);
-        const albums: Album[] = [];
-        for (const shelf of res.shelves ?? []) {
-          for (const e of shelf.entities ?? []) {
-            if ((e.kind || '').toLowerCase() === 'album') {
-              albums.push(mapYtAlbum(e));
-            }
-          }
-        }
+    void ipcInvoke<ArtistPageResponse>('yt_fetch_artist_page', { browseId })
+      .then((page) => {
+        if (cancelled || !page) return;
+        const existingArtist = libraryStore.artists.find((entry) => entry.id === browseId);
+        const entry = existingArtist ?? (page.name ? mapYtArtist({ kind: 'artist', name: page.name, browseId }) : undefined);
+        const songs = (page.songs ?? []).map(mapYtTrack);
         libraryStore.upsertTracks(songs);
-        libraryStore.upsertAlbums(albums);
+        if (entry && songs.length) entry.topTrackIds = songs.map((song) => song.id);
+        if (entry && !existingArtist) libraryStore.upsertArtists([entry]);
         remoteSongs = songs;
-        remoteAlbums = albums;
+
+        if (!allTracksPage) {
+          const catalog = readArtistReleases(page.shelves ?? [], page.name || entry?.name || '');
+          libraryStore.upsertAlbums(catalog.albums);
+          remoteCatalog = catalog;
+          bannerUrl = page.bannerUrl ?? '';
+        }
       })
       .finally(() => {
         if (!cancelled) loading = false;
       });
+
     return () => {
       cancelled = true;
     };
   });
 
-  let artist = $derived(libraryStore.artists.find((a) => a.id === artistId));
-  let topTracks = $derived(
-    remoteSongs.length > 0
-      ? remoteSongs
-      : artist
-        ? libraryStore.tracksByIds(artist.topTrackIds)
-        : []
-  );
-  let discography = $derived(
-    remoteAlbums.length > 0
-      ? remoteAlbums
-      : artist
-        ? libraryStore.albums.filter((al) => artist.albumIds.includes(al.id))
-        : []
-  );
+  function playPopular(shuffle = false) {
+    if (topTracks.length === 0) return;
+    const tracks = shuffle ? [...topTracks] : topTracks;
+    if (shuffle) {
+      for (let i = tracks.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [tracks[i], tracks[j]] = [tracks[j], tracks[i]];
+      }
+    }
+    playTrackNow(tracks[0], tracks);
+  }
+
+  function openLatestRelease() {
+    if (latestAlbum) goAlbum(latestAlbum.id);
+    else if (featuredTrack) playTrackNow(featuredTrack, [featuredTrack]);
+  }
 </script>
 
-<div class="space-y-8 px-8 py-4 pb-10">
+{#snippet releaseTile(album: Album)}
+  <button type="button" onclick={() => goAlbum(album.id)} class="release">
+    <Artwork src={album.artworkUrl} label={album.title} artist={album.artist} kind="album" upgrade={false} radius={10} class="aspect-square w-full" />
+    <span class="release-title" title={album.title}>{album.title}</span>
+    <span class="release-details">{album.year ? album.year + ' · ' : ''}{album.type}</span>
+  </button>
+{/snippet}
+
+{#snippet artistOverview()}
+<div class="artist-page" aria-busy={loading}>
   {#if artist}
-    <HeroHeader
-      overline="Artist"
-      title={artist.name}
-      subtitle={artist.bio}
-      meta={artist.monthlyListeners}
-      artworkUrl={artist.artworkUrl}
-      circleArt
-    >
-      {#snippet actions()}
-        <Buttons variant="primary" disabled={topTracks.length === 0} onclick={() => topTracks[0] && playTrackNow(topTracks[0], topTracks)}>
-          <WaveIcon name="play" size={15} filled /> Play Top Tracks
-        </Buttons>
-        <Buttons variant="secondary" disabled={topTracks.length === 0} onclick={() => { const s = [...topTracks].sort(() => Math.random() - 0.5); s[0] && playTrackNow(s[0], s); }}>
-          <WaveIcon name="shuffle" size={14} /> Shuffle
-        </Buttons>
-        <Buttons variant="secondary" onclick={() => libraryStore.toggleFollowArtist(artist.id)}>
-          {artist.isFollowing ? 'Following' : 'Follow'}
-        </Buttons>
-      {/snippet}
-    </HeroHeader>
-
-    {#if loading && topTracks.length === 0}
-      <Skeletons variant="rows" rows={6} />
-    {:else if topTracks.length > 0}
-      <Shelf title="Popular">
-        <DesktopTable tracks={topTracks} />
-      </Shelf>
-    {/if}
-
-    {#if discography.length > 0}
-      <Shelf title="Discography">
-        <div class="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-6">
-          {#each discography as album (album.id)}
-            <button type="button" onclick={() => goAlbum(album.id)} class="cursor-pointer rounded-[12px] p-2 text-left transition-colors hover:bg-[var(--lw-wash-hover)]">
-              <Artwork src={album.artworkUrl} label={album.title} artist={album.artist} kind="album" radius={10} class="aspect-square w-full" />
-              <div class="mt-2 truncate text-[13px] font-semibold">{album.title}</div>
-              <div class="truncate text-[12px] text-[var(--lw-text-secondary)]">
-                {album.year ? `${album.year} · ` : ''}{album.type}
-              </div>
-            </button>
-          {/each}
+    <header class="artist-hero">
+      {#if bannerUrl}
+        <img
+          class="catalog-banner"
+          class:portrait-banner={portraitBanner}
+          class:banner-backdrop={Boolean(profileArtwork && loadedProfile === profileArtwork)}
+          src={bannerUrl}
+          alt=""
+          referrerpolicy="no-referrer"
+          onload={({ currentTarget }) => {
+            if (currentTarget instanceof HTMLImageElement) {
+              portraitBanner = currentTarget.naturalWidth / currentTarget.naturalHeight < 1.45;
+            }
+          }}
+          onerror={() => (bannerUrl = '')}
+        />
+      {/if}
+      {#if profileArtwork}
+        {@const profile = profileArtwork}
+        <div class="profile-banner" class:profile-ready={loadedProfile === profile} aria-hidden="true">
+          <Artwork src={profile} kind="artist" highResolution upgrade={false} radius={0} class="h-full w-full" onArtworkLoad={() => (loadedProfile = profile)} />
         </div>
-      </Shelf>
-    {/if}
+      {/if}
+
+      <div class="artist-identity">
+        <h1>{artist.name}</h1>
+        {#if artist.monthlyListeners}
+          <p>{artist.monthlyListeners}</p>
+        {/if}
+        <div class="artist-actions">
+          <Buttons variant="primary" class="artist-play" disabled={topTracks.length === 0} onclick={() => playPopular()}>
+            <WaveIcon name="play" size={15} filled /> Play top tracks
+          </Buttons>
+          <Buttons class="artist-action" disabled={topTracks.length === 0} onclick={() => playPopular(true)}>
+            <WaveIcon name="shuffle" size={14} /> Shuffle
+          </Buttons>
+          <Buttons variant="toggle" active={Boolean(artist.isFollowing)} class="artist-action" onclick={() => libraryStore.toggleFollowArtist(artistId)}>
+            {artist.isFollowing ? 'Following' : 'Follow'}
+          </Buttons>
+        </div>
+      </div>
+    </header>
   {:else if loading}
-    <Skeletons variant="feature" />
-    <div class="mt-6">
-      <Skeletons variant="rows" rows={6} />
+    <div class="artist-hero artist-loading" role="status" aria-label="Loading artist">
+      <div class="lw-skeleton h-12 w-60 max-w-full rounded-[8px]"></div>
+      <div class="lw-skeleton mt-7 h-9 w-36 rounded-[10px]"></div>
     </div>
   {/if}
+
+  {#if artist || topTracks.length || latestRelease || loading}
+    <div class="artist-content">
+      <div class="artist-overview" class:artist-split={Boolean(latestRelease && (topTracks.length || loading))}>
+        {#if latestRelease}
+          <section aria-labelledby={id + '-latest-title'}>
+            <div class="section-header"><h2 id={id + '-latest-title'}>Latest release</h2></div>
+            <button type="button" class="latest-release" onclick={openLatestRelease}>
+              <Artwork
+                src={latestRelease.artworkUrl}
+                label={latestRelease.title}
+                artist={latestRelease.artist}
+                kind={latestAlbum ? 'album' : 'track'}
+                upgrade={false}
+                radius={10}
+                class="aspect-square w-full"
+              />
+              <span class="latest-copy">
+                <span class="release-details">{latestAlbum?.year ? latestAlbum.year + ' · ' : ''}{latestAlbum?.type ?? 'Song'}</span>
+                <span class="latest-name">{latestRelease.title}</span>
+                <span class="latest-action">
+                  <WaveIcon name={latestAlbum ? 'chevronRight' : 'play'} size={15} filled={!latestAlbum} />
+                  {latestAlbum ? 'View release' : 'Play song'}
+                </span>
+              </span>
+            </button>
+          </section>
+        {/if}
+        {#if topTracks.length || loading}
+          <div class="popular-shelf">
+            {#if topTracks.length}
+              <ShelfRail
+                title="Popular tracks"
+                seeAllLabel="Show all"
+                onSeeAll={() => goArtistPopularTracks(artistId)}
+                preferredCardWidth={394}
+                maxVisibleCards={2}
+              >
+                {#each trackColumns as column (column[0].id)}
+                  <div class="artist-tracks">
+                    {#each column as track (track.id)}
+                      <TrackRow {track} list={topTracks} presentation="artist" showAlbum={false} showQuality={false} />
+                    {/each}
+                  </div>
+                {/each}
+              </ShelfRail>
+            {:else}
+              <ShelfRail title="Popular tracks">
+                {#snippet beforeCards()}
+                  <Skeletons variant="rows" rows={TRACKS_PER_COLUMN} />
+                {/snippet}
+              </ShelfRail>
+            {/if}
+          </div>
+        {/if}
+      </div>
+
+      {#if essentialAlbums.length}
+        <section aria-labelledby={id + '-essentials-title'}>
+          <div class="section-header"><h2 id={id + '-essentials-title'}>Essential albums</h2></div>
+          <div class="essential-albums">
+            {#each essentialAlbums as album (album.id)}
+              {@render releaseTile(album)}
+            {/each}
+          </div>
+        </section>
+      {/if}
+
+      {#if albums.length}
+        <div class="release-shelf">
+          <ShelfRail title="Albums">
+            {#each albums as album (album.id)}
+              {@render releaseTile(album)}
+            {/each}
+          </ShelfRail>
+        </div>
+      {/if}
+
+      {#if singles.length}
+        <div class="release-shelf">
+          <ShelfRail title="Singles & EPs">
+            {#each singles as single (single.id)}
+              {@render releaseTile(single)}
+            {/each}
+          </ShelfRail>
+        </div>
+      {/if}
+
+      {#if !loading && topTracks.length === 0 && !latestRelease}
+        <States title="No tracks or releases available" />
+      {/if}
+    </div>
+  {:else}
+    <States title="Artist unavailable" description="Open an artist from Search to try again." />
+  {/if}
 </div>
+{/snippet}
+
+{#if showPopularTracks}
+  <ArtistPopularTracksPage {artistId} {artist} tracks={topTracks} {loading} />
+{:else}
+  {@render artistOverview()}
+{/if}
+
+<style>
+  .artist-page {
+    container: artist-page / inline-size;
+  }
+
+  .artist-hero {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    min-height: clamp(230px, 22cqw, 330px);
+    overflow: hidden;
+    padding: clamp(24px, 4cqw, 60px);
+    background: #101719;
+    color: #fff;
+  }
+
+  .artist-hero::after {
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    content: '';
+    background: linear-gradient(90deg, rgb(8 14 16 / 94%), rgb(8 14 16 / 72%) 34%, transparent 78%),
+      linear-gradient(0deg, rgb(8 14 16 / 54%), transparent 54%);
+  }
+
+  .catalog-banner,
+  .profile-banner {
+    position: absolute;
+    z-index: -2;
+    inset: 0 0 0 auto;
+    width: 100%;
+    height: 100%;
+  }
+
+  .catalog-banner {
+    width: auto;
+    max-width: 78%;
+    object-fit: contain;
+    object-position: right center;
+    mask-image: linear-gradient(90deg, transparent, #000 38%);
+  }
+
+  .portrait-banner {
+    width: min(72%, 640px);
+    mask-image: linear-gradient(90deg, transparent, #000 36%);
+    object-fit: cover;
+    object-position: center 28%;
+  }
+
+  .banner-backdrop {
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    mask-image: none;
+    filter: blur(36px) brightness(0.65);
+    object-fit: cover;
+    transform: scale(1.08);
+  }
+
+  .profile-banner {
+    right: clamp(10px, 7cqw, 150px);
+    width: min(70%, 440px);
+    mask-image: linear-gradient(90deg, transparent, #000 18% 88%, transparent);
+    visibility: hidden;
+  }
+
+  .profile-banner.profile-ready {
+    visibility: visible;
+  }
+
+  .profile-banner :global(img) {
+    object-fit: cover;
+    object-position: center 28%;
+  }
+
+  .artist-identity {
+    max-width: min(760px, 66%);
+  }
+
+  .artist-identity h1 {
+    margin: 0;
+    font-size: clamp(36px, 5cqw, 82px);
+    font-weight: 750;
+    line-height: 1.03;
+    letter-spacing: -0.035em;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+  }
+
+  .artist-identity p {
+    margin-top: 8px;
+    color: #e1e8e9;
+    font-size: clamp(14px, 1.25cqw, 19px);
+  }
+
+  .artist-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin-top: clamp(16px, 2.1cqw, 26px);
+  }
+
+  .artist-actions :global(.artist-play) {
+    background: #fff;
+    color: #101416;
+  }
+
+  .artist-actions :global(button) {
+    height: 38px;
+    padding-inline: 16px;
+    font-size: 14px;
+  }
+
+  .artist-actions :global(.artist-action) {
+    border-color: rgb(255 255 255 / 52%);
+    background: rgb(8 14 16 / 58%);
+    color: #fff;
+  }
+
+  .artist-actions :global(.artist-action:hover:not(:disabled)) {
+    background: rgb(255 255 255 / 18%);
+  }
+
+  .artist-actions :global(button:focus-visible) {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+  }
+
+  .artist-loading {
+    align-items: flex-start;
+  }
+
+  .artist-loading::after {
+    content: none;
+  }
+
+  .artist-content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: clamp(32px, 3.5cqw, 48px);
+    padding: 24px clamp(18px, 2.6cqw, 42px) 36px;
+  }
+
+  .artist-overview {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 28px;
+  }
+
+  .artist-overview:empty {
+    display: none;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 32px;
+    margin-bottom: 12px;
+  }
+
+  .section-header h2,
+  .popular-shelf :global(h2),
+  .release-shelf :global(h2) {
+    margin: 0;
+    font-size: clamp(19px, 1.7cqw, 26px);
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.024em;
+  }
+
+  .popular-shelf {
+    min-width: 0;
+  }
+
+  .popular-shelf :global(.shelf-all) {
+    color: var(--lw-text-secondary);
+  }
+
+  .artist-tracks :global(.track-row) {
+    --artist-track-height: clamp(52px, 4.6cqw, 64px);
+    position: relative;
+  }
+
+  .artist-tracks :global(.track-row + .track-row)::before {
+    position: absolute;
+    inset: 0 8px auto 60px;
+    height: 1px;
+    content: '';
+    background: var(--lw-outline-soft);
+    pointer-events: none;
+  }
+
+  .latest-release {
+    display: grid;
+    grid-template-columns: clamp(100px, 12cqw, 176px) minmax(0, 1fr);
+    align-items: center;
+    gap: clamp(12px, 1.6cqw, 22px);
+    width: 100%;
+    max-width: 530px;
+    border-radius: 12px;
+    padding: 8px;
+    background: var(--lw-surface);
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--lw-motion-fast) var(--ease-native);
+  }
+
+  .latest-release:hover {
+    background: var(--lw-wash-hover);
+  }
+
+  .latest-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding-inline-end: 8px;
+  }
+
+  .latest-name {
+    color: var(--lw-text-primary);
+    font-size: clamp(16px, 1.6cqw, 22px);
+    font-weight: 700;
+    line-height: 1.22;
+    letter-spacing: -0.02em;
+    overflow-wrap: anywhere;
+  }
+
+  .latest-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 7px;
+    color: var(--lw-text-secondary);
+    font-size: 13px;
+  }
+
+  .latest-release:hover .latest-action {
+    color: var(--lw-text-primary);
+  }
+
+  .essential-albums {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, clamp(130px, 15cqw, 200px)), 1fr));
+    gap: 12px;
+  }
+
+  .essential-albums .release {
+    max-width: 216px;
+  }
+
+  .release {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    border-radius: 9px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .release-title,
+  .release-details {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .release-title {
+    margin-top: 7px;
+    color: var(--lw-text-primary);
+    font-size: 15px;
+    font-weight: 650;
+  }
+
+  .release:hover .release-title {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .release-details {
+    color: var(--lw-text-secondary);
+    font-size: 13px;
+  }
+
+  @container artist-page (max-width: 849px) {
+    .artist-identity {
+      max-width: min(540px, 92%);
+    }
+  }
+
+  @container artist-page (min-width: 850px) {
+    .artist-split {
+      grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+      column-gap: clamp(28px, 3.3cqw, 56px);
+    }
+  }
+
+</style>
