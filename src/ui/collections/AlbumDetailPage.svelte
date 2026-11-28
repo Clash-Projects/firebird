@@ -33,11 +33,15 @@
       artist: string;
       artworkUrl: string;
       year: string;
-      tracks: any[];
+      tracks: Parameters<typeof mapYtTrack>[0][];
     } | null>('yt_browse_album', { browseId: id, limit: 100 })
       .then((res) => {
         if (cancelled || !res) return;
-        const mapped = (res.tracks ?? []).map(mapYtTrack);
+        const mapped = (res.tracks ?? []).map((song) => mapYtTrack({
+          ...song,
+          album: song.album || res.title,
+          albumBrowseId: song.albumBrowseId || (!song.album || song.album === res.title ? res.browseId || id : undefined),
+        }));
         libraryStore.upsertTracks(mapped);
         const alb: Album = {
           id: res.browseId || id,

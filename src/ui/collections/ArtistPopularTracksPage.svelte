@@ -37,7 +37,7 @@
   </HeroHeader>
 
   {#if tracks.length}
-    <DesktopTable {tracks} showAlbum={tracks.some((track) => Boolean(track.album))} />
+    <DesktopTable {tracks} />
   {:else if loading}
     <Skeletons variant="rows" />
   {:else}

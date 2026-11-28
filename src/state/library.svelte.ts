@@ -1,4 +1,5 @@
 import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
+import { mergeTrackMetadata, prefetchTrackMetadata, trackMetadataCache } from './trackMetadata';
 import type {
   Album,
   Artist,
@@ -80,7 +81,7 @@ export function mapYtTrack(t: BackendYtTrack): Track {
     title: t.title || 'Unknown Title',
     artist: t.artist || 'Unknown Artist',
     artists: t.artist ? t.artist.split(/,\s*/).filter(Boolean) : ['Unknown Artist'],
-    album: t.album || '',
+    album: t.album?.trim() || '',
     albumId: t.albumBrowseId || undefined,
     durationSec: Math.max(0, Number(t.durationSeconds) || 0),
     artworkUrl: t.artworkUrl || '',
@@ -131,7 +132,7 @@ function mapStoredTrack(t: BackendStoredTrack, idx: number): Track {
     title: t.name || 'Unknown Title',
     artist: t.artist || 'Unknown Artist',
     artists: t.artist ? t.artist.split(/,\s*/).filter(Boolean) : ['Unknown Artist'],
-    album: t.album || '',
+    album: t.album?.trim() || '',
     durationSec: Math.max(0, Number(t.durationSeconds) || 0),
     artworkUrl: t.artworkUrl || '',
     accentColor: '#7c9bff',
@@ -146,6 +147,7 @@ function mapStoredTrack(t: BackendStoredTrack, idx: number): Track {
 
 class LibraryStore {
   tracks = $state<Track[]>([]);
+  private tracksById = $derived(new Map(this.tracks.map((track) => [track.id, track])));
   albums = $state<Album[]>([]);
   artists = $state<Artist[]>([]);
   playlists = $state<Playlist[]>([]);
@@ -162,9 +164,9 @@ class LibraryStore {
 
   upsertTracks(incoming: Track[]) {
     if (incoming.length === 0) return;
-    const byId = new Map(this.tracks.map((t) => [t.id, t]));
+    const byId = new Map(this.tracksById);
     for (const track of incoming) {
-      byId.set(track.id, track);
+      byId.set(track.id, mergeTrackMetadata(track, byId.get(track.id)));
     }
     this.tracks = Array.from(byId.values());
   }
@@ -232,6 +234,7 @@ class LibraryStore {
       }
 
       this.upsertTracks(collectedTracks);
+      this.prefetchLibraryAlbums();
       this.playlists = mappedPlaylists;
       if (savedPlaylists.some((pl) => pl.mode === 'liked')) {
         this.likedIds = liked;
@@ -303,6 +306,11 @@ class LibraryStore {
     this.upsertTracks(nextTracks);
     this.upsertAlbums(nextAlbums);
     this.upsertArtists(nextArtists);
+    this.prefetchLibraryAlbums();
+  }
+
+  private prefetchLibraryAlbums() {
+    prefetchTrackMetadata(this.tracks.slice(0, 24).map((track) => this.trackWithMetadata(track)));
   }
 
   async loadHomeFeed(authenticated = true, forceFresh = false) {
@@ -346,7 +354,16 @@ class LibraryStore {
   }
 
   trackById(id: string): Track | undefined {
-    return this.tracks.find((t) => t.id === id);
+    return this.tracksById.get(id);
+  }
+
+  trackWithMetadata(track: Track): Track {
+    const known = this.trackById(track.id);
+    const cached = track.videoId ? trackMetadataCache.get(track.videoId) : undefined;
+    const merged = mergeTrackMetadata(mergeTrackMetadata(track, known), cached);
+    if (merged.album || !merged.albumId) return merged;
+    const album = this.albums.find((item) => item.id === merged.albumId);
+    return album ? { ...merged, album: album.title } : merged;
   }
 
   tracksByIds(ids: string[]): Track[] {
@@ -439,6 +456,7 @@ class LibraryStore {
     const playlist = this.playlists.find((item) => item.id === playlistId);
     if (!playlist) return false;
     if (playlist.trackIds.includes(track.id)) return true;
+    track = this.trackWithMetadata(track);
     if (isTauriRuntime()) {
       const id = Number(playlistId.replace(/^pl-/, ''));
       if (!Number.isSafeInteger(id)) return false;

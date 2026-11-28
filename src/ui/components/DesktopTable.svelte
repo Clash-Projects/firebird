@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createVirtualizer } from '@tanstack/svelte-virtual';
   import { enqueueTrack, playTrackNow } from '$src/app/trackActions';
+  import { libraryStore } from '$src/state/library.svelte';
   import type { Track } from '$src/state/types';
   import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
@@ -42,7 +43,10 @@
   }
 
   let sortedEntries = $derived.by(() => {
-    const mapped = tracks.map((track, originalIndex) => ({ track, originalIndex }));
+    const mapped = tracks.map((track, originalIndex) => ({
+      track: showAlbum ? libraryStore.trackWithMetadata(track) : track,
+      originalIndex,
+    }));
     if (sortCol === 'none') return mapped;
     const mul = sortDir === 'asc' ? 1 : -1;
     return [...mapped].sort((a, b) => {

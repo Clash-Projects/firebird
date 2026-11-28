@@ -45,7 +45,7 @@
     remoteCatalog?.albums.length ? remoteCatalog.albums : libraryStore.albums.filter((album) => artist?.albumIds.includes(album.id))
   );
   let trackColumns = $derived.by(() => {
-    const preview = topTracks.slice(0, TRACK_PREVIEW_COUNT);
+    const preview = topTracks.slice(0, TRACK_PREVIEW_COUNT).map((track) => libraryStore.trackWithMetadata(track));
     return Array.from({ length: Math.ceil(preview.length / TRACKS_PER_COLUMN) }, (_, index) => {
       const start = index * TRACKS_PER_COLUMN;
       return preview.slice(start, start + TRACKS_PER_COLUMN);

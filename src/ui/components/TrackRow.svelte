@@ -9,6 +9,7 @@
   import ArtistLine from './ArtistLine.svelte';
   import Artwork from './Artwork.svelte';
   import { contextMenu } from './contextMenuState.svelte';
+  import { observeTrackMetadata } from './observeTrackMetadata';
 
   interface Props {
     track: Track;
@@ -53,6 +54,7 @@
   data-active={isCurrent}
   data-selected={selected}
   data-focused={focused}
+  use:observeTrackMetadata={(showAlbum || artistRow) && !track.album && track.videoId ? track : null}
   onclick={(e) => (onRowClick ? onRowClick(e) : onPlay())}
   onkeydown={(e) => e.target === e.currentTarget && e.key === 'Enter' && onPlay()}
   oncontextmenu={(e) =>
@@ -122,16 +124,23 @@
   </div>
 
   {#if showAlbum}
-    <button
-      type="button"
-      onclick={(e) => {
-        e.stopPropagation();
-        if (track.albumId) goAlbum(track.albumId);
-      }}
-      class="ml-3 hidden flex-[3] cursor-pointer truncate text-left text-[12px] text-[var(--lw-text-secondary)] hover:text-[var(--lw-text-primary)] hover:underline md:block"
-    >
-      {track.album}
-    </button>
+    <div data-lw="track-album" class="ml-3 hidden min-w-0 flex-[3] text-[12px] text-[var(--lw-text-secondary)] md:block">
+      {#if track.album && track.albumId}
+        <button
+          type="button"
+          title={track.album}
+          onclick={(e) => {
+            e.stopPropagation();
+            if (track.albumId) goAlbum(track.albumId);
+          }}
+          class="block max-w-full cursor-pointer truncate text-left hover:text-[var(--lw-text-primary)] hover:underline"
+        >{track.album}</button>
+      {:else if track.album}
+        <span class="block truncate" title={track.album}>{track.album}</span>
+      {:else}
+        <span title="Album unavailable" class="text-[var(--lw-text-tertiary)]">—</span>
+      {/if}
+    </div>
   {/if}
 
   {#if showQuality}
