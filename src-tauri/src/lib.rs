@@ -173,6 +173,10 @@ fn shutdown_audio_and_resources(app: &tauri::AppHandle) {
     state.spectrum.unsubscribe(None);
     state.playback.shutdown_sync();
     state.audio_output.dispose();
+    let discord = Arc::clone(&state.discord_presence);
+    tauri::async_runtime::spawn(async move {
+        discord.shutdown().await;
+    });
     DiagnosticsLog::mark_clean_exit();
 }
 
@@ -355,6 +359,20 @@ pub fn run() {
             DiagnosticsLog::info("tauri setup complete");
 
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    let app = window.app_handle();
+                    let close_to_tray = app.state::<AppState>().prefs.close_to_tray();
+                    if close_to_tray && TRAY_READY.load(Ordering::SeqCst) {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    } else {
+                        quit_application(app);
+                    }
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             // commands::player
@@ -657,7 +675,11 @@ pub fn run() {
 
     app.run(|app_handle, event| match event {
         RunEvent::ExitRequested { api, .. } => {
-            if !ALLOW_EXIT.load(Ordering::SeqCst) && TRAY_READY.load(Ordering::SeqCst) {
+            let close_to_tray = app_handle.state::<AppState>().prefs.close_to_tray();
+            if !ALLOW_EXIT.load(Ordering::SeqCst)
+                && TRAY_READY.load(Ordering::SeqCst)
+                && close_to_tray
+            {
                 api.prevent_exit();
             } else {
                 shutdown_audio_and_resources(app_handle);
