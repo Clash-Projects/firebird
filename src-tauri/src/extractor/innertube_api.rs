@@ -12,6 +12,7 @@ use axum::Router;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use chrono::{DateTime, NaiveDateTime, Utc};
+use futures_util::stream::{self, StreamExt};
 use rand::Rng;
 use regex::Regex;
 use reqwest::header::{COOKIE, ORIGIN, REFERER, USER_AGENT};
@@ -274,6 +275,39 @@ pub struct YtArtistPage {
     pub songs: Vec<YouTubeMusicTrack>,
     #[serde(default)]
     pub shelves: Vec<YtHomeShelf>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind", content = "data", rename_all = "camelCase")]
+pub enum YtArtistPageUpdate {
+    Preview(YtArtistPage),
+    Songs(Vec<YouTubeMusicTrack>),
+    Shelf { index: usize, shelf: YtHomeShelf },
+}
+
+enum ArtistExpansion {
+    Songs(Vec<YouTubeMusicTrack>),
+    Shelf { index: usize, entities: Vec<YouTubeMusicEntity> },
+}
+
+struct ArtistContinuation {
+    shelf_index: Option<usize>,
+    browse_id: String,
+    params: Option<String>,
+}
+
+impl ArtistContinuation {
+    fn new(endpoint: Map<String, Value>, shelf_index: Option<usize>) -> Option<Self> {
+        let browse_id = val_str(endpoint.get("browseId"));
+        if browse_id.is_empty() {
+            return None;
+        }
+        Some(Self {
+            shelf_index,
+            browse_id,
+            params: endpoint.get("params").and_then(Value::as_str).map(str::to_owned),
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -2891,96 +2925,56 @@ impl InnerTubeMusicApi {
         .await
     }
 
-    pub async fn fetch_artist_page(&self, browse_id: &str) -> Option<YtArtistPage> {
+    pub async fn fetch_artist_page(
+        &self,
+        browse_id: &str,
+        mut on_update: impl FnMut(YtArtistPageUpdate) + Send,
+    ) -> Option<YtArtistPage> {
         let bid = browse_id.trim();
         if bid.is_empty() {
             return None;
         }
         let root = self.browse_with_params(bid, None).await.ok()?;
-        let mut section_lists = Vec::new();
-        collect_objects(&root, "sectionListRenderer", &mut section_lists);
+        let (mut page, continuations) = self.parse_artist_page(&root);
+        drop(root);
 
-        let mut songs = Vec::new();
-        let mut shelves = Vec::new();
-
-        for list in section_lists {
-            let Some(contents) = list.get("contents").and_then(Value::as_array) else {
-                continue;
+        if continuations.is_empty() {
+            return if page.name.is_empty() && page.songs.is_empty() && page.shelves.is_empty() {
+                None
+            } else {
+                Some(page)
             };
-            for section in contents {
-                let Some(sec_obj) = section.as_object() else {
-                    continue;
-                };
-                if let Some(song_shelf) = sec_obj.get("musicShelfRenderer").filter(|v| v.is_object()) {
-                    let on_page = self.parse_song_renderers(song_shelf);
-                    if songs.is_empty() {
-                        songs = on_page;
-                    }
-                    let more = song_shelf
-                        .get("title")
-                        .and_then(first_browse_endpoint)
-                        .or_else(|| song_shelf.get("bottomEndpoint").and_then(first_browse_endpoint));
-                    if let Some(ep) = more {
-                        let more_id = val_str(ep.get("browseId"));
-                        let more_params = ep
-                            .get("params")
-                            .and_then(Value::as_str)
-                            .map(str::to_string);
-                        if !more_id.is_empty() {
-                            if let Ok(full) =
-                                self.browse_songs(&more_id, more_params.as_deref(), Some(500)).await
-                            {
-                                if full.len() > songs.len() {
-                                    songs = full;
-                                }
-                            }
-                        }
-                    }
-                    continue;
-                }
+        }
 
-                let Some(mut shelf) = self.parse_home_section(sec_obj, 500) else {
-                    continue;
-                };
-                if !shelf.is_renderable() {
-                    continue;
+        on_update(YtArtistPageUpdate::Preview(page.clone()));
+        let mut pending = stream::iter(continuations)
+            .map(|continuation| self.expand_artist_shelf(continuation))
+            .buffer_unordered(4);
+
+        while let Some(update) = pending.next().await {
+            match update {
+                Some(ArtistExpansion::Songs(songs)) if songs.len() > page.songs.len() => {
+                    page.songs = songs;
+                    on_update(YtArtistPageUpdate::Songs(page.songs.clone()));
                 }
-                if shelf.is_card_shelf() {
-                    if let Some(carousel) = sec_obj.get("musicCarouselShelfRenderer").and_then(Value::as_object) {
-                        if let Some(ep) = more_endpoint_of_carousel(carousel) {
-                            let ep_id = val_str(ep.get("browseId"));
-                            let ep_params = ep.get("params").and_then(Value::as_str);
-                            if let Ok(grid) = self.browse_with_params(&ep_id, ep_params).await {
-                                let mut cards = Vec::new();
-                                collect_objects(&grid, "musicTwoRowItemRenderer", &mut cards);
-                                let mut more = Vec::new();
-                                for card in cards {
-                                    let id = card
-                                        .get("navigationEndpoint")
-                                        .and_then(|n| n.get("browseEndpoint"))
-                                        .and_then(|b| b.get("browseId"))
-                                        .and_then(Value::as_str)
-                                        .unwrap_or("");
-                                    if id.is_empty() {
-                                        continue;
-                                    }
-                                    if let Some(e) = self.parse_two_row_entity(&card, Self::kind_for_browse_id(id)) {
-                                        if !Self::is_liked_music_id(&e.browse_id) {
-                                            more.push(e);
-                                        }
-                                    }
-                                }
-                                if more.len() > shelf.entities.len() {
-                                    shelf.entities = more;
-                                }
-                            }
-                        }
-                    }
+                Some(ArtistExpansion::Shelf { index, entities })
+                    if entities.len() > page.shelves[index].entities.len() =>
+                {
+                    page.shelves[index].entities = entities;
+                    on_update(YtArtistPageUpdate::Shelf { index, shelf: page.shelves[index].clone() });
                 }
-                shelves.push(shelf);
+                _ => {}
             }
         }
 
+        if page.name.is_empty() && page.songs.is_empty() && page.shelves.is_empty() {
+            None
+        } else {
+            Some(page)
+        }
+    }
+
+    fn parse_artist_page(&self, root: &Value) -> (YtArtistPage, Vec<ArtistContinuation>) {
         let header = root.get("header").and_then(|header| {
             [
                 "musicImmersiveHeaderRenderer",
@@ -2995,10 +2989,9 @@ impl InnerTubeMusicApi {
         let name = header
             .and_then(|header| header.get("title"))
             .and_then(|title| {
-                title
-                    .get("runs")
-                    .and_then(runs_text)
-                    .or_else(|| title.get("simpleText").and_then(Value::as_str).map(str::to_owned))
+                title.get("runs").and_then(runs_text).or_else(|| {
+                    title.get("simpleText").and_then(Value::as_str).map(str::to_owned)
+                })
             })
             .unwrap_or_default();
         let banner_url = header
@@ -3006,11 +2999,72 @@ impl InnerTubeMusicApi {
             .and_then(original_thumbnail_url)
             .map(|url| if url.starts_with("//") { format!("https:{url}") } else { url.to_owned() })
             .unwrap_or_default();
+        let mut page = YtArtistPage { name, banner_url, ..Default::default() };
+        let mut continuations = Vec::new();
+        let mut section_lists = Vec::new();
+        collect_objects(root, "sectionListRenderer", &mut section_lists);
 
-        if name.is_empty() && songs.is_empty() && shelves.is_empty() {
-            return None;
+        for list in section_lists {
+            let Some(contents) = list.get("contents").and_then(Value::as_array) else {
+                continue;
+            };
+            for section in contents.iter().filter_map(Value::as_object) {
+                if let Some(song_shelf) = section.get("musicShelfRenderer").filter(|v| v.is_object()) {
+                    if page.songs.is_empty() {
+                        page.songs = self.parse_song_renderers(song_shelf);
+                    }
+                    let more = song_shelf
+                        .get("title")
+                        .and_then(first_browse_endpoint)
+                        .or_else(|| song_shelf.get("bottomEndpoint").and_then(first_browse_endpoint));
+                    if let Some(request) = more.and_then(|endpoint| ArtistContinuation::new(endpoint, None)) {
+                        continuations.push(request);
+                    }
+                    continue;
+                }
+
+                let Some(shelf) = self.parse_home_section(section, 500) else {
+                    continue;
+                };
+                if !shelf.is_renderable() {
+                    continue;
+                }
+                if shelf.is_card_shelf() {
+                    let more = section
+                        .get("musicCarouselShelfRenderer")
+                        .and_then(Value::as_object)
+                        .and_then(more_endpoint_of_carousel);
+                    if let Some(request) = more.and_then(|endpoint| ArtistContinuation::new(endpoint, Some(page.shelves.len()))) {
+                        continuations.push(request);
+                    }
+                }
+                page.shelves.push(shelf);
+            }
         }
-        Some(YtArtistPage { name, banner_url, songs, shelves })
+        (page, continuations)
+    }
+
+    async fn expand_artist_shelf(&self, continuation: ArtistContinuation) -> Option<ArtistExpansion> {
+        let browse_id = &continuation.browse_id;
+        let params = continuation.params.as_deref();
+        let Some(index) = continuation.shelf_index else {
+            return self.browse_songs(browse_id, params, Some(500)).await.ok().map(ArtistExpansion::Songs);
+        };
+        let grid = self.browse_with_params(browse_id, params).await.ok()?;
+        let mut cards = Vec::new();
+        collect_objects(&grid, "musicTwoRowItemRenderer", &mut cards);
+        let entities = cards.iter().filter_map(|card| {
+            let id = card
+                .get("navigationEndpoint")?
+                .get("browseEndpoint")?
+                .get("browseId")?
+                .as_str()?;
+            if id.is_empty() || Self::is_liked_music_id(id) {
+                return None;
+            }
+            self.parse_two_row_entity(card, Self::kind_for_browse_id(id))
+        }).collect();
+        Some(ArtistExpansion::Shelf { index, entities })
     }
 
     pub fn kind_for_browse_id(browse_id: &str) -> YouTubeEntityKind {

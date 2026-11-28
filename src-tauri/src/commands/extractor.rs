@@ -2,12 +2,12 @@ use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
 
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{ipc::JavaScriptChannelId, State, Webview};
 
 use crate::extractor::album_match::resolve_album_browse_id;
 use crate::extractor::innertube_api::{
     TranscriptCue, YouTubeAlbumResult, YouTubeMusicEntity, YouTubeMusicTrack,
-    YouTubePlaylistResult, YouTubePlaylistSummary, YtAccount, YtArtistPage, YtChannel,
+    YouTubePlaylistResult, YouTubePlaylistSummary, YtAccount, YtArtistPage, YtArtistPageUpdate, YtChannel,
     YtConnection, YtHomeShelf, YtProfile,
 };
 use crate::extractor::yt_auth_store::YtSessionBundle;
@@ -152,9 +152,16 @@ pub async fn yt_fetch_home_shelves(
 #[tauri::command]
 pub async fn yt_fetch_artist_page(
     state: State<'_, AppState>,
+    webview: Webview,
     browse_id: String,
+    updates: Option<JavaScriptChannelId>,
 ) -> Result<Option<YtArtistPage>, String> {
-    Ok(state.tube.fetch_artist_page(&browse_id).await)
+    let updates = updates.map(|id| id.channel_on::<_, YtArtistPageUpdate>(webview));
+    Ok(state.tube.fetch_artist_page(&browse_id, |update| {
+        if let Some(channel) = &updates {
+            let _ = channel.send(update);
+        }
+    }).await)
 }
 
 #[tauri::command]

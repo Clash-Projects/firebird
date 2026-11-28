@@ -1,0 +1,81 @@
+import { Channel } from '@tauri-apps/api/core';
+import { ipcInvoke } from '$src/lib/ipc';
+import type { mapYtTrack } from '$src/state/library.svelte';
+import type { ArtistReleaseShelf } from './artistReleases';
+
+type ArtistSong = Parameters<typeof mapYtTrack>[0];
+
+export interface ArtistPageResponse {
+  name?: string;
+  bannerUrl?: string;
+  songs?: ArtistSong[];
+  shelves?: ArtistReleaseShelf[];
+}
+
+type ArtistPageUpdate =
+  | { kind: 'preview'; data: ArtistPageResponse }
+  | { kind: 'songs'; data: ArtistSong[] }
+  | { kind: 'shelf'; data: { index: number; shelf: ArtistReleaseShelf } };
+
+type PageListener = (page: ArtistPageResponse | null, complete: boolean) => void;
+
+interface ArtistRequest {
+  page: ArtistPageResponse | null;
+  listeners: Set<PageListener>;
+}
+
+const CACHE_TTL = 5 * 60 * 1000;
+const CACHE_LIMIT = 24;
+const cache = new Map<string, { page: ArtistPageResponse; expiresAt: number }>();
+const pending = new Map<string, ArtistRequest>();
+
+export function subscribeToArtistPage(browseId: string, accountScope: string, listener: PageListener): () => void {
+  const key = JSON.stringify([accountScope, browseId]);
+  const cached = cache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    listener(cached.page, true);
+    return () => {};
+  }
+  cache.delete(key);
+
+  const active = pending.get(key);
+  if (active) {
+    active.listeners.add(listener);
+    if (active.page) listener(active.page, false);
+    return () => active.listeners.delete(listener);
+  }
+
+  const request: ArtistRequest = { page: null, listeners: new Set([listener]) };
+  pending.set(key, request);
+
+  const updates = new Channel<ArtistPageUpdate>((update) => {
+    if (update.kind === 'preview') {
+      request.page = update.data;
+    } else if (request.page && update.kind === 'songs') {
+      request.page = { ...request.page, songs: update.data };
+    } else if (request.page && update.kind === 'shelf') {
+      const { index, shelf } = update.data;
+      const shelves = request.page.shelves?.map((entry, i) => i === index ? shelf : entry);
+      request.page = { ...request.page, shelves };
+    }
+    if (request.page) {
+      for (const notify of request.listeners) notify(request.page, false);
+    }
+  });
+
+  void ipcInvoke<ArtistPageResponse>('yt_fetch_artist_page', { browseId, updates }).then((result) => {
+    pending.delete(key);
+    const page = result ?? request.page;
+    if (result) {
+      if (cache.size >= CACHE_LIMIT) {
+        const oldest = cache.keys().next().value;
+        if (oldest !== undefined) cache.delete(oldest);
+      }
+      cache.set(key, { page: result, expiresAt: Date.now() + CACHE_TTL });
+    }
+    for (const notify of request.listeners) notify(page, true);
+    request.listeners.clear();
+  });
+
+  return () => request.listeners.delete(listener);
+}

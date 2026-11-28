@@ -1,8 +1,9 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { playTrackNow } from '$src/app/trackActions';
-  import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
+  import { isTauriRuntime } from '$src/lib/ipc';
   import { libraryStore, mapYtArtist, mapYtTrack } from '$src/state/library.svelte';
+  import { settingsStore } from '$src/state/settings.svelte';
   import type { Album, Track } from '$src/state/types';
   import Artwork from '$src/ui/components/Artwork.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
@@ -13,14 +14,8 @@
   import { goAlbum, goArtistPopularTracks } from '$src/ui/navigation/waveNav';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import ArtistPopularTracksPage from './ArtistPopularTracksPage.svelte';
-  import { readArtistReleases, selectEssentialAlbums, selectLatestAlbum, type ArtistReleaseShelf } from './artistReleases';
-
-  interface ArtistPageResponse {
-    name?: string;
-    bannerUrl?: string;
-    songs?: Parameters<typeof mapYtTrack>[0][];
-    shelves?: ArtistReleaseShelf[];
-  }
+  import { subscribeToArtistPage, type ArtistPageResponse } from './artistPageLoader';
+  import { readArtistReleases, selectEssentialAlbums, selectLatestAlbum } from './artistReleases';
 
   const TRACKS_PER_COLUMN = 3;
   const TRACK_PREVIEW_COUNT = 18;
@@ -58,47 +53,51 @@
     ?? (featuredTrack ? undefined : selectLatestAlbum(discography))
   );
   let latestRelease = $derived(latestAlbum ?? featuredTrack);
+  let releasesLoading = $derived(loading && !remoteCatalog && !latestRelease);
 
   $effect(() => {
     const browseId = artistId;
     const allTracksPage = showPopularTracks;
+    const accountScope = settingsStore.ytConnected
+      ? JSON.stringify([settingsStore.ytAccountEmail, settingsStore.ytAccountName])
+      : '';
     remoteSongs = [];
     remoteCatalog = null;
     bannerUrl = '';
     portraitBanner = false;
     loadedProfile = '';
 
-    const hasCachedTracks = allTracksPage && untrack(() => topTracks.length > 0);
-    const needsFetch = Boolean(browseId && isTauriRuntime() && !hasCachedTracks);
+    const needsFetch = Boolean(browseId && isTauriRuntime());
     loading = needsFetch;
     if (!needsFetch) return;
 
-    let cancelled = false;
-    void ipcInvoke<ArtistPageResponse>('yt_fetch_artist_page', { browseId })
-      .then((page) => {
-        if (cancelled || !page) return;
-        const existingArtist = libraryStore.artists.find((entry) => entry.id === browseId);
-        const entry = existingArtist ?? (page.name ? mapYtArtist({ kind: 'artist', name: page.name, browseId }) : undefined);
+    let previousSongs: ArtistPageResponse['songs'];
+    let previousShelves: ArtistPageResponse['shelves'];
+    return untrack(() => subscribeToArtistPage(browseId, accountScope, (page, complete) => {
+      loading = !complete;
+      if (!page) return;
+
+      const existingArtist = libraryStore.artists.find((entry) => entry.id === browseId);
+      const entry = existingArtist ?? (page.name ? mapYtArtist({ kind: 'artist', name: page.name, browseId }) : undefined);
+      if (page.songs !== previousSongs) {
+        previousSongs = page.songs;
         const songs = (page.songs ?? []).map(mapYtTrack);
         libraryStore.upsertTracks(songs);
-        if (entry && songs.length) entry.topTrackIds = songs.map((song) => song.id);
-        if (entry && !existingArtist) libraryStore.upsertArtists([entry]);
         remoteSongs = songs;
+      }
+      if (complete && entry && remoteSongs.length) entry.topTrackIds = remoteSongs.map((song) => song.id);
+      if (entry && !existingArtist) libraryStore.upsertArtists([entry]);
 
-        if (!allTracksPage) {
+      if (!allTracksPage) {
+        if (page.shelves !== previousShelves || !remoteCatalog) {
+          previousShelves = page.shelves;
           const catalog = readArtistReleases(page.shelves ?? [], page.name || entry?.name || '');
           libraryStore.upsertAlbums(catalog.albums);
           remoteCatalog = catalog;
-          bannerUrl = page.bannerUrl ?? '';
         }
-      })
-      .finally(() => {
-        if (!cancelled) loading = false;
-      });
-
-    return () => {
-      cancelled = true;
-    };
+        bannerUrl = page.bannerUrl ?? '';
+      }
+    }));
   });
 
   function playPopular(shuffle = false) {
@@ -181,7 +180,7 @@
 
   {#if artist || topTracks.length || latestRelease || loading}
     <div class="artist-content">
-      <div class="artist-overview" class:artist-split={Boolean(latestRelease && (topTracks.length || loading))}>
+      <div class="artist-overview" class:artist-split={Boolean((latestRelease || releasesLoading) && (topTracks.length || loading))}>
         {#if latestRelease}
           <section aria-labelledby={id + '-latest-title'}>
             <div class="section-header"><h2 id={id + '-latest-title'}>Latest release</h2></div>
@@ -204,6 +203,17 @@
                 </span>
               </span>
             </button>
+          </section>
+        {:else if releasesLoading}
+          <section aria-labelledby={id + '-latest-title'}>
+            <div class="section-header"><h2 id={id + '-latest-title'}>Latest release</h2></div>
+            <div class="latest-layout" aria-hidden="true">
+              <div class="lw-skeleton aspect-square w-full rounded-[10px]"></div>
+              <div class="latest-copy">
+                <div class="lw-skeleton h-3 w-16 rounded"></div>
+                <div class="lw-skeleton h-5 w-full max-w-48 rounded"></div>
+              </div>
+            </div>
           </section>
         {/if}
         {#if topTracks.length || loading}
@@ -479,7 +489,8 @@
     pointer-events: none;
   }
 
-  .latest-release {
+  .latest-release,
+  .latest-layout {
     display: grid;
     grid-template-columns: clamp(100px, 12cqw, 176px) minmax(0, 1fr);
     align-items: center;
@@ -489,6 +500,9 @@
     border-radius: 12px;
     padding: 8px;
     background: var(--lw-surface);
+  }
+
+  .latest-release {
     text-align: left;
     cursor: pointer;
     transition: background-color var(--lw-motion-fast) var(--ease-native);
