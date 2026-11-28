@@ -183,7 +183,7 @@ export interface LastWaveAPI {
   readonly window: {
     readonly toggleRail: () => void;
     readonly toggleMiniPlayer: () => void;
-    readonly toggleRightPanel: (panel: 'queue' | 'lyrics' | 'eq' | 'output') => void;
+    readonly toggleRightPanel: (panel: 'queue' | 'eq' | 'output') => void;
   };
   readonly events: {
     readonly on: (event: PlayerEventType, fn: (payload: unknown) => void) => () => void;

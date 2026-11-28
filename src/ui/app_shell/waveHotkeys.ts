@@ -45,8 +45,6 @@ export function attachWaveHotkeys(): () => void {
       playerStore.toggleMute();
     } else if (e.key.toLowerCase() === 'q') {
       windowState.toggleRightPanel('queue');
-    } else if (e.key.toLowerCase() === 'l') {
-      windowState.toggleRightPanel('lyrics');
     }
   };
 

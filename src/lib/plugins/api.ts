@@ -102,7 +102,7 @@ export function installLastWaveApi(): LastWaveAPI {
     window: Object.freeze({
       toggleRail: () => windowState.toggleRail(),
       toggleMiniPlayer: () => windowState.toggleMiniPlayer(),
-      toggleRightPanel: (panel: 'queue' | 'lyrics' | 'eq' | 'output') => windowState.toggleRightPanel(panel),
+      toggleRightPanel: (panel: 'queue' | 'eq' | 'output') => windowState.toggleRightPanel(panel),
     }),
     events: Object.freeze({
       on: (event: PlayerEventType, fn: (payload: unknown) => void) => playerStore.on(event, fn),

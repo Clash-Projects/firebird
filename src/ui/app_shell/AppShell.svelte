@@ -27,7 +27,6 @@
   import HomePage from '$src/ui/home/HomePage.svelte';
   import JamPage from '$src/ui/jam/JamPage.svelte';
   import LibraryPage from '$src/ui/library/LibraryPage.svelte';
-  import LyricsPanel from '$src/ui/lyrics/LyricsPanel.svelte';
   import MiniPlayer from '$src/ui/mini_player/MiniPlayer.svelte';
   import SupportPages from '$src/ui/misc/SupportPages.svelte';
   import SideRail from '$src/ui/navigation/SideRail.svelte';
@@ -174,8 +173,6 @@
                 <div class="shell-panel" transition:waveSlide={{ x: 24 }}>
                   {#if panel === 'queue'}
                     <QueuePanel />
-                  {:else if panel === 'lyrics'}
-                    <LyricsPanel />
                   {:else if panel === 'eq'}
                     <EqualizerPanel />
                   {:else if panel === 'output'}

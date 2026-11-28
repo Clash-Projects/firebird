@@ -474,17 +474,6 @@
     <button
       type="button"
       class="dock-glyph dock-press"
-      onclick={() => windowState.toggleRightPanel('lyrics')}
-      use:waveTooltip={'Lyrics (L)'}
-      aria-label="Lyrics (L)"
-      aria-pressed={windowState.activeRightPanel === 'lyrics'}
-    >
-      <WaveIcon name="lyrics" size={15} />
-    </button>
-
-    <button
-      type="button"
-      class="dock-glyph dock-press"
       onclick={() => windowState.toggleRightPanel('queue')}
       use:waveTooltip={'Queue (Q)'}
       aria-label="Queue (Q)"
