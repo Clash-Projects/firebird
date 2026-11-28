@@ -20,6 +20,7 @@ use tokio::sync::{Mutex, Semaphore};
 
 use crate::storage::app_database::AppDatabase;
 
+use super::apple_music_artist;
 use super::apple_music_canvas::AppleMusicCanvas;
 use super::community_canvas::CommunityCanvas;
 use super::official_artwork_service::OfficialArtworkService;
@@ -272,7 +273,11 @@ static MP4_URL_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)\.mp4(?:[?#]|$)").unwrap());
 
 /// Picks a mid-size H.264 `STREAM-INF` rendition.
-pub fn pick_animated_artwork_stream(playlist: &str, master_url: &str) -> Option<String> {
+pub fn pick_animated_artwork_stream(
+    playlist: &str,
+    master_url: &str,
+    preferred_size: i32,
+) -> Option<String> {
     let lines: Vec<&str> = playlist.lines().collect();
     let mut best_url = String::new();
     let mut best_score = i32::MIN;
@@ -304,8 +309,8 @@ pub fn pick_animated_artwork_stream(playlist: &str, master_url: &str) -> Option<
         if line.contains("hvc1") || line.contains("hev1") {
             score -= 400;
         }
-        score -= (size - 640).abs();
-        if size >= 1080 {
+        score -= (size - preferred_size).abs();
+        if size > preferred_size && size >= 1080 {
             score -= 800;
         }
         if size >= 1920 {
@@ -428,6 +433,17 @@ impl AnimatedArtworkService {
             semaphore: Semaphore::new(2),
             inflight: Mutex::new(HashMap::new()),
         }
+    }
+
+    pub async fn lookup_artist_banner(&self, artist: &str, track_titles: &[String]) -> Option<String> {
+        tokio::time::timeout(Duration::from_secs(12), async {
+            let manifest = apple_music_artist::lookup_banner(&self.http, artist, track_titles).await?;
+            let playable = self.resolve_playable_url(manifest.as_str(), 1280).await;
+            Some(playable)
+        })
+        .await
+        .ok()
+        .flatten()
     }
 
     fn track_key_id(artist: &str, title: &str) -> String {
@@ -899,13 +915,13 @@ impl AnimatedArtworkService {
 
     async fn resolve_playable_if_needed(&self, url: &str) -> String {
         if url.contains(".m3u8") {
-            self.resolve_playable_url(url).await
+            self.resolve_playable_url(url, 640).await
         } else {
             url.to_string()
         }
     }
 
-    async fn resolve_playable_url(&self, master_url: &str) -> String {
+    async fn resolve_playable_url(&self, master_url: &str, preferred_size: i32) -> String {
         let Ok(master) = self.get_plain(master_url).await else {
             return master_url.to_string();
         };
@@ -914,7 +930,7 @@ impl AnimatedArtworkService {
                 return direct;
             }
         }
-        let stream = pick_animated_artwork_stream(&master, master_url);
+        let stream = pick_animated_artwork_stream(&master, master_url, preferred_size);
         let variant_url = stream.as_deref().unwrap_or(master_url);
         if let Some(ref s) = stream {
             if s != master_url {
@@ -976,7 +992,7 @@ mod tests {
 mid_h264.m3u8
 ";
         assert_eq!(
-            pick_animated_artwork_stream(master, "https://cdn.apple.com/master.m3u8"),
+            pick_animated_artwork_stream(master, "https://cdn.apple.com/master.m3u8", 640),
             Some("https://cdn.apple.com/mid_h264.m3u8".to_string())
         );
 

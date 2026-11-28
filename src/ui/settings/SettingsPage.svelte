@@ -624,7 +624,7 @@
           <div class="min-w-0 flex-1">
             <div class="text-[13.5px] font-semibold">Canvas &amp; animated artwork</div>
             <div class="text-[12px] text-[var(--lw-text-secondary)]">
-              Play looping Canvas and motion cover art in Now Playing
+              Play looping Canvas, motion cover art, and artist banner videos
             </div>
           </div>
           <Switch

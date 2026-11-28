@@ -2,7 +2,7 @@
   import Artwork from './Artwork.svelte';
 
   interface Props {
-    posterUrl: string;
+    posterUrl?: string;
     title?: string;
     artist?: string;
     album?: string;
@@ -25,18 +25,20 @@
   style:height={size ? `${size}px` : undefined}
   style:border-radius="{radius}px"
 >
-  <Artwork
-    src={posterUrl}
-    label={title || album}
-    kind={title ? 'track' : 'album'}
-    {artist}
-    {album}
-    {size}
-    {radius}
-    {onArtworkLoad}
-    highResolution
-    class="h-full w-full"
-  />
+  {#if posterUrl !== undefined}
+    <Artwork
+      src={posterUrl}
+      label={title || album}
+      kind={title ? 'track' : 'album'}
+      {artist}
+      {album}
+      {size}
+      {radius}
+      {onArtworkLoad}
+      highResolution
+      class="h-full w-full"
+    />
+  {/if}
   {#if activeUrl}
     {#key activeUrl}
       <video
@@ -46,6 +48,10 @@
         muted
         playsinline
         onloadstart={() => { playingUrl = ''; }}
+        oncanplay={({ currentTarget }) => {
+          // A hidden first frame can prevent native autoplay from starting.
+          if (currentTarget.paused) void currentTarget.play().catch(() => {});
+        }}
         onplaying={(event) => { playingUrl = event.currentTarget.getAttribute('src') ?? ''; }}
         onerror={(event) => {
           const failed = event.currentTarget.getAttribute('src');

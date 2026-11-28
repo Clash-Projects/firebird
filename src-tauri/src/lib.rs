@@ -651,6 +651,7 @@ pub fn run() {
             commands::integrations::artwork_resolve_album,
             commands::integrations::artwork_resolve_artist,
             commands::integrations::artwork_lookup_animated,
+            commands::integrations::artwork_lookup_artist_banner,
             commands::integrations::home_load_feed,
             commands::integrations::home_load_new_albums,
             commands::integrations::home_load_personal_mix,

@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { playTrackNow } from '$src/app/trackActions';
   import { isTauriRuntime } from '$src/lib/ipc';
   import { libraryStore, mapYtArtist, mapYtTrack } from '$src/state/library.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
   import type { Album, Track } from '$src/state/types';
+  import AnimatedArtworkVideo from '$src/ui/components/AnimatedArtworkVideo.svelte';
   import Artwork from '$src/ui/components/Artwork.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import ShelfRail from '$src/ui/components/ShelfRail.svelte';
@@ -14,7 +15,7 @@
   import { goAlbum, goArtistPopularTracks } from '$src/ui/navigation/waveNav';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import ArtistPopularTracksPage from './ArtistPopularTracksPage.svelte';
-  import { subscribeToArtistPage, type ArtistPageResponse } from './artistPageLoader';
+  import { loadArtistBannerMotion, subscribeToArtistPage, type ArtistPageResponse } from './artistPageLoader';
   import { readArtistReleases, selectEssentialAlbums, selectLatestAlbum } from './artistReleases';
 
   const TRACKS_PER_COLUMN = 3;
@@ -26,11 +27,17 @@
   let remoteSongs = $state<Track[]>([]);
   let remoteCatalog = $state<ReturnType<typeof readArtistReleases> | null>(null);
   let bannerUrl = $state('');
-  let portraitBanner = $state(false);
-  let loadedProfile = $state('');
+  let stillArtwork = $state<{ artistId: string; url: string } | null>(null);
+  let systemReduceMotion = $state(true);
+  let artistMotion = $state<{ artistId: string; url: string | null } | null>(null);
 
   let artist = $derived(libraryStore.artists.find((entry) => entry.id === artistId));
   let profileArtwork = $derived(artist?.bannerUrl || artist?.artworkUrl);
+  let stillUrl = $derived(stillArtwork?.artistId === artistId ? stillArtwork.url : '');
+  let motionEnabled = $derived(
+    settingsStore.canvasEnabled && !settingsStore.reduceMotion && !settingsStore.performanceMode && !systemReduceMotion,
+  );
+  let motionUrl = $derived(motionEnabled && artistMotion?.artistId === artistId ? artistMotion.url : null);
   let topTracks = $derived(
     remoteSongs.length ? remoteSongs : libraryStore.tracksByIds(artist?.topTrackIds ?? [])
   );
@@ -55,6 +62,74 @@
   let latestRelease = $derived(latestAlbum ?? featuredTrack);
   let releasesLoading = $derived(loading && !remoteCatalog && !latestRelease);
 
+  onMount(() => {
+    const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const sync = () => { systemReduceMotion = preference.matches; };
+    sync();
+    preference.addEventListener('change', sync);
+    return () => preference.removeEventListener('change', sync);
+  });
+
+  function artistImageAtSize(src: string, size: number) {
+    try {
+      const url = new URL(src);
+      if (url.protocol === 'https:' && /\.(?:googleusercontent|ggpht)\.com$/.test(url.hostname)) {
+        url.pathname = url.pathname.replace(/=(?:s\d+|w\d+(?:-h\d+)?|h\d+)(?:-[\w-]+)?$/, `=s${size}`);
+        return url.href;
+      }
+    } catch {
+      return src;
+    }
+    return src;
+  }
+
+  $effect(() => {
+    const browseId = artistId;
+    const sources = [bannerUrl, profileArtwork].filter((src): src is string => Boolean(src));
+    const urls = [...new Set([
+      ...sources.map((src) => artistImageAtSize(src, 0)),
+      ...sources.map((src) => artistImageAtSize(src, 1600)),
+      ...sources,
+    ])];
+    if (!urls.length) return;
+
+    const image = new Image();
+    image.referrerPolicy = 'no-referrer';
+    let index = 0;
+
+    function loadNext() {
+      const url = urls[index++];
+      if (!url || untrack(() => stillUrl) === url) return;
+      image.onload = () => { stillArtwork = { artistId: browseId, url }; };
+      image.onerror = loadNext;
+      image.src = url;
+    }
+
+    loadNext();
+    return () => {
+      image.onload = null;
+      image.onerror = null;
+    };
+  });
+
+  $effect(() => {
+    const name = artist?.name;
+    const browseId = artistId;
+    if (!name || !browseId || !motionEnabled || showPopularTracks || !isTauriRuntime()) return;
+    if (loading && !remoteSongs.length) return;
+
+    const trackTitles = topTracks
+      .filter((track) => track.artists.includes(name) || track.artist === name)
+      .slice(0, 4)
+      .map((track) => track.title);
+
+    let current = true;
+    void loadArtistBannerMotion(browseId, name, trackTitles).then((url) => {
+      if (current) artistMotion = { artistId: browseId, url };
+    });
+    return () => { current = false; };
+  });
+
   $effect(() => {
     const browseId = artistId;
     const allTracksPage = showPopularTracks;
@@ -64,8 +139,6 @@
     remoteSongs = [];
     remoteCatalog = null;
     bannerUrl = '';
-    portraitBanner = false;
-    loadedProfile = '';
 
     const needsFetch = Boolean(browseId && isTauriRuntime());
     loading = needsFetch;
@@ -130,27 +203,18 @@
 <div class="artist-page" aria-busy={loading}>
   {#if artist}
     <header class="artist-hero">
-      {#if bannerUrl}
-        <img
-          class="catalog-banner"
-          class:portrait-banner={portraitBanner}
-          class:banner-backdrop={Boolean(profileArtwork && loadedProfile === profileArtwork)}
-          src={bannerUrl}
-          alt=""
-          referrerpolicy="no-referrer"
-          onload={({ currentTarget }) => {
-            if (currentTarget instanceof HTMLImageElement) {
-              portraitBanner = currentTarget.naturalWidth / currentTarget.naturalHeight < 1.45;
-            }
-          }}
-          onerror={() => (bannerUrl = '')}
-        />
-      {/if}
-      {#if profileArtwork}
-        {@const profile = profileArtwork}
-        <div class="profile-banner" class:profile-ready={loadedProfile === profile} aria-hidden="true">
-          <Artwork src={profile} kind="artist" highResolution upgrade={false} radius={0} class="h-full w-full" onArtworkLoad={() => (loadedProfile = profile)} />
+      {#if stillUrl}
+        <img class="still-backdrop" src={stillUrl} alt="" referrerpolicy="no-referrer" />
+        <div class="still-banner">
+          <img src={stillUrl} alt="" referrerpolicy="no-referrer" />
         </div>
+      {/if}
+      {#if motionUrl}
+        {#key motionUrl}
+          <div class="motion-banner" aria-hidden="true">
+            <AnimatedArtworkVideo videoUrls={[motionUrl]} radius={0} class="h-full w-full" />
+          </div>
+        {/key}
       {/if}
 
       <div class="artist-identity">
@@ -319,54 +383,47 @@
       linear-gradient(0deg, rgb(8 14 16 / 54%), transparent 54%);
   }
 
-  .catalog-banner,
-  .profile-banner {
+  .still-backdrop,
+  .still-banner {
     position: absolute;
     z-index: -2;
-    inset: 0 0 0 auto;
-    width: 100%;
     height: 100%;
+    pointer-events: none;
   }
 
-  .catalog-banner {
-    width: auto;
-    max-width: 78%;
-    object-fit: contain;
-    object-position: right center;
-    mask-image: linear-gradient(90deg, transparent, #000 38%);
-  }
-
-  .portrait-banner {
-    width: min(72%, 640px);
-    mask-image: linear-gradient(90deg, transparent, #000 36%);
-    object-fit: cover;
-    object-position: center 28%;
-  }
-
-  .banner-backdrop {
+  .still-backdrop {
     inset: 0;
     width: 100%;
-    max-width: none;
-    mask-image: none;
     filter: blur(36px) brightness(0.65);
     object-fit: cover;
     transform: scale(1.08);
   }
 
-  .profile-banner {
-    right: clamp(10px, 7cqw, 150px);
-    width: min(70%, 440px);
-    mask-image: linear-gradient(90deg, transparent, #000 18% 88%, transparent);
-    visibility: hidden;
+  .still-banner {
+    inset: 0 clamp(12px, 5cqw, 100px) 0 auto;
+    width: min(58%, 780px);
+    display: grid;
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+    place-items: center;
   }
 
-  .profile-banner.profile-ready {
-    visibility: visible;
+  .still-banner img {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    mask-image: linear-gradient(90deg, transparent, #000 18% 86%, transparent);
   }
 
-  .profile-banner :global(img) {
-    object-fit: cover;
+  .motion-banner {
+    position: absolute;
+    z-index: -2;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .motion-banner :global(video) {
     object-position: center 28%;
+    transition: opacity 200ms var(--ease-wave);
   }
 
   .artist-identity {

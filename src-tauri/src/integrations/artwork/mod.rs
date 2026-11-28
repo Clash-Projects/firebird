@@ -1,4 +1,5 @@
 pub mod animated_artwork_service;
+mod apple_music_artist;
 pub mod animated_artwork_session;
 pub mod apple_music_canvas;
 pub mod artwork_resolver;

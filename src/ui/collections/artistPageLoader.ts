@@ -28,6 +28,22 @@ const CACHE_TTL = 5 * 60 * 1000;
 const CACHE_LIMIT = 24;
 const cache = new Map<string, { page: ArtistPageResponse; expiresAt: number }>();
 const pending = new Map<string, ArtistRequest>();
+const motionCache = new Map<string, { result: Promise<string | null>; expiresAt: number }>();
+
+export function loadArtistBannerMotion(artistId: string, artist: string, trackTitles: string[]): Promise<string | null> {
+  const key = JSON.stringify([artistId, artist, trackTitles]);
+  const cached = motionCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.result;
+
+  motionCache.delete(key);
+  if (motionCache.size >= CACHE_LIMIT) {
+    const oldest = motionCache.keys().next().value;
+    if (oldest !== undefined) motionCache.delete(oldest);
+  }
+  const result = ipcInvoke<string>('artwork_lookup_artist_banner', { artist, trackTitles });
+  motionCache.set(key, { result, expiresAt: Date.now() + CACHE_TTL });
+  return result;
+}
 
 export function subscribeToArtistPage(browseId: string, accountScope: string, listener: PageListener): () => void {
   const key = JSON.stringify([accountScope, browseId]);

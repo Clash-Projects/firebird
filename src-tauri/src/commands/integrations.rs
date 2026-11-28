@@ -927,6 +927,18 @@ pub async fn artwork_lookup_animated(
     Ok(state.animated_artwork.lookup(&query).await)
 }
 
+#[tauri::command]
+pub async fn artwork_lookup_artist_banner(
+    state: State<'_, AppState>,
+    artist: String,
+    track_titles: Vec<String>,
+) -> Result<Option<String>, String> {
+    Ok(state
+        .animated_artwork
+        .lookup_artist_banner(&artist, &track_titles)
+        .await)
+}
+
 // Home, Feed, Search, Stats, Updates commands
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
