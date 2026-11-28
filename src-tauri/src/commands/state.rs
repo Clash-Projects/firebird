@@ -290,6 +290,10 @@ impl AppState {
         self.po_tokens.set_host(Arc::new(
             crate::extractor::ephemeral_webview_broker::TauriBotGuardHost::new(handle.clone()),
         ));
+        let emit_handle = handle.clone();
+        self.yt_library_sync.set_on_synced(Some(Arc::new(move |playlists_changed| {
+            let _ = emit_handle.emit("yt-library-synced", playlists_changed);
+        })));
         if let Ok(mut guard) = self.app_handle.lock() {
             *guard = Some(handle);
         }

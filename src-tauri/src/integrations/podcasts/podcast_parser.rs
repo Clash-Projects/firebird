@@ -726,19 +726,7 @@ fn artwork_url_in_map(map: &Map<String, Value>) -> Option<String> {
         }
     }
     let raw = url?;
-    let absolute = if raw.starts_with("//") {
-        format!("https:{raw}")
-    } else {
-        raw
-    };
-    if (absolute.contains("googleusercontent.com") || absolute.contains("ggpht.com"))
-        && absolute.contains('=')
-    {
-        if let Some(idx) = absolute.rfind('=') {
-            return Some(format!("{}=w512-h512-l90-rj", &absolute[..idx]));
-        }
-    }
-    Some(absolute)
+    Some(crate::extractor::innertube_api::InnerTubeMusicApi::high_resolution_artwork(&raw))
 }
 
 fn browse_ids_in_map(map: &Map<String, Value>) -> Vec<String> {

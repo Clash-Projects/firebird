@@ -16,6 +16,7 @@
     connected?: boolean;
     accountName?: string;
     profileEmail?: string;
+    photoUrl?: string;
   }
 
   function applyYtConnection(conn: BackendYtConnection | null) {
@@ -23,6 +24,11 @@
     settingsStore.ytConnected = Boolean(conn.connected);
     settingsStore.ytAccountName = conn.accountName || '';
     settingsStore.ytAccountEmail = conn.profileEmail || '';
+    if (!conn.connected) {
+      settingsStore.ytAccountAvatar = '';
+    } else if (conn.photoUrl) {
+      settingsStore.ytAccountAvatar = conn.photoUrl;
+    }
   }
 
   $effect(() => {
@@ -57,6 +63,7 @@
     pluginManager.init();
     let disconnectPlayer: (() => void) | undefined;
     let unlistenYt: (() => void) | undefined;
+    let unlistenSync: (() => void) | undefined;
 
     playerStore.connectBackend().then((fn) => {
       disconnectPlayer = fn;
@@ -89,8 +96,14 @@
       void ipcListen<BackendYtConnection>('yt-connection-changed', (conn) => {
         applyYtConnection(conn);
         void libraryStore.loadHomeFeed(Boolean(conn?.connected));
+        void libraryStore.loadLocalStorage();
       }).then((fn) => {
         unlistenYt = fn ?? undefined;
+      });
+      void ipcListen<boolean>('yt-library-synced', () => {
+        void libraryStore.loadLocalStorage();
+      }).then((fn) => {
+        unlistenSync = fn ?? undefined;
       });
     }
 
@@ -99,6 +112,7 @@
     return () => {
       disconnectPlayer?.();
       unlistenYt?.();
+      unlistenSync?.();
       detachKeys();
       detachLife();
     };

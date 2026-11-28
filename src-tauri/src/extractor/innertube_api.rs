@@ -1586,6 +1586,11 @@ impl InnerTubeMusicApi {
         self.secure.write_yt_active(Some(&payload.to_string()));
     }
 
+    pub fn update_enriched_connection(&self, conn: YtConnection) {
+        self.set_connection(conn);
+        self.persist_active_pointer();
+    }
+
     pub async fn connect(&self, raw_cookies: &str) -> Result<(), InnerTubeError> {
         self.connect_as(raw_cookies, "", "").await
     }
@@ -2529,7 +2534,9 @@ impl InnerTubeMusicApi {
             }
             let name_node = item.get("accountName");
             let name = name_node
+                .and_then(|n| n.get("runs"))
                 .and_then(runs_text)
+                .or_else(|| name_node.and_then(runs_text))
                 .or_else(|| {
                     name_node
                         .and_then(|n| n.get("simpleText"))
@@ -6875,14 +6882,24 @@ impl InnerTubeMusicApi {
     }
 
     pub fn high_resolution_artwork(url: &str) -> String {
+        static RE_GUSER_WH: OnceLock<Regex> = OnceLock::new();
         let mut u = if url.starts_with("//") {
             format!("https:{url}")
         } else {
             url.to_string()
         };
-        if (u.contains("googleusercontent.com") || u.contains("ggpht.com")) && u.contains('=') {
-            if let Some(idx) = u.rfind('=') {
-                u = format!("{}=w512-h512-l90-rj", &u[..idx]);
+        if u.contains("googleusercontent.com") || u.contains("ggpht.com") {
+            // Split off any ?query or #fragment so we never truncate signed params.
+            let suffix_idx = u.find(['?', '#']).unwrap_or(u.len());
+            let (path_part, tail) = u.split_at(suffix_idx);
+            if let Some(eq_idx) = path_part.rfind('=') {
+                let (base, params) = path_part.split_at(eq_idx);
+                let wh_re = RE_GUSER_WH.get_or_init(|| {
+                    Regex::new(r"^=w\d+-h\d+(?:-l\d+)?(?:-rj)?$").unwrap()
+                });
+                if wh_re.is_match(params) {
+                    u = format!("{base}=w512-h512-l90-rj{tail}");
+                }
             }
         }
         u
@@ -8569,5 +8586,61 @@ mod tests {
             .await
             .expect("request");
         assert_eq!(missing_res.status().as_u16(), 404);
+    }
+
+    #[test]
+    fn parse_switcher_channels_extracts_runs_name_and_preserves_avatar_url() {
+        let api = InnerTubeMusicApi::with_defaults().expect("api");
+        let payload = json!({
+            "actions": [{
+                "accountItem": {
+                    "accountName": { "runs": [{ "text": "Metanoia Music" }] },
+                    "channelHandle": { "runs": [{ "text": "@TheMetanoia17" }] },
+                    "accountPhoto": {
+                        "thumbnails": [{
+                            "url": "https://yt3.ggpht.com/ytc/AIdro_test=s88-c-k-c0x00ffffff-no-rj"
+                        }]
+                    },
+                    "pageId": "108456789012345678901"
+                }
+            }]
+        });
+        let channels = api.parse_switcher_channels(&payload);
+        assert_eq!(channels.len(), 1);
+        assert_eq!(channels[0].name, "Metanoia Music");
+        assert_eq!(channels[0].handle, "@TheMetanoia17");
+        assert_eq!(channels[0].page_id, "108456789012345678901");
+        assert_eq!(
+            channels[0].photo_url,
+            "https://yt3.ggpht.com/ytc/AIdro_test=s88-c-k-c0x00ffffff-no-rj"
+        );
+    }
+
+    #[test]
+    fn high_resolution_artwork_preserves_avatars_and_query_params() {
+        assert_eq!(
+            InnerTubeMusicApi::high_resolution_artwork(
+                "https://lh3.googleusercontent.com/abc=w120-h120-l90-rj"
+            ),
+            "https://lh3.googleusercontent.com/abc=w512-h512-l90-rj"
+        );
+        assert_eq!(
+            InnerTubeMusicApi::high_resolution_artwork(
+                "//lh3.googleusercontent.com/abc=w60-h60-l90-rj?foo=bar"
+            ),
+            "https://lh3.googleusercontent.com/abc=w512-h512-l90-rj?foo=bar"
+        );
+        assert_eq!(
+            InnerTubeMusicApi::high_resolution_artwork(
+                "https://yt3.ggpht.com/ytc/avatar=s88-c-k-c0x00ffffff-no-rj"
+            ),
+            "https://yt3.ggpht.com/ytc/avatar=s88-c-k-c0x00ffffff-no-rj"
+        );
+        assert_eq!(
+            InnerTubeMusicApi::high_resolution_artwork(
+                "https://lh3.googleusercontent.com/xyz=w544-h544-p-k-no-nu"
+            ),
+            "https://lh3.googleusercontent.com/xyz=w544-h544-p-k-no-nu"
+        );
     }
 }

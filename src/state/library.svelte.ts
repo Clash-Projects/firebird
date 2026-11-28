@@ -229,7 +229,9 @@ class LibraryStore {
 
       this.upsertTracks(collectedTracks);
       this.playlists = mappedPlaylists;
-      if (liked.length > 0) this.likedIds = liked;
+      if (savedPlaylists.some((pl) => pl.mode === 'liked')) {
+        this.likedIds = liked;
+      }
     }
 
     if (Array.isArray(downloads)) {

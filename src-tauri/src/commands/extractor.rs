@@ -382,6 +382,7 @@ async fn enrich_and_persist_yt_profile(state: &AppState, pid: &str) -> YtConnect
         let encoded = YtProfile::list_to_json(&profiles);
         state.secure.write_yt_profiles(Some(&encoded));
     }
+    state.tube.update_enriched_connection(conn.clone());
     conn
 }
 
@@ -400,6 +401,7 @@ pub async fn yt_connect_cookies(
         .await
         .map_err(|e| e.to_string())?;
     let conn = enrich_and_persist_yt_profile(&state, pid).await;
+    library_providers_for(&state).invalidate_account_surfaces();
     state.emit_event("yt-connection-changed", conn.clone());
     state.yt_library_sync.kick();
     Ok(conn)
@@ -411,6 +413,7 @@ pub async fn yt_sign_out(state: State<'_, AppState>) -> Result<(), String> {
         login.sign_out_webview().await;
     }
     state.tube.sign_out().await;
+    library_providers_for(&state).invalidate_account_surfaces();
     state.emit_event("yt-connection-changed", state.tube.connection());
     Ok(())
 }
@@ -472,6 +475,7 @@ pub async fn yt_switch_identity(
         .await
         .map_err(|e| e.to_string())?;
     let conn = enrich_and_persist_yt_profile(&state, &page_id).await;
+    library_providers_for(&state).invalidate_account_surfaces();
     state.emit_event("yt-connection-changed", conn.clone());
     state.yt_library_sync.kick();
     Ok(conn)
@@ -606,6 +610,7 @@ pub async fn yt_web_sign_in(
         .await
         .map_err(|e| e.to_string())?;
     let conn = enrich_and_persist_yt_profile(&state, &page_id).await;
+    library_providers_for(&state).invalidate_account_surfaces();
     state.emit_event("yt-connection-changed", conn.clone());
     state.yt_library_sync.kick();
     Ok(conn)

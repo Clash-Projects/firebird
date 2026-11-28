@@ -236,7 +236,7 @@ pub struct YtLibrarySync {
     repo: Arc<PlaylistRepository>,
     enabled: EnabledCheck,
     on_status: Option<SyncStatusCallback>,
-    on_synced: Option<SyncedCallback>,
+    on_synced: Mutex<Option<SyncedCallback>>,
     like_pacing: Duration,
     now_ms: ClockFn,
     rt: Mutex<RuntimeFlags>,
@@ -285,7 +285,7 @@ impl YtLibrarySync {
             repo,
             enabled,
             on_status,
-            on_synced,
+            on_synced: Mutex::new(on_synced),
             like_pacing,
             now_ms,
             rt: Mutex::new(rt),
@@ -299,10 +299,21 @@ impl YtLibrarySync {
         id.strip_prefix("VL").unwrap_or(id)
     }
 
+    fn spawn_task<F>(fut: F)
+    where
+        F: std::future::Future<Output = ()> + Send + 'static,
+    {
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            handle.spawn(fut);
+        } else {
+            tauri::async_runtime::spawn(fut);
+        }
+    }
+
     pub fn start(self: &Arc<Self>) {
         if !self.ticker_started.swap(true, Ordering::AcqRel) {
             let me = Arc::clone(self);
-            tokio::spawn(async move {
+            Self::spawn_task(async move {
                 let mut interval = tokio::time::interval(TICK_EVERY);
                 interval.tick().await;
                 loop {
@@ -317,13 +328,29 @@ impl YtLibrarySync {
         self.kick();
     }
 
+    pub fn set_on_synced(&self, cb: Option<SyncedCallback>) {
+        if let Ok(mut g) = self.on_synced.lock() {
+            *g = cb;
+        }
+    }
+
+    fn notify_synced(&self, playlists_changed: bool) {
+        if self.disposed.load(Ordering::Acquire) {
+            return;
+        }
+        let cb = self.on_synced.lock().ok().and_then(|g| g.clone());
+        if let Some(cb) = cb {
+            cb(playlists_changed);
+        }
+    }
+
     pub fn dispose(&self) {
         self.disposed.store(true, Ordering::Release);
     }
 
     pub fn kick(self: &Arc<Self>) {
         let me = Arc::clone(self);
-        tokio::spawn(async move {
+        Self::spawn_task(async move {
             me.run(true).await;
         });
     }
@@ -343,7 +370,7 @@ impl YtLibrarySync {
         }
         let gen = self.debounce_gen.fetch_add(1, Ordering::AcqRel) + 1;
         let me = Arc::clone(self);
-        tokio::spawn(async move {
+        Self::spawn_task(async move {
             tokio::time::sleep(DEBOUNCE_DELAY).await;
             if me.disposed.load(Ordering::Acquire)
                 || me.debounce_gen.load(Ordering::Acquire) != gen
@@ -409,14 +436,17 @@ impl YtLibrarySync {
             if !rerun || self.disposed.load(Ordering::Acquire) {
                 break;
             }
-            let gen = self.debounce_gen.fetch_add(1, Ordering::AcqRel) + 1;
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            if self.disposed.load(Ordering::Acquire)
-                || self.debounce_gen.load(Ordering::Acquire) != gen
-            {
-                break;
+            let urgent = self.rt.lock().map(|g| g.force_full).unwrap_or(false);
+            if !urgent {
+                let gen = self.debounce_gen.fetch_add(1, Ordering::AcqRel) + 1;
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                if self.disposed.load(Ordering::Acquire)
+                    || self.debounce_gen.load(Ordering::Acquire) != gen
+                {
+                    break;
+                }
             }
-            next_force = false;
+            next_force = urgent;
         }
     }
 
@@ -459,16 +489,38 @@ impl YtLibrarySync {
         let key = Self::account_key(&conn);
         Self::adopt_legacy_empty_email_key(&mut state, &key);
         state.accounts.entry(key.clone()).or_default();
-        self.handle_account_switch(&mut state, &key);
+        let switched_stripped = self.handle_account_switch(&mut state, &key);
         state.last_account = Some(key.clone());
+        if switched_stripped {
+            self.save_state(&state);
+            self.notify_synced(false);
+        }
 
         let mut account = state.accounts.remove(&key).unwrap_or_default();
         let more_likes = self
             .sync_liked(&mut account, force_flag || local_dirty)
             .await;
+        if Self::account_key(&self.tube.connection()) != key {
+            if let Ok(mut g) = self.rt.lock() {
+                g.running = false;
+                g.force_full = true;
+                g.rerun = true;
+            }
+            self.publish(false, "");
+            return true;
+        }
         let playlists_changed = self
             .sync_playlists(&state, &mut account, &key, force_flag || local_dirty)
             .await;
+        if Self::account_key(&self.tube.connection()) != key {
+            if let Ok(mut g) = self.rt.lock() {
+                g.running = false;
+                g.force_full = true;
+                g.rerun = true;
+            }
+            self.publish(false, "");
+            return true;
+        }
 
         let linked_ids: HashSet<String> = account
             .links
@@ -503,11 +555,7 @@ impl YtLibrarySync {
         };
 
         self.publish(false, &message);
-        if !self.disposed.load(Ordering::Acquire) {
-            if let Some(cb) = &self.on_synced {
-                cb(playlists_changed);
-            }
-        }
+        self.notify_synced(playlists_changed);
 
         rerun
     }
@@ -579,9 +627,12 @@ impl YtLibrarySync {
         } else {
             plan.remove_local.iter().map(StoredTrack::key).collect()
         };
-        self.set_applying_local(true);
-        self.repo.apply_batch(liked.id, &plan.add_local, &remove_keys);
-        self.set_applying_local(false);
+        if !plan.add_local.is_empty() || !remove_keys.is_empty() {
+            self.set_applying_local(true);
+            self.repo.apply_batch(liked.id, &plan.add_local, &remove_keys);
+            self.set_applying_local(false);
+            self.notify_synced(false);
+        }
 
         let mut writes = 0usize;
         let mut queued = false;
@@ -1142,28 +1193,38 @@ impl YtLibrarySync {
         state.last_account = Some(key.to_string());
     }
 
-    fn handle_account_switch(&self, state: &mut SyncState, key: &str) {
+    fn handle_account_switch(&self, state: &mut SyncState, key: &str) -> bool {
         let Some(last) = state.last_account.clone() else {
-            return;
+            return false;
         };
         if last == key {
-            return;
+            return false;
         }
-        let Some(previous) = state.accounts.get_mut(&last) else {
-            return;
-        };
+        let prev_liked_base = state
+            .accounts
+            .get(&last)
+            .map(|p| p.liked_base.clone())
+            .unwrap_or_default();
         let liked = self.repo.ensure_liked_songs();
         let strip: HashSet<String> = liked
             .tracks
             .iter()
-            .filter(|t| base_entries(t).iter().any(|e| previous.liked_base.contains(e)))
+            .filter(|t| {
+                base_entries(t).iter().any(|e| prev_liked_base.contains(e))
+                    || (!t.video_id.is_empty() && t.playback_url.is_empty())
+            })
             .map(StoredTrack::key)
             .collect();
-        self.set_applying_local(true);
-        self.repo.apply_batch(liked.id, &[], &strip);
-        self.set_applying_local(false);
-        previous.liked_base.clear();
-        previous.liked_seeded = false;
+        let stripped = !strip.is_empty();
+        if stripped {
+            self.set_applying_local(true);
+            self.repo.apply_batch(liked.id, &[], &strip);
+            self.set_applying_local(false);
+        }
+        if let Some(previous) = state.accounts.get_mut(&last) {
+            previous.liked_base.clear();
+            previous.liked_seeded = false;
+        }
         if let Some(incoming) = state.accounts.get_mut(key) {
             incoming.liked_base.clear();
             incoming.liked_seeded = false;
@@ -1172,6 +1233,7 @@ impl YtLibrarySync {
             g.liked_head.clear();
             g.last_liked_full_ms = None;
         }
+        stripped
     }
 
     fn load_state(&self) -> SyncState {
@@ -1282,5 +1344,48 @@ mod tests {
         assert!(!is_bulk_removal(25, 30));
         assert!(!is_bulk_removal(26, 100));
         assert!(is_bulk_removal(26, 80));
+    }
+
+    #[test]
+    fn account_switch_strips_previous_youtube_likes_and_keeps_local_files() {
+        let dir = std::env::temp_dir().join(format!(
+            "firebird_sync_switch_test_{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        let db = Arc::new(AppDatabase::open(&dir));
+        let tube = Arc::new(InnerTubeMusicApi::with_defaults().expect("api"));
+        let repo = Arc::new(PlaylistRepository::new(Arc::clone(&db)));
+        let liked = repo.ensure_liked_songs();
+        let remote_track = tr("Primary Song", "Primary Artist", "vid_primary");
+        let local_track = StoredTrack {
+            name: "Local File".to_string(),
+            artist: "Local Artist".to_string(),
+            playback_url: "C:\\Music\\song.flac".to_string(),
+            ..Default::default()
+        };
+        repo.replace_tracks(liked.id, &[remote_track.clone(), local_track.clone()]);
+
+        let sync = YtLibrarySync::new(
+            Arc::clone(&db),
+            tube,
+            Arc::clone(&repo),
+            Arc::new(|| true),
+            None,
+            None,
+        );
+        let mut state = SyncState {
+            last_account: Some("user@example.com|".to_string()),
+            accounts: HashMap::from([("user@example.com|".to_string(), AccountSyncState::default())]),
+            legacy_remotes: HashMap::new(),
+        };
+
+        let stripped = sync.handle_account_switch(&mut state, "user@example.com|108456789012345678901");
+        assert!(stripped);
+        let updated = repo.ensure_liked_songs();
+        assert_eq!(updated.tracks.len(), 1);
+        assert_eq!(updated.tracks[0].name, "Local File");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

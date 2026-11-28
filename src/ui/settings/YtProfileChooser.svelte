@@ -56,6 +56,13 @@
     try {
       const list = await ipcInvoke<YtChannelItem[]>('yt_fetch_available_channels');
       channels = Array.isArray(list) ? list : [];
+      if (!activePhotoUrl) {
+        const match = channels.find((c) => c.pageId === activePageId);
+        if (match?.photoUrl) {
+          activePhotoUrl = match.photoUrl;
+          settingsStore.ytAccountAvatar = match.photoUrl;
+        }
+      }
     } finally {
       loadingChannels = false;
     }
@@ -67,7 +74,21 @@
       void ipcInvoke<YtConnectionResult>('yt_get_connection').then((conn) => {
         if (conn?.connected) {
           activePageId = conn.activePageId ?? '';
-          activePhotoUrl = conn.photoUrl ?? '';
+          activePhotoUrl = conn.photoUrl || settingsStore.ytAccountAvatar || '';
+          if (activePhotoUrl) settingsStore.ytAccountAvatar = activePhotoUrl;
+          if (!activePhotoUrl || !settingsStore.ytAccountName) {
+            void ipcInvoke<{ name?: string; email?: string; photoUrl?: string }>(
+              'yt_fetch_account_info',
+              { forceRefresh: false, pageId: activePageId }
+            ).then((acc) => {
+              if (acc?.name && !settingsStore.ytAccountName) settingsStore.ytAccountName = acc.name;
+              if (acc?.email && !settingsStore.ytAccountEmail) settingsStore.ytAccountEmail = acc.email;
+              if (acc?.photoUrl) {
+                activePhotoUrl = acc.photoUrl;
+                settingsStore.ytAccountAvatar = acc.photoUrl;
+              }
+            });
+          }
           void refreshChannels();
         }
       });
@@ -81,6 +102,7 @@
     settingsStore.ytAccountEmail = conn.profileEmail || '';
     activePageId = conn.activePageId ?? '';
     activePhotoUrl = conn.photoUrl ?? '';
+    settingsStore.ytAccountAvatar = activePhotoUrl;
     showCookieForm = false;
     cookiesInput = '';
     cookieError = '';
@@ -179,6 +201,7 @@
           conn.photoUrl ||
           channels.find((c) => c.pageId === pageId)?.photoUrl ||
           '';
+        settingsStore.ytAccountAvatar = activePhotoUrl;
         void libraryStore.loadHomeFeed(true);
         void libraryStore.loadLocalStorage();
         featuresStore.showToast({
@@ -206,6 +229,7 @@
       settingsStore.ytConnected = false;
       settingsStore.ytAccountName = '';
       settingsStore.ytAccountEmail = '';
+      settingsStore.ytAccountAvatar = '';
       activePageId = '';
       activePhotoUrl = '';
       channels = [];
@@ -220,8 +244,8 @@
 <div class="space-y-3 rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
   <div class="flex items-center justify-between gap-3">
     <div class="flex items-center gap-3">
-      {#if settingsStore.ytConnected && activePhotoUrl}
-        <Artwork src={activePhotoUrl} alt={settingsStore.ytAccountName || 'YouTube Music'} size={28} circle />
+      {#if settingsStore.ytConnected && (activePhotoUrl || settingsStore.ytAccountAvatar)}
+        <Artwork src={activePhotoUrl || settingsStore.ytAccountAvatar} alt={settingsStore.ytAccountName || 'YouTube Music'} size={28} circle />
       {:else}
         <BrandIcon name="youtube" size={24} />
       {/if}

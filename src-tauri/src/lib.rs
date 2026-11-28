@@ -211,6 +211,7 @@ pub fn run() {
                 state.tube.load_persisted_connection().await;
                 state.spotify_auth.load().await;
             });
+            state.yt_library_sync.start();
             DiagnosticsLog::info("persisted auth loaded");
 
             let emit_handle = handle.clone();

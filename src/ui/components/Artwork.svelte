@@ -45,15 +45,34 @@
         .replace('{f}', 'jpg');
     }
     if (url.includes('googleusercontent.com') || url.includes('ggpht.com')) {
-      const next = url.replace(/=w\d+(-h\d+)?(-c)?(-p)?(-l\d+)?(-rj)?/, `=w${px}-h${px}-l90-rj`);
-      if (next !== url) return next;
-      const slash = url.replace(/\/w\d+(-h\d+)?\//, `/w${px}-h${px}/`);
-      if (slash !== url) return slash;
+      const qIdx = url.search(/[?#]/);
+      const pathPart = qIdx >= 0 ? url.slice(0, qIdx) : url;
+      const tail = qIdx >= 0 ? url.slice(qIdx) : '';
+      const nextPath = pathPart.replace(/=w\d+-h\d+(?:-l\d+)?(?:-rj)?$/, `=w${px}-h${px}-l90-rj`);
+      if (nextPath !== pathPart) return `${nextPath}${tail}`;
+      const slashPath = pathPart.replace(/\/w\d+-h\d+\//, `/w${px}-h${px}/`);
+      if (slashPath !== pathPart) return `${slashPath}${tail}`;
+      return url;
     }
     if (url.includes('ytimg.com') && px < 300 && url.includes('hqdefault')) {
       return url.replace('hqdefault', 'mqdefault');
     }
     return url;
+  }
+
+  function ytimgFallbackUrl(raw: string): string {
+    const trimmed = raw.trim();
+    if (!trimmed) return '';
+    try {
+      const parsed = new URL(trimmed);
+      if (!parsed.hostname.endsWith('ytimg.com')) return '';
+      const m = parsed.pathname.match(/^\/vi(?:_webp)?\/([\w-]{11})\/([^/]+)$/);
+      if (!m) return '';
+      const fallback = `https://i.ytimg.com/vi/${m[1]}/hqdefault.jpg`;
+      return trimmed === fallback ? '' : fallback;
+    } catch {
+      return '';
+    }
   }
 
   let {
@@ -74,12 +93,16 @@
     onArtworkLoad,
   }: Props = $props();
 
+  let failedSizedPrimary = $state(false);
   let failedPrimary = $state(false);
   let failedLarger = $state(false);
   let failedResolved = $state(false);
+  let failedYtFallback = $state(false);
   let loaded = $state(false);
   let resolvedUrl = $state('');
   let largerUrl = $derived(highResolution ? largerArtworkUrl(src) : '');
+  let sizedPrimaryUrl = $derived(src ? sizedUrl(src, size) : '');
+  let ytFallbackUrl = $derived(src ? ytimgFallbackUrl(src) : '');
   let imgEl = $state<HTMLImageElement | null>(null);
   let lastActiveUrl = '';
   let resolveSeq = 0;
@@ -131,14 +154,14 @@
     const target = 1600;
     const enlarge = (width: string, height = width) => Math.min(Number(width), Number(height)) < target;
     if (/\.(?:googleusercontent|ggpht)\.com$/.test(host)) {
-      url.pathname = originalPath.replace(/=w(\d+)-h(\d+)(?:-[^/]*)?$/, (size, width, height) =>
-        enlarge(width, height) ? `=w${target}-h${target}-l90-rj` : size);
+      url.pathname = originalPath.replace(/=w(\d+)-h(\d+)(?:-l\d+)?(?:-rj)?$/, (sz, width, height) =>
+        enlarge(width, height) ? `=w${target}-h${target}-l90-rj` : sz);
       if (url.pathname === originalPath) {
         url.pathname = originalPath
-          .replace(/=s(\d+)(?:-[^/]*)?$/, (size, dimension) =>
-            enlarge(dimension) ? `=s${target}` : size)
-          .replace(/\/w(\d+)-h(\d+)\//, (size, width, height) =>
-            enlarge(width, height) ? `/w${target}-h${target}/` : size);
+          .replace(/=s(\d+)$/, (sz, dimension) =>
+            enlarge(dimension) ? `=s${target}` : sz)
+          .replace(/\/w(\d+)-h(\d+)\//, (sz, width, height) =>
+            enlarge(width, height) ? `/w${target}-h${target}/` : sz);
       }
     } else if (host.endsWith('.mzstatic.com')) {
       url.pathname = originalPath.replace(/\/(\d+)x(\d+)([a-z]*)(?=\.)/i, (size, width, height, format) =>
@@ -158,9 +181,11 @@
     const verifiedCover = highResolution && currentKind === 'track' && Boolean(currentArtist);
     const seq = ++resolveSeq;
 
+    failedSizedPrimary = false;
     failedPrimary = false;
     failedLarger = false;
     failedResolved = false;
+    failedYtFallback = false;
     resolvedUrl = '';
 
     if (!upgrade || !isTauriRuntime() || !currentLabel || (!verifiedCover && isOfficialUrl(currentSrc))) {
@@ -201,6 +226,7 @@
         if (url && !failedResolved) {
           const sized = sizedUrl(url, size);
           const preloader = new Image();
+          preloader.referrerPolicy = 'no-referrer';
           preloader.onload = () => {
             if (seq === resolveSeq && !failedResolved) resolvedUrl = sized;
           };
@@ -211,9 +237,11 @@
   });
 
   let activeUrl = $derived.by(() => {
-    if (resolvedUrl && !failedResolved) return sizedUrl(resolvedUrl, size);
+    if (resolvedUrl && !failedResolved) return resolvedUrl;
     if (largerUrl && !failedLarger) return largerUrl;
-    if (src && !failedPrimary) return sizedUrl(src, size);
+    if (sizedPrimaryUrl && sizedPrimaryUrl !== src && !failedSizedPrimary) return sizedPrimaryUrl;
+    if (src && !failedPrimary) return src;
+    if (ytFallbackUrl && ytFallbackUrl !== src && !failedYtFallback) return ytFallbackUrl;
     return '';
   });
 
@@ -240,10 +268,14 @@
   function handleError() {
     if (resolvedUrl && !failedResolved && activeUrl === resolvedUrl) {
       failedResolved = true;
-    } else if (largerUrl && activeUrl === largerUrl) {
+    } else if (largerUrl && !failedLarger && activeUrl === largerUrl) {
       failedLarger = true;
-    } else {
+    } else if (sizedPrimaryUrl && sizedPrimaryUrl !== src && !failedSizedPrimary && activeUrl === sizedPrimaryUrl) {
+      failedSizedPrimary = true;
+    } else if (src && !failedPrimary && activeUrl === src) {
       failedPrimary = true;
+    } else {
+      failedYtFallback = true;
     }
   }
 </script>
@@ -261,6 +293,7 @@
       bind:this={imgEl}
       src={activeUrl}
       {alt}
+      referrerpolicy="no-referrer"
       loading={highResolution ? 'eager' : undefined}
       decoding="async"
       onload={(event) => {
