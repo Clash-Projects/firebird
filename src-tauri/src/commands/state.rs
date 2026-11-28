@@ -122,7 +122,8 @@ impl AppState {
         let db = Arc::new(AppDatabase::open(&app_support_dir));
         let secure = Arc::new(SecureStore::from_app_support_dir(&app_support_dir));
 
-        let po_tokens = Arc::new(PoTokenEngine::new(http.clone(), None, None));
+        let auth_store = Arc::new(crate::extractor::yt_auth_store::YtAuthStore::new(Arc::clone(&secure)));
+        let po_tokens = Arc::new(PoTokenEngine::new(http.clone(), Some(auth_store), None));
         let tube = Arc::new(InnerTubeMusicApi::new(
             http.clone(),
             Arc::clone(&secure),
@@ -286,6 +287,9 @@ impl AppState {
 
     /// Attaches the Tauri `AppHandle` once the application setup hook runs.
     pub fn set_app_handle(&self, handle: AppHandle) {
+        self.po_tokens.set_host(Arc::new(
+            crate::extractor::ephemeral_webview_broker::TauriBotGuardHost::new(handle.clone()),
+        ));
         if let Ok(mut guard) = self.app_handle.lock() {
             *guard = Some(handle);
         }

@@ -154,11 +154,8 @@ impl SignatureDecipher {
 
     /// Fetches and parses `base.js` into a cached [`PlayerScript`].
     pub async fn script_for(&self, video_id: &str) -> Option<PlayerScript> {
-        if QuickJsCipher::is_available() {
-            let qjs = Arc::clone(&self.quick_js);
-            tokio::spawn(async move {
-                let _ = qjs.ensure_player().await;
-            });
+        if QuickJsCipher::is_available() && self.quick_js.active_player().is_none() {
+            let _ = tokio::time::timeout(Duration::from_secs(6), self.quick_js.ensure_player()).await;
         }
 
         let (_, Some(js_url)) = self.player_info(video_id).await else {
@@ -259,6 +256,51 @@ impl SignatureDecipher {
         }
 
         Some(url)
+    }
+
+    /// Solves throttling (`n`) on an already-direct stream URL, returning the
+    /// original URL unchanged if no `n` transform is available or needed.
+    pub fn decipher_direct_url(&self, url: &str, script: Option<&PlayerScript>) -> String {
+        if url.is_empty() || url.starts_with("sabr:") {
+            return url.to_string();
+        }
+        if QuickJsCipher::is_available() {
+            if let Some(player) = self.quick_js.active_player() {
+                if !player.bytecode.is_empty() {
+                    if let Some(fast) = decipher_url_with_bytecode(url, &player.bytecode) {
+                        return fast;
+                    }
+                }
+            }
+        }
+        let Some(script) = script else {
+            return url.to_string();
+        };
+        let Some(n) = extract_query_param(url, "n").filter(|v| !v.is_empty()) else {
+            return url.to_string();
+        };
+        let Some(n_ops) = &script.n_ops else {
+            return url.to_string();
+        };
+        let cached = self
+            .n_cache
+            .read()
+            .ok()
+            .and_then(|map| map.get(&script.js_url).and_then(|inner| inner.get(&n).cloned()));
+        if let Some(fixed) = cached {
+            return replace_query_param(url, "n", &fixed);
+        }
+        if let Ok(fixed) = apply_ops(n_ops, &n) {
+            if !fixed.is_empty() {
+                if let Ok(mut map) = self.n_cache.write() {
+                    map.entry(script.js_url.clone())
+                        .or_default()
+                        .insert(n, fixed.clone());
+                }
+                return replace_query_param(url, "n", &fixed);
+            }
+        }
+        url.to_string()
     }
 }
 

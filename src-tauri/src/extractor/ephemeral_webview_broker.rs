@@ -23,9 +23,11 @@ use super::webview_profile::webview_user_data_folder;
 use super::yt_auth_store::YtAuthStore;
 use super::yt_webview_guard::{YtWebviewGuard, BOTGUARD_TITLE};
 
-const CREATE_URL: &str = "https://www.youtube.com/api/jnn/v1/Create";
-const GENERATE_IT_URL: &str = "https://www.youtube.com/api/jnn/v1/GenerateIT";
+const CREATE_URL: &str = "https://jnn-pa.googleapis.com/$rpc/google.internal.waa.v1.Waa/Create";
+const GENERATE_IT_URL: &str =
+    "https://jnn-pa.googleapis.com/$rpc/google.internal.waa.v1.Waa/GenerateIT";
 const REQUEST_KEY: &str = "O43z0dpjhgX20SCx4KAo";
+const JNN_API_KEY: &str = "AIzaSyDyT5W0Jh49F30Pqqtyfdf7pDLFKLJoAnw";
 const WATCHDOG_TIMEOUT: Duration = Duration::from_secs(15);
 const PO_TOKEN_HTML: &str = include_str!("../../assets/po_token.html");
 
@@ -217,7 +219,7 @@ impl BotGuardWebviewSession for TauriBotGuardSession {
                 "(function(){{var __v=null;try{{__v=eval({expr_json});}}catch(_e){{__v=null;}}\
                  var __payload=(__v===undefined||__v===null)?null:String(__v);\
                  fetch('http://127.0.0.1:{port}/cb?id={eval_id}',{{\
-                   method:'POST',headers:{{'Content-Type':'application/json'}},\
+                   method:'POST',headers:{{'Content-Type':'text/plain'}},\
                    body:JSON.stringify({{value:__payload}})\
                  }}).catch(function(){{}});}})();",
                 expr_json = serde_json::to_string(&expr).unwrap_or_else(|_| "\"\"".to_string()),
@@ -275,12 +277,46 @@ async fn run_loopback_bridge(
         };
         let pending_ref = Arc::clone(&pending);
         tokio::spawn(async move {
-            let mut buf = vec![0u8; 65536];
-            let Ok(n) = stream.read(&mut buf).await else {
-                return;
-            };
-            let req = String::from_utf8_lossy(&buf[..n]);
+            let mut raw = Vec::with_capacity(4096);
+            let mut tmp = [0u8; 4096];
+            let mut header_end: Option<usize> = None;
+            let mut content_len: usize = 0;
+
+            loop {
+                let Ok(Ok(n)) = tokio::time::timeout(Duration::from_secs(2), stream.read(&mut tmp)).await else {
+                    break;
+                };
+                if n == 0 {
+                    break;
+                }
+                raw.extend_from_slice(&tmp[..n]);
+                if header_end.is_none() {
+                    if let Some(pos) = raw.windows(4).position(|w| w == b"\r\n\r\n") {
+                        let end = pos + 4;
+                        header_end = Some(end);
+                        let hdr = String::from_utf8_lossy(&raw[..pos]);
+                        for line in hdr.lines() {
+                            if let Some((k, v)) = line.split_once(':') {
+                                if k.trim().eq_ignore_ascii_case("content-length") {
+                                    content_len = v.trim().parse::<usize>().unwrap_or(0);
+                                }
+                            }
+                        }
+                    }
+                }
+                if let Some(end) = header_end {
+                    if raw.len() >= end + content_len {
+                        break;
+                    }
+                }
+                if raw.len() >= 262_144 {
+                    break;
+                }
+            }
+
+            let req = String::from_utf8_lossy(&raw);
             let first_line = req.lines().next().unwrap_or("");
+            let is_post = first_line.starts_with("POST ");
             let eval_id = first_line
                 .split_whitespace()
                 .nth(1)
@@ -288,19 +324,24 @@ async fn run_loopback_bridge(
                 .and_then(|rest| rest.split('&').next())
                 .and_then(|s| s.parse::<u64>().ok());
 
-            if let Some(id) = eval_id {
-                let body = req.split("\r\n\r\n").nth(1).unwrap_or("").trim();
-                let value = serde_json::from_str::<serde_json::Value>(body)
-                    .ok()
-                    .and_then(|v| v.get("value").and_then(|x| x.as_str()).map(str::to_owned));
-                if let Ok(mut map) = pending_ref.lock() {
-                    if let Some(tx) = map.remove(&id) {
-                        let _ = tx.send(value);
+            if is_post {
+                if let Some(id) = eval_id {
+                    let body = header_end
+                        .and_then(|end| raw.get(end..))
+                        .map(|b| String::from_utf8_lossy(b).into_owned())
+                        .unwrap_or_default();
+                    let value = serde_json::from_str::<serde_json::Value>(body.trim())
+                        .ok()
+                        .and_then(|v| v.get("value").and_then(|x| x.as_str()).map(str::to_owned));
+                    if let Ok(mut map) = pending_ref.lock() {
+                        if let Some(tx) = map.remove(&id) {
+                            let _ = tx.send(value);
+                        }
                     }
                 }
             }
 
-            let resp = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: Content-Type\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok";
+            let resp = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok";
             let _ = stream.write_all(resp.as_bytes()).await;
         });
     }
@@ -314,7 +355,7 @@ async fn run_loopback_bridge(
 pub struct EphemeralWebViewBroker {
     client: Client,
     auth_store: Option<Arc<YtAuthStore>>,
-    host: Option<Arc<dyn BotGuardWebviewHost>>,
+    host: Mutex<Option<Arc<dyn BotGuardWebviewHost>>>,
     enabled: AtomicBool,
     single_flight: AsyncMutex<()>,
     failed_tracks: Mutex<HashSet<String>>,
@@ -329,10 +370,16 @@ impl EphemeralWebViewBroker {
         Self {
             client,
             auth_store,
-            host,
+            host: Mutex::new(host),
             enabled: AtomicBool::new(true),
             single_flight: AsyncMutex::new(()),
             failed_tracks: Mutex::new(HashSet::new()),
+        }
+    }
+
+    pub fn set_host(&self, host: Arc<dyn BotGuardWebviewHost>) {
+        if let Ok(mut guard) = self.host.lock() {
+            *guard = Some(host);
         }
     }
 
@@ -417,7 +464,7 @@ impl EphemeralWebViewBroker {
             }
         }
 
-        let Some(host) = &self.host else {
+        let Some(host) = self.host.lock().ok().and_then(|g| g.clone()) else {
             return None;
         };
 
@@ -426,7 +473,7 @@ impl EphemeralWebViewBroker {
             Arc::new(AsyncMutex::new(None));
 
         let burst_fut = self.run_ephemeral_burst(
-            Arc::clone(host),
+            host,
             video_id.to_string(),
             session_id.to_string(),
             Arc::clone(&cancelled),
@@ -434,9 +481,23 @@ impl EphemeralWebViewBroker {
         );
 
         let result = match tokio::time::timeout(WATCHDOG_TIMEOUT, burst_fut).await {
-            Ok(Ok(res)) => Some(res),
-            Ok(Err(_)) => None,
+            Ok(Ok(res)) => {
+                crate::storage::diagnostics_log::DiagnosticsLog::info(&format!(
+                    "botguard mint_ok video_id={video_id} len={}",
+                    res.player_token.len()
+                ));
+                Some(res)
+            }
+            Ok(Err(e)) => {
+                crate::storage::diagnostics_log::DiagnosticsLog::info(&format!(
+                    "botguard mint_err video_id={video_id} err={e}"
+                ));
+                None
+            }
             Err(_) => {
+                crate::storage::diagnostics_log::DiagnosticsLog::info(&format!(
+                    "botguard mint_timeout video_id={video_id}"
+                ));
                 cancelled.store(true, Ordering::Release);
                 let stuck = active_session.lock().await.take();
                 if let Some(session) = stuck {
@@ -607,16 +668,26 @@ impl EphemeralWebViewBroker {
         body: &[&str],
     ) -> Result<String, EphemeralBrokerError> {
         let payload = json!(body).to_string();
-        let text = self
+        let res = self
             .client
             .post(url)
-            .header("Content-Type", "application/json")
+            .header("Content-Type", "application/json+protobuf")
+            .header("X-Goog-Api-Key", JNN_API_KEY)
+            .header("Origin", "https://www.youtube.com")
+            .header("Referer", "https://www.youtube.com/")
             .body(payload)
             .timeout(Duration::from_secs(10))
             .send()
-            .await?
-            .text()
             .await?;
+        let status = res.status();
+        let text = res.text().await?;
+        if !status.is_success() {
+            return Err(EphemeralBrokerError::Webview(format!(
+                "HTTP {} from {url}: {}",
+                status.as_u16(),
+                text.chars().take(160).collect::<String>()
+            )));
+        }
         if text.is_empty() {
             return Err(EphemeralBrokerError::Webview(format!("empty response from {url}")));
         }

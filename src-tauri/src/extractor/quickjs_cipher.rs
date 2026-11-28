@@ -122,6 +122,7 @@ impl QuickJsCipher {
         let rt = new_runtime()?;
         let ctx = Context::full(&rt)?;
         ctx.with(|ctx| {
+            setup_browser_globals(&ctx)?;
             let setup = format!(
                 "var _r = {{n: null, sig: null}};\n(function (_result) {{\n{preprocessed_js}\n}})(_r);"
             );
@@ -142,6 +143,7 @@ impl QuickJsCipher {
         let rt = new_runtime()?;
         let ctx = Context::full(&rt)?;
         ctx.with(|ctx| unsafe {
+            setup_browser_globals(&ctx)?;
             let raw_ctx = ctx.as_raw().as_ptr();
             let func = qjs::JS_ReadObject(
                 raw_ctx,
@@ -254,8 +256,8 @@ impl QuickJsCipherWorker {
             return Ok(None);
         };
 
-        let qbc_path = self.cache_dir.join(format!("{id}.qbc"));
-        let sts_path = self.cache_dir.join(format!("{id}.sts"));
+        let qbc_path = self.cache_dir.join(format!("{id}_v2.qbc"));
+        let sts_path = self.cache_dir.join(format!("{id}_v2.sts"));
 
         if qbc_path.exists() && sts_path.exists() {
             if let (Ok(sts_raw), Ok(bc)) = (fs::read_to_string(&sts_path), fs::read(&qbc_path)) {
@@ -373,8 +375,16 @@ pub fn decipher_url_with_bytecode(url_or_cipher: &str, bytecode: &[u8]) -> Optio
         return Some(url);
     }
 
-    let solved =
-        QuickJsCipher::solve_bytecode(bytecode, n_param.as_deref(), s_param.as_deref()).ok()?;
+    let solved = match QuickJsCipher::solve_bytecode(bytecode, n_param.as_deref(), s_param.as_deref())
+    {
+        Ok(s) => s,
+        Err(e) => {
+            crate::storage::diagnostics_log::DiagnosticsLog::info(&format!(
+                "qjs solve_bytecode err={e}"
+            ));
+            return None;
+        }
+    };
 
     let mut final_url = url;
     if s_param.is_some() {
@@ -418,7 +428,7 @@ pub fn parse_query_map(query: &str) -> HashMap<String, String> {
         .collect()
 }
 
-/// Reads a single query parameter value from a URL.
+/// Extracts the first query parameter named `key` from a URL string.
 pub fn extract_query_param(raw_url: &str, key: &str) -> Option<String> {
     let parsed = Url::parse(raw_url).ok()?;
     parsed
@@ -427,7 +437,7 @@ pub fn extract_query_param(raw_url: &str, key: &str) -> Option<String> {
         .map(|(_, v)| v.into_owned())
 }
 
-/// Appends `name=value` to `raw_url`, preserving any `#fragment`.
+/// Appends a URL-encoded `name=value` query parameter before any `#fragment`.
 pub fn append_query_param(raw_url: &str, name: &str, value: &str) -> String {
     let (base, fragment) = match raw_url.find('#') {
         Some(idx) => (&raw_url[..idx], &raw_url[idx..]),
@@ -535,6 +545,67 @@ fn prune_stale_player_cache(cache_dir: &Path, current_id: &str) {
     }
 }
 
+fn setup_browser_globals(ctx: &rquickjs::Ctx<'_>) -> Result<(), QuickJsCipherError> {
+    const PREAMBLE: &str = r#"
+        var self = globalThis;
+        var window = globalThis;
+        var navigator = {
+            cookieEnabled: true,
+            userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+            language: "en-US",
+            languages: ["en-US", "en"],
+            platform: "Win32",
+            onLine: true
+        };
+        var location = {
+            href: "https://www.youtube.com/",
+            protocol: "https:",
+            host: "www.youtube.com",
+            hostname: "www.youtube.com",
+            origin: "https://www.youtube.com",
+            pathname: "/",
+            search: "",
+            hash: ""
+        };
+        var document = {
+            URL: location.href,
+            cookie: "",
+            location: location,
+            documentElement: { style: {} },
+            head: { appendChild: function() {} },
+            body: { appendChild: function() {} },
+            createElement: function() { return { style: {}, setAttribute: function() {}, getElementsByTagName: function() { return []; }, appendChild: function() {} }; },
+            getElementsByTagName: function() { return []; },
+            getElementById: function() { return null; },
+            querySelector: function() { return null; },
+            querySelectorAll: function() { return []; },
+            addEventListener: function() {},
+            removeEventListener: function() {}
+        };
+        function XMLHttpRequest() {
+            this.open = function() {};
+            this.send = function() {};
+            this.setRequestHeader = function() {};
+            this.addEventListener = function() {};
+            this.removeEventListener = function() {};
+        }
+        function fetch() { return Promise.resolve({ ok: false, status: 200, text: function() { return Promise.resolve(""); }, json: function() { return Promise.resolve({}); } }); }
+        function setTimeout() { return 0; }
+        function clearTimeout() {}
+        function setInterval() { return 0; }
+        function clearInterval() {}
+        var performance = { now: function() { return Date.now(); } };
+        var localStorage = { getItem: function() { return null; }, setItem: function() {}, removeItem: function() {} };
+        var sessionStorage = localStorage;
+        var matchMedia = function() { return { matches: false, addListener: function() {}, removeListener: function() {} }; };
+        var addEventListener = function() {};
+        var removeEventListener = function() {};
+        var console = { log: function() {}, warn: function() {}, error: function() {}, debug: function() {} };
+    "#;
+    let _: rquickjs::Value = ctx.eval(PREAMBLE).map_err(|e| capture_js_err(ctx, e))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -599,5 +670,49 @@ mod tests {
             replace_query_param("https://example.com/v?a=1&n=old&b=2", "n", "new"),
             "https://example.com/v?a=1&b=2&n=new"
         );
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn live_player_recipe_smoke_test() {
+        let client = crate::extractor::http_client::HttpClientFactory::create().expect("client");
+        let worker = QuickJsCipherWorker::new(client.clone());
+        let player = worker.ensure_player().await.expect("ensure_player must succeed");
+        assert!(!player.bytecode.is_empty(), "bytecode non-empty");
+        assert!(player.sts > 0, "sts positive");
+        let solved = QuickJsCipher::solve_bytecode(
+            &player.bytecode,
+            Some("test_n_param_1234"),
+            Some("AOQgCW8wRgIhAK_sample_sig_payload_0123456789ABCDEF"),
+        )
+        .expect("solve_bytecode on live player");
+        assert!(solved.n.is_some());
+        assert!(solved.sig.is_some());
+        println!(
+            "LIVE_RECIPE_OK id={} sts={} bc_bytes={} n_out={:?} sig_len={}",
+            player.id,
+            player.sts,
+            player.bytecode.len(),
+            solved.n,
+            solved.sig.as_ref().map_or(0, String::len)
+        );
+
+        let jnn_res = client
+            .post("https://jnn-pa.googleapis.com/$rpc/google.internal.waa.v1.Waa/Create")
+            .header("Content-Type", "application/json+protobuf")
+            .header("X-Goog-Api-Key", "AIzaSyDyT5W0Jh49F30Pqqtyfdf7pDLFKLJoAnw")
+            .header("Origin", "https://www.youtube.com")
+            .header("Referer", "https://www.youtube.com/")
+            .body(r#"["O43z0dpjhgX20SCx4KAo"]"#)
+            .send()
+            .await
+            .expect("jnn-pa request");
+        assert!(jnn_res.status().is_success(), "jnn-pa status={}", jnn_res.status());
+        let jnn_text = jnn_res.text().await.expect("jnn-pa body");
+        let parsed_challenge = crate::extractor::challenge_parser::parse_create_challenge(&jnn_text)
+            .expect("parse_create_challenge on live jnn-pa");
+        assert!(parsed_challenge.contains("program"));
+        assert!(parsed_challenge.contains("globalName"));
+        println!("LIVE_JNN_OK challenge_len={}", parsed_challenge.len());
     }
 }

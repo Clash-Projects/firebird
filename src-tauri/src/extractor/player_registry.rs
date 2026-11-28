@@ -16,23 +16,8 @@ const RECIPE_SOURCES: [&str; 2] = [
 const REFRESH_MIN_INTERVAL: Duration = Duration::from_secs(300);
 const PLAYER_IIFE_CLOSE: &str = "})(_yt_player);";
 
-/// Minimal browser-like global environment so player scripts initialize inside QuickJS.
-const QUICKJS_BROWSER_SHIM: &str = r#"
-var _yt_player = {};
-var window = globalThis;
-var self = globalThis;
-var navigator = { userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" };
-var location = { href: "https://music.youtube.com/", hostname: "music.youtube.com", protocol: "https:", origin: "https://music.youtube.com", search: "" };
-var document = {
-  URL: location.href,
-  location: location,
-  cookie: "",
-  createElement: function() { return { style: {}, setAttribute: function(){}, appendChild: function(){} }; },
-  getElementsByTagName: function() { return []; },
-  querySelector: function() { return null; }
-};
-var performance = { now: function() { return Date.now(); } };
-"#;
+/// Minimal browser-like global environment marker for `base.js` closure instrumentation.
+const QUICKJS_BROWSER_SHIM: &str = "var _yt_player = globalThis._yt_player || {};";
 
 /// Validated cipher invocation recipe for a specific YouTube player revision hash.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

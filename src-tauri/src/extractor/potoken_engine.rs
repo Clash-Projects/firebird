@@ -39,6 +39,14 @@ impl PoTokenEngine {
         self.broker.set_enabled(enabled);
     }
 
+    pub fn set_host(&self, host: Arc<dyn BotGuardWebviewHost>) {
+        self.broker.set_host(host);
+    }
+
+    pub fn auth_store(&self) -> Option<&Arc<YtAuthStore>> {
+        self.auth_store.as_ref()
+    }
+
     /// Startup pre-warm without spawning a WebView: loads persisted session state into memory.
     pub fn pre_warm(&self) {
         if let Some(store) = &self.auth_store {

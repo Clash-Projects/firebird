@@ -1008,7 +1008,10 @@ impl InnerTubeMusicApi {
         secure: Arc<SecureStore>,
         po_tokens: Option<Arc<PoTokenEngine>>,
     ) -> Self {
-        let auth_store = Arc::new(YtAuthStore::new(Arc::clone(&secure)));
+        let auth_store = po_tokens
+            .as_ref()
+            .and_then(|p| p.auth_store().cloned())
+            .unwrap_or_else(|| Arc::new(YtAuthStore::new(Arc::clone(&secure))));
         let _ = auth_store.load();
         let decipher = SignatureDecipher::new(client.clone(), None);
         Self {
@@ -5841,6 +5844,10 @@ impl InnerTubeMusicApi {
                 Ok(Err(InnerTubeError::ConfirmedUnplayable(msg))) => {
                     let ckey = client.key();
                     self.cool_client(video_id, &ckey, Some(auth_scope));
+                    DiagnosticsLog::info(&format!(
+                        "stream_resolve_fail video_id={video_id} client={ckey} confirmed_unplayable={}",
+                        safe_error_detail(&msg)
+                    ));
                     log_stream(
                         "client-resolve-failed",
                         video_id,
@@ -5857,6 +5864,10 @@ impl InnerTubeMusicApi {
                 Ok(Err(err)) => {
                     let ckey = client.key();
                     self.cool_client(video_id, &ckey, Some(auth_scope));
+                    DiagnosticsLog::info(&format!(
+                        "stream_resolve_fail video_id={video_id} client={ckey} err={}",
+                        safe_error_detail(&err.to_string())
+                    ));
                     log_stream(
                         "client-resolve-failed",
                         video_id,
@@ -6180,6 +6191,8 @@ impl InnerTubeMusicApi {
         let url = format!("{player_api}/player?key={}&prettyPrint=false", client.api_key);
         let origin = client.origin();
         let referer = client.referer();
+        let use_auth = self.connection().connected
+            && matches!(client.name, "WEB_REMIX" | "TVHTML5" | "MWEB");
         let root = self
             .post_json(
                 &url,
@@ -6187,7 +6200,7 @@ impl InnerTubeMusicApi {
                 client.name,
                 client.version,
                 client.user_agent,
-                client.name == "WEB_REMIX" && self.connection().connected,
+                use_auth,
                 Some(origin),
                 Some(&referer),
                 visitor_data,
@@ -6225,7 +6238,7 @@ impl InnerTubeMusicApi {
         if let Some(v) = visitor_data.filter(|s| !s.is_empty()) {
             headers.insert("X-Goog-Visitor-Id".to_string(), v.to_string());
         }
-        if client.name == "WEB_REMIX" && self.connection().connected {
+        if use_auth {
             if let Some(cookies) = self.cookie_header_value() {
                 headers.insert("Cookie".to_string(), cookies);
             }
@@ -6269,23 +6282,36 @@ impl InnerTubeMusicApi {
         let watchtime_url = Self::watchtime_url_of(&root);
         let client_key = client.key();
         let mut candidates = Vec::new();
+        let mut sabr_count = 0usize;
+        let mut decipher_fail_count = 0usize;
 
         for (format, adaptive) in formats {
             let raw_url = format
                 .get("url")
                 .and_then(Value::as_str)
-                .map(str::to_string)
+                .map(|u| {
+                    if client_needs_cipher {
+                        self.decipher.decipher_direct_url(u, script)
+                    } else {
+                        u.to_string()
+                    }
+                })
                 .or_else(|| {
                     let cipher = format
                         .get("signatureCipher")
                         .or_else(|| format.get("cipher"))
                         .and_then(Value::as_str)?;
-                    self.decipher.decipher_url(cipher, script)
+                    let res = self.decipher.decipher_url(cipher, script);
+                    if res.is_none() {
+                        decipher_fail_count += 1;
+                    }
+                    res
                 });
             let Some(mut stream_url) = raw_url.filter(|u| !u.is_empty()) else {
                 continue;
             };
             if stream_url.starts_with("sabr:") {
+                sabr_count += 1;
                 continue;
             }
             stream_url = Self::append_pot(&stream_url, gvs_po_token);
@@ -6391,6 +6417,22 @@ impl InnerTubeMusicApi {
         }
 
         Self::sort_stream_candidates(&mut candidates, prefer_smallest);
+        if candidates.is_empty() {
+            let total_fmt = streaming
+                .and_then(|s| s.get("formats"))
+                .and_then(Value::as_array)
+                .map_or(0, Vec::len)
+                + streaming
+                    .and_then(|s| s.get("adaptiveFormats"))
+                    .and_then(Value::as_array)
+                    .map_or(0, Vec::len);
+            let has_hls = hls_url.is_some();
+            DiagnosticsLog::info(&format!(
+                "stream_empty client={client_key} video_id={video_id} raw_formats={total_fmt} sabr={sabr_count} decipher_fail={decipher_fail_count} has_hls={has_hls} has_script={} qjs_active={}",
+                script.is_some(),
+                self.decipher.quick_js.active_player().is_some()
+            ));
+        }
         candidates
             .into_iter()
             .next()
