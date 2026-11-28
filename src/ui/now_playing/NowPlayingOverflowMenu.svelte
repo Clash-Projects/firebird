@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { dismissFlyout } from '$src/app/accessibility';
+  import { clampSubmenu, dismissFlyout } from '$src/app/accessibility';
   import {
     featuresStore,
     LYRICS_ANIMATION_OPTIONS,
@@ -274,6 +274,7 @@
           <div
             role="menu"
             tabindex="-1"
+            use:clampSubmenu
             onpointerenter={clearTimers}
             onpointerleave={scheduleCloseSubmenu}
             class="absolute top-[-4px] right-full z-50 w-[240px] pr-1.5"
@@ -329,6 +330,7 @@
           <div
             role="menu"
             tabindex="-1"
+            use:clampSubmenu
             onpointerenter={clearTimers}
             onpointerleave={scheduleCloseSubmenu}
             class="absolute top-[-4px] right-full z-50 w-[184px] pr-1.5"
@@ -388,6 +390,7 @@
           <div
             role="menu"
             tabindex="-1"
+            use:clampSubmenu
             onpointerenter={clearTimers}
             onpointerleave={scheduleCloseSubmenu}
             class="absolute top-[-4px] right-full z-50 w-[208px] pr-1.5"
@@ -436,6 +439,7 @@
           <div
             role="menu"
             tabindex="-1"
+            use:clampSubmenu
             onpointerenter={clearTimers}
             onpointerleave={scheduleCloseSubmenu}
             class="absolute top-[-4px] right-full z-50 w-[196px] pr-1.5"
@@ -484,9 +488,10 @@
           <div
             role="menu"
             tabindex="-1"
+            use:clampSubmenu
             onpointerenter={clearTimers}
             onpointerleave={scheduleCloseSubmenu}
-            class="absolute bottom-[-4px] right-full z-50 w-[216px] pr-1.5"
+            class="absolute top-[-4px] right-full z-50 w-[216px] pr-1.5"
           >
             <div class="now-playing-flyout max-h-[340px] overflow-y-auto">
               {#each LYRICS_ANIMATION_OPTIONS as anim (anim.id)}

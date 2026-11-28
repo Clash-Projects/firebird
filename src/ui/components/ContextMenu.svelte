@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { dismissDialogOnBackdrop } from '$src/app/accessibility';
+  import { clampSubmenu, dismissDialogOnBackdrop } from '$src/app/accessibility';
   import {
     downloadTrack,
     enqueueTrack,
@@ -383,6 +383,7 @@
           role="menu"
           data-submenu-panel
           tabindex="-1"
+          use:clampSubmenu
           onpointerenter={cancelSubmenuTimers}
           onpointerleave={scheduleCloseSubmenu}
           class="absolute z-20 w-[236px] {submenuOpenUp ? 'bottom-[-4px]' : 'top-[-4px]'} {submenuFlipLeft ? 'right-full pr-1.5' : 'left-full pl-1.5'}"

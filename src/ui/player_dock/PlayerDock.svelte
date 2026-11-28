@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { dismissDialogOnBackdrop, dismissFlyout } from '$src/app/accessibility';
+  import { clampSubmenu, dismissDialogOnBackdrop, dismissFlyout } from '$src/app/accessibility';
   import { router } from '$src/app/router.svelte';
   import { downloadTrack, toggleTrackLike } from '$src/app/trackActions';
   import { windowState } from '$src/app/window.svelte';
@@ -667,6 +667,7 @@
             <div
               role="menu"
               tabindex="-1"
+              use:clampSubmenu
               onpointerenter={keepDockSubmenu}
               onpointerleave={scheduleCloseDockSubmenu}
               class="absolute right-full bottom-[-4px] z-50 w-[264px] pr-1.5"
@@ -768,6 +769,7 @@
             <div
               role="menu"
               tabindex="-1"
+              use:clampSubmenu
               onpointerenter={keepDockSubmenu}
               onpointerleave={scheduleCloseDockSubmenu}
               class="absolute right-full bottom-[-4px] z-50 w-[196px] pr-1.5"
