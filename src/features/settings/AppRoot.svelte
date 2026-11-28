@@ -33,6 +33,7 @@
 
   $effect(() => {
     void settingsStore.themeMode;
+    void settingsStore.amoled;
     void settingsStore.customThemeBase;
     void settingsStore.accentColor;
     void settingsStore.accentSource;
@@ -40,7 +41,6 @@
     void settingsStore.hazeMaterial;
     void settingsStore.hazeIntensity;
     void settingsStore.liquidGlass;
-    void settingsStore.performanceMode;
     void settingsStore.appFont;
     void settingsStore.uiScale;
     void playerStore.currentTrack?.accentColor;
@@ -48,8 +48,7 @@
   });
 
   $effect(() => {
-    const reduced = settingsStore.reduceMotion || settingsStore.performanceMode;
-    document.documentElement.toggleAttribute('data-reduced-motion', reduced);
+    document.documentElement.toggleAttribute('data-reduced-motion', settingsStore.reduceMotion);
   });
 
   $effect(() => {

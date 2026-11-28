@@ -456,6 +456,8 @@ pub fn run() {
             commands::settings::diagnostics_build_bundle_bytes,
             commands::settings::diagnostics_play_diag,
             commands::settings::diagnostics_export_logs,
+            commands::settings::diagnostics_open_log_folder,
+            commands::settings::dialog_pick_folder,
             commands::settings::window_set_mini_mode,
             // commands::extractor
             commands::extractor::yt_search_songs,

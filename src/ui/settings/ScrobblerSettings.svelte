@@ -5,6 +5,8 @@
   import { settingsStore } from '$src/state/settings.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import Input from '$src/ui/components/Input.svelte';
+  import Select from '$src/ui/components/Select.svelte';
+  import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
 
   interface Props {
     onOpenGuide: () => void;
@@ -14,29 +16,37 @@
 
   let apiKey = $state('');
   let apiSecret = $state('');
-  let pendingToken = $state<string | null>(null);
-  let lastfmBusy = $state(false);
-  let lastfmError = $state<string | null>(null);
+  let editingLfmKeys = $state(false);
+  let handshake = $state<{ token: string; url: string } | null>(null);
+  let lfmError = $state<string | null>(null);
+  let lbError = $state<string | null>(null);
+  let lfError = $state<string | null>(null);
+  let busy = $state(false);
 
   let lbToken = $state('');
-  let lbServer = $state('https://api.listenbrainz.org');
-  let lbOpen = $state(false);
-  let lbBusy = $state(false);
-
+  let lbServer = $state('');
   let libreUser = $state('');
   let librePass = $state('');
-  let libreServer = $state('https://libre.fm/2.0/');
-  let libreOpen = $state(false);
-  let libreBusy = $state(false);
+  let libreServer = $state('');
+
+  let connectedServices = $derived.by(() => {
+    const out: Array<{ id: string; label: string }> = [];
+    if (settingsStore.lastfmConnected) out.push({ id: 'lastfm', label: 'Last.fm' });
+    if (settingsStore.listenBrainzConnected) out.push({ id: 'listenbrainz', label: 'ListenBrainz' });
+    if (settingsStore.libreFmConnected) out.push({ id: 'librefm', label: 'Libre.fm' });
+    return out;
+  });
 
   async function refreshLastfmState() {
     if (!isTauriRuntime()) return;
-    const state = await ipcInvoke<{ status?: string; username?: string; message?: string }>('lastfm_auth_state');
+    const state = await ipcInvoke<{ status?: string; username?: string; message?: string }>(
+      'lastfm_auth_state'
+    );
     if (!state) return;
     settingsStore.lastfmConnected = Boolean(state.username) && state.status === 'signedIn';
     settingsStore.lastfmUser = state.username || '';
     if (state.message && state.status === 'error') {
-      lastfmError = state.message;
+      lfmError = state.message;
     }
   }
 
@@ -45,241 +55,353 @@
   });
 
   async function saveLastfmKeys() {
-    if (!apiKey.trim() || !apiSecret.trim() || lastfmBusy) return;
-    lastfmBusy = true;
-    lastfmError = null;
+    if (!apiKey.trim() || !apiSecret.trim() || busy) return;
+    busy = true;
+    lfmError = null;
     try {
       await ipcInvoke('lastfm_save_custom_keys', {
         apiKey: apiKey.trim(),
         apiSecret: apiSecret.trim(),
       });
-      featuresStore.showToast({ title: 'Last.fm API keys saved', severity: 'success' });
+      settingsStore.lastfmConfigured = true;
+      editingLfmKeys = false;
     } catch (err) {
-      lastfmError = err instanceof Error ? err.message : 'Failed to save API keys';
+      lfmError = err instanceof Error ? err.message : 'Failed to save API keys.';
     } finally {
-      lastfmBusy = false;
+      busy = false;
+    }
+  }
+
+  async function clearLastfmKeys() {
+    if (busy) return;
+    busy = true;
+    try {
+      await ipcInvoke('lastfm_clear_custom_keys');
+      settingsStore.lastfmConfigured = false;
+      apiKey = '';
+      apiSecret = '';
+      handshake = null;
+    } finally {
+      busy = false;
     }
   }
 
   async function beginLastfmAuth() {
-    if (lastfmBusy) return;
-    lastfmBusy = true;
-    lastfmError = null;
+    if (busy) return;
+    busy = true;
+    lfmError = null;
     try {
-      if (apiKey.trim() && apiSecret.trim()) {
-        await ipcInvoke('lastfm_save_custom_keys', {
-          apiKey: apiKey.trim(),
-          apiSecret: apiSecret.trim(),
-        });
-      }
       const res = await ipcInvoke<{ token: string; url: string }>('lastfm_begin_web_auth');
       if (res?.token && res?.url) {
-        pendingToken = res.token;
-        window.open(res.url, '_blank');
-        featuresStore.showToast({
-          title: 'Approve LastWave in your browser',
-          subtitle: 'Then click "Complete Sign-In" below',
-          severity: 'info',
-        });
+        handshake = res;
+        window.open(res.url, '_blank', 'noopener,noreferrer');
       } else {
-        lastfmError = 'Save your Last.fm API Key and Shared Secret first (BYOK).';
+        lfmError = 'Could not start Last.fm handshake.';
       }
+    } catch {
+      lfmError = 'Could not reach Last.fm. Check your connection and retry.';
     } finally {
-      lastfmBusy = false;
+      busy = false;
     }
   }
 
-  async function completeLastfmAuth() {
-    if (!pendingToken || lastfmBusy) return;
-    lastfmBusy = true;
-    lastfmError = null;
+  async function finishLastfmAuth() {
+    if (!handshake || busy) return;
+    busy = true;
+    lfmError = null;
     try {
-      await ipcInvoke('lastfm_complete_web_auth', { token: pendingToken });
-      pendingToken = null;
+      await ipcInvoke('lastfm_complete_web_auth', { token: handshake.token });
       await refreshLastfmState();
       if (settingsStore.lastfmConnected) {
-        featuresStore.showToast({
-          title: 'Last.fm connected',
-          subtitle: settingsStore.lastfmUser,
-          severity: 'success',
-        });
+        handshake = null;
+      } else {
+        lfmError = 'Not approved yet — approve LastWave in the browser, then retry.';
       }
+    } catch {
+      lfmError = 'Not approved yet — approve LastWave in the browser, then retry.';
     } finally {
-      lastfmBusy = false;
+      busy = false;
     }
   }
 
   async function signOutLastfm() {
-    await ipcInvoke('lastfm_sign_out');
-    pendingToken = null;
-    settingsStore.lastfmConnected = false;
-    settingsStore.lastfmUser = '';
-    featuresStore.showToast({ title: 'Signed out of Last.fm', severity: 'info' });
+    busy = true;
+    try {
+      await ipcInvoke('lastfm_sign_out');
+      handshake = null;
+      settingsStore.lastfmConnected = false;
+      settingsStore.lastfmUser = '';
+    } finally {
+      busy = false;
+    }
   }
 
   async function connectListenBrainz() {
-    if (!lbToken.trim() || lbBusy) return;
-    lbBusy = true;
+    if (!lbToken.trim() || busy) return;
+    busy = true;
+    lbError = null;
     try {
       const err = await ipcInvoke<string | null>('extra_scrobblers_connect_listenbrainz', {
         token: lbToken.trim(),
-        server: lbServer.trim() || 'https://api.listenbrainz.org',
+        server: lbServer.trim(),
       });
       if (err) {
-        featuresStore.showToast({ title: 'ListenBrainz failed', subtitle: err, severity: 'error' });
+        lbError = err;
       } else {
-        settingsStore.listenBrainzConnected = true;
+        await settingsStore.loadFromBackend();
         lbToken = '';
-        lbOpen = false;
-        featuresStore.showToast({ title: 'ListenBrainz connected', severity: 'success' });
       }
     } finally {
-      lbBusy = false;
+      busy = false;
     }
   }
 
   async function disconnectListenBrainz() {
-    await ipcInvoke('extra_scrobblers_disconnect_listenbrainz');
-    settingsStore.listenBrainzConnected = false;
-    featuresStore.showToast({ title: 'ListenBrainz disconnected', severity: 'info' });
+    busy = true;
+    try {
+      await ipcInvoke('extra_scrobblers_disconnect_listenbrainz');
+      settingsStore.listenBrainzConnected = false;
+      settingsStore.listenBrainzUser = '';
+    } finally {
+      busy = false;
+    }
   }
 
   async function connectLibreFm() {
-    if (!libreUser.trim() || !librePass.trim() || libreBusy) return;
-    libreBusy = true;
+    if (!libreUser.trim() || !librePass || busy) return;
+    busy = true;
+    lfError = null;
     try {
       const err = await ipcInvoke<string | null>('extra_scrobblers_connect_librefm', {
         username: libreUser.trim(),
         password: librePass,
-        server: libreServer.trim() || 'https://libre.fm/2.0/',
+        server: libreServer.trim(),
       });
       if (err) {
-        featuresStore.showToast({ title: 'Libre.fm failed', subtitle: err, severity: 'error' });
+        lfError = err;
       } else {
-        settingsStore.libreFmConnected = true;
+        await settingsStore.loadFromBackend();
         librePass = '';
-        libreOpen = false;
-        featuresStore.showToast({ title: 'Libre.fm connected', severity: 'success' });
       }
     } finally {
-      libreBusy = false;
+      busy = false;
     }
   }
 
   async function disconnectLibreFm() {
-    await ipcInvoke('extra_scrobblers_disconnect_librefm');
-    settingsStore.libreFmConnected = false;
-    featuresStore.showToast({ title: 'Libre.fm disconnected', severity: 'info' });
+    busy = true;
+    try {
+      await ipcInvoke('extra_scrobblers_disconnect_librefm');
+      settingsStore.libreFmConnected = false;
+      settingsStore.libreFmUser = '';
+    } finally {
+      busy = false;
+    }
   }
 </script>
 
 <div class="space-y-4">
-  <div class="space-y-3 rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-    <div class="flex flex-wrap items-center justify-between gap-2">
-      <div>
-        <div class="text-[13.5px] font-semibold">
-          Last.fm (BYOK) {settingsStore.lastfmUser ? `· ${settingsStore.lastfmUser}` : ''}
-        </div>
+  {#if connectedServices.length > 1}
+    <div class="flex items-center justify-between gap-3 pb-1">
+      <div class="min-w-0 flex-1">
+        <div class="text-[13.5px] font-semibold">Primary scrobbler</div>
         <div class="text-[12px] text-[var(--lw-text-secondary)]">
-          {settingsStore.lastfmConnected
-            ? 'Connected · serialized offline scrobble queue active'
-            : 'Enter your own Last.fm API Key & Shared Secret, then authorize in browser'}
+          Used for Stats, History, Home, and Top Artists/Albums.
         </div>
       </div>
-      <div class="flex items-center gap-2">
-        {#if settingsStore.lastfmConnected}
-          <Buttons variant="secondary" size="sm" onclick={() => void signOutLastfm()}>Sign Out</Buttons>
-        {:else if pendingToken}
-          <Buttons variant="primary" size="sm" disabled={lastfmBusy} onclick={() => void completeLastfmAuth()}>
-            {lastfmBusy ? 'Verifying...' : 'Complete Sign-In'}
-          </Buttons>
-        {:else}
-          <Buttons variant="primary" size="sm" disabled={lastfmBusy} onclick={() => void beginLastfmAuth()}>
-            {lastfmBusy ? 'Opening...' : 'Authorize'}
-          </Buttons>
-        {/if}
-        <Buttons variant="ghost" size="sm" onclick={onOpenGuide}>API Key Guide</Buttons>
+      <div class="w-[220px] shrink-0">
+        <Select
+          expanded
+          label="Primary scrobbler"
+          value={connectedServices.some((s) => s.id === settingsStore.primaryScrobbler)
+            ? settingsStore.primaryScrobbler
+            : ''}
+          options={[
+            { value: '', label: `Auto (${connectedServices[0]?.label ?? 'Last.fm'})` },
+            ...connectedServices.map((s) => ({ value: s.id, label: s.label })),
+          ]}
+          onchange={(v) => {
+            settingsStore.primaryScrobbler = v;
+            settingsStore.saveStringPref('lw_primary_scrobbler', v);
+          }}
+        />
       </div>
     </div>
+  {/if}
 
-    {#if !settingsStore.lastfmConnected}
-      <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <Input bind:value={apiKey} placeholder="Last.fm API Key" />
-        <Input bind:value={apiSecret} type="password" placeholder="Last.fm Shared Secret" />
-      </div>
-      <div class="flex items-center justify-between gap-2">
-        <span class="text-[11.5px] text-[var(--lw-text-tertiary)]">
-          Keys are stored securely on-device and never shared.
+  <!-- Last.fm -->
+  <div>
+    <div class="text-[13.5px] font-semibold text-[var(--lw-text-primary)]">Last.fm</div>
+    {#if settingsStore.lastfmConnected}
+      <div class="mt-1.5 flex items-center gap-2">
+        <WaveIcon name="check" size={14} class="text-[var(--lw-accent)]" />
+        <span class="min-w-0 flex-1 truncate text-[13.5px] font-semibold">
+          Last.fm connected as @{settingsStore.lastfmUser}
         </span>
-        <Buttons variant="secondary" size="sm" disabled={lastfmBusy || !apiKey.trim() || !apiSecret.trim()} onclick={() => void saveLastfmKeys()}>
-          Save Keys
+        <Buttons variant="secondary" size="sm" disabled={busy} onclick={() => void signOutLastfm()}>
+          Disconnect
         </Buttons>
       </div>
-    {/if}
-
-    {#if lastfmError}
-      <div class="rounded-[10px] bg-[var(--lw-danger)]/15 px-3 py-2 text-[12px] text-[var(--lw-danger)]">
-        {lastfmError}
-      </div>
+    {:else}
+      <p class="mt-1 text-[12px] text-[var(--lw-text-secondary)]">
+        Connect with your Last.fm account and personal API keys from last.fm/api/account/create.
+      </p>
+      {#if !settingsStore.lastfmConfigured || editingLfmKeys}
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <div class="min-w-[140px] flex-1">
+            <Input bind:value={apiKey} placeholder="API key" />
+          </div>
+          <div class="min-w-[140px] flex-1">
+            <Input bind:value={apiSecret} type="password" placeholder="Shared secret" />
+          </div>
+          <Buttons
+            variant="primary"
+            size="sm"
+            disabled={busy || !apiKey.trim() || !apiSecret.trim()}
+            onclick={() => void saveLastfmKeys()}
+          >
+            Save keys
+          </Buttons>
+          {#if editingLfmKeys}
+            <Buttons variant="secondary" size="sm" disabled={busy} onclick={() => (editingLfmKeys = false)}>
+              Cancel
+            </Buttons>
+          {/if}
+        </div>
+        <div class="mt-1.5">
+          <button
+            type="button"
+            onclick={onOpenGuide}
+            class="cursor-pointer text-[12px] font-medium text-[var(--lw-accent)] hover:underline"
+          >
+            How to get personal Last.fm API keys…
+          </button>
+        </div>
+      {:else}
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <WaveIcon name="check" size={14} class="text-[var(--lw-accent)]" />
+          <span class="min-w-0 flex-1 text-[12px] text-[var(--lw-text-secondary)]">
+            {handshake === null
+              ? 'API keys saved — click Connect to authorize in browser.'
+              : 'Approve LastWave in your browser, then click Finish.'}
+          </span>
+          <Buttons variant="secondary" size="sm" disabled={busy} onclick={() => (editingLfmKeys = true)}>
+            Edit keys
+          </Buttons>
+          <Buttons variant="secondary" size="sm" disabled={busy} onclick={() => void clearLastfmKeys()}>
+            Clear
+          </Buttons>
+          {#if handshake !== null}
+            <Buttons
+              variant="secondary"
+              size="sm"
+              disabled={busy}
+              onclick={() => {
+                if (handshake) {
+                  void navigator.clipboard.writeText(handshake.url);
+                  featuresStore.showToast({ title: 'Auth link copied', severity: 'success' });
+                }
+              }}
+            >
+              Copy link
+            </Buttons>
+            <Buttons variant="secondary" size="sm" disabled={busy} onclick={() => void beginLastfmAuth()}>
+              Restart
+            </Buttons>
+            <Buttons variant="primary" size="sm" disabled={busy} onclick={() => void finishLastfmAuth()}>
+              Finish
+            </Buttons>
+          {:else}
+            <Buttons variant="primary" size="sm" disabled={busy} onclick={() => void beginLastfmAuth()}>
+              Connect
+            </Buttons>
+          {/if}
+        </div>
+      {/if}
+      {#if lfmError}
+        <p class="mt-1.5 text-[12px] text-[var(--lw-danger)]">{lfmError}</p>
+      {/if}
     {/if}
   </div>
 
-  <div class="space-y-3 rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-    <div class="flex items-center justify-between gap-3">
-      <div>
-        <div class="text-[13.5px] font-semibold">ListenBrainz</div>
-        <div class="text-[12px] text-[var(--lw-text-secondary)]">
-          {settingsStore.listenBrainzConnected ? 'Connected' : 'Connect using your ListenBrainz user token'}
+  <!-- ListenBrainz -->
+  <div>
+    <div class="text-[13.5px] font-semibold text-[var(--lw-text-primary)]">ListenBrainz</div>
+    {#if settingsStore.listenBrainzConnected}
+      <div class="mt-1.5 flex items-center gap-2">
+        <WaveIcon name="check" size={14} class="text-[var(--lw-accent)]" />
+        <span class="min-w-0 flex-1 truncate text-[13.5px] font-semibold">
+          ListenBrainz connected{settingsStore.listenBrainzUser ? ` as @${settingsStore.listenBrainzUser}` : ''}{settingsStore.listenBrainzServer ? ` · ${settingsStore.listenBrainzServer}` : ''}
+        </span>
+        <Buttons variant="secondary" size="sm" disabled={busy} onclick={() => void disconnectListenBrainz()}>
+          Disconnect
+        </Buttons>
+      </div>
+    {:else}
+      <p class="mt-1 text-[12px] text-[var(--lw-text-secondary)]">
+        Paste your user token from listenbrainz.org/settings. Leave the server empty unless you self-host (Maloja, Koito, …).
+      </p>
+      <div class="mt-2 flex flex-wrap items-center gap-2">
+        <div class="min-w-[160px] flex-[3]">
+          <Input bind:value={lbToken} type="password" placeholder="User token" />
         </div>
-      </div>
-      {#if settingsStore.listenBrainzConnected}
-        <Buttons variant="secondary" size="sm" onclick={() => void disconnectListenBrainz()}>Disconnect</Buttons>
-      {:else}
-        <Buttons variant="secondary" size="sm" onclick={() => (lbOpen = !lbOpen)}>
-          {lbOpen ? 'Cancel' : 'Connect'}
+        <div class="min-w-[140px] flex-[2]">
+          <Input bind:value={lbServer} placeholder="Server (optional)" />
+        </div>
+        <Buttons
+          variant="primary"
+          size="sm"
+          disabled={busy || !lbToken.trim()}
+          onclick={() => void connectListenBrainz()}
+        >
+          Connect
         </Buttons>
+      </div>
+      {#if lbError}
+        <p class="mt-1.5 text-[12px] text-[var(--lw-danger)]">{lbError}</p>
       {/if}
-    </div>
-    {#if lbOpen && !settingsStore.listenBrainzConnected}
-      <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <Input bind:value={lbToken} type="password" placeholder="ListenBrainz User Token" />
-        <Input bind:value={lbServer} placeholder="Server URL (default api.listenbrainz.org)" />
-      </div>
-      <div class="flex justify-end">
-        <Buttons variant="primary" size="sm" disabled={lbBusy || !lbToken.trim()} onclick={() => void connectListenBrainz()}>
-          {lbBusy ? 'Connecting...' : 'Save & Connect'}
-        </Buttons>
-      </div>
     {/if}
   </div>
 
-  <div class="space-y-3 rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-    <div class="flex items-center justify-between gap-3">
-      <div>
-        <div class="text-[13.5px] font-semibold">Libre.fm</div>
-        <div class="text-[12px] text-[var(--lw-text-secondary)]">
-          {settingsStore.libreFmConnected ? 'Connected' : 'Connect with your Libre.fm username and password'}
+  <!-- Libre.fm -->
+  <div>
+    <div class="text-[13.5px] font-semibold text-[var(--lw-text-primary)]">Libre.fm</div>
+    {#if settingsStore.libreFmConnected}
+      <div class="mt-1.5 flex items-center gap-2">
+        <WaveIcon name="check" size={14} class="text-[var(--lw-accent)]" />
+        <span class="min-w-0 flex-1 truncate text-[13.5px] font-semibold">
+          Libre.fm connected{settingsStore.libreFmUser ? ` as @${settingsStore.libreFmUser}` : ''}{settingsStore.libreFmServer ? ` · ${settingsStore.libreFmServer}` : ''}
+        </span>
+        <Buttons variant="secondary" size="sm" disabled={busy} onclick={() => void disconnectLibreFm()}>
+          Disconnect
+        </Buttons>
+      </div>
+    {:else}
+      <p class="mt-1 text-[12px] text-[var(--lw-text-secondary)]">
+        Sign in with your Libre.fm account. The server field takes other GNU FM instances.
+      </p>
+      <div class="mt-2 flex flex-wrap items-center gap-2">
+        <div class="min-w-[120px] flex-1">
+          <Input bind:value={libreUser} placeholder="Username" />
         </div>
-      </div>
-      {#if settingsStore.libreFmConnected}
-        <Buttons variant="secondary" size="sm" onclick={() => void disconnectLibreFm()}>Disconnect</Buttons>
-      {:else}
-        <Buttons variant="secondary" size="sm" onclick={() => (libreOpen = !libreOpen)}>
-          {libreOpen ? 'Cancel' : 'Connect'}
+        <div class="min-w-[120px] flex-1">
+          <Input bind:value={librePass} type="password" placeholder="Password" />
+        </div>
+        <div class="min-w-[130px] flex-1">
+          <Input bind:value={libreServer} placeholder="Server (optional)" />
+        </div>
+        <Buttons
+          variant="primary"
+          size="sm"
+          disabled={busy || !libreUser.trim() || !librePass}
+          onclick={() => void connectLibreFm()}
+        >
+          Connect
         </Buttons>
+      </div>
+      {#if lfError}
+        <p class="mt-1.5 text-[12px] text-[var(--lw-danger)]">{lfError}</p>
       {/if}
-    </div>
-    {#if libreOpen && !settingsStore.libreFmConnected}
-      <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <Input bind:value={libreUser} placeholder="Username" />
-        <Input bind:value={librePass} type="password" placeholder="Password" />
-        <Input bind:value={libreServer} placeholder="Server URL" />
-      </div>
-      <div class="flex justify-end">
-        <Buttons variant="primary" size="sm" disabled={libreBusy || !libreUser.trim() || !librePass.trim()} onclick={() => void connectLibreFm()}>
-          {libreBusy ? 'Connecting...' : 'Save & Connect'}
-        </Buttons>
-      </div>
     {/if}
   </div>
 </div>

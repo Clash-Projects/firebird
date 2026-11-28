@@ -4,6 +4,7 @@
   import { downloadTrack, toggleTrackLike } from '$src/app/trackActions';
   import { windowState } from '$src/app/window.svelte';
   import { uiSlots } from '$src/lib/plugins/uiSlots.svelte';
+  import { featuresStore } from '$src/state/features.svelte';
   import { libraryStore } from '$src/state/library.svelte';
   import { formatDuration, playerStore } from '$src/state/player.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
@@ -18,7 +19,7 @@
 
   let track = $derived(playerStore.currentTrack);
   let liked = $derived(track ? libraryStore.isLiked(track.id) : false);
-  let glass = $derived(!settingsStore.performanceMode && settingsStore.glassmorphism);
+  let glass = $derived(settingsStore.glassmorphism);
 
   let seekDragging = $state(false);
   let seekDragSec = $state<number | null>(null);
@@ -32,9 +33,47 @@
   let qualityOpen = $state(false);
   let volumeFlyoutOpen = $state(false);
   let overflowOpen = $state(false);
+  let dockSubmenu = $state<'output' | 'sleep' | null>(null);
+  let dockSubHoverTimer: ReturnType<typeof setTimeout> | null = null;
+  let dockSubCloseTimer: ReturnType<typeof setTimeout> | null = null;
   let sleepDialogOpen = $state(false);
   let sleepMinutesDraft = $state('45');
   let sleepDialogEl = $state<HTMLDialogElement | null>(null);
+
+  function hoverDockSubmenu(key: 'output' | 'sleep') {
+    if (dockSubCloseTimer) {
+      clearTimeout(dockSubCloseTimer);
+      dockSubCloseTimer = null;
+    }
+    if (dockSubmenu === key) return;
+    if (dockSubHoverTimer) clearTimeout(dockSubHoverTimer);
+    dockSubHoverTimer = setTimeout(() => {
+      dockSubmenu = key;
+    }, dockSubmenu ? 260 : 160);
+  }
+
+  function keepDockSubmenu() {
+    if (dockSubHoverTimer) {
+      clearTimeout(dockSubHoverTimer);
+      dockSubHoverTimer = null;
+    }
+    if (dockSubCloseTimer) {
+      clearTimeout(dockSubCloseTimer);
+      dockSubCloseTimer = null;
+    }
+  }
+
+  function scheduleCloseDockSubmenu() {
+    if (dockSubHoverTimer) {
+      clearTimeout(dockSubHoverTimer);
+      dockSubHoverTimer = null;
+    }
+    if (!dockSubmenu) return;
+    if (dockSubCloseTimer) clearTimeout(dockSubCloseTimer);
+    dockSubCloseTimer = setTimeout(() => {
+      dockSubmenu = null;
+    }, 320);
+  }
 
   $effect(() => {
     if (!sleepDialogEl) return;
@@ -384,27 +423,50 @@
         <div
           data-open={qualityOpen}
           inert={!qualityOpen}
-          class="lw-popover absolute right-0 bottom-10 z-40 w-[240px] rounded-[12px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] p-2.5 text-[12px] shadow-[var(--lw-shadow-flyout)]"
+          class="lw-popover lw-flyout-surface absolute right-0 bottom-10 z-40 w-[264px]"
+          style:--lw-popover-origin="bottom right"
         >
-          <div class="flex items-center gap-2 px-1.5 py-1 font-semibold text-[var(--lw-text-primary)]">
-            <WaveIcon name="activity" size={14} class="text-[var(--lw-accent)]" />
-            <span>{qualityBadge} · {track.codec}</span>
+          <div class="lw-menu-row pointer-events-none">
+            <WaveIcon name="activity" size={15} />
+            <span class="min-w-0 flex-1 truncate">{qualityBadge} · {track.codec}</span>
           </div>
-          <div class="my-1 h-px bg-[var(--lw-divider)]"></div>
-          <div class="space-y-1 px-1.5 py-0.5 text-[var(--lw-text-secondary)]">
-            <div class="flex justify-between">
-              <span>Sample rate</span>
-              <span class="lw-tabular text-[var(--lw-text-primary)]">
-                {(track.sampleRateHz / 1000).toFixed(track.sampleRateHz % 1000 === 0 ? 0 : 1)} kHz
-              </span>
-            </div>
-            <div class="flex justify-between">
-              <span>Bit depth</span>
-              <span class="lw-tabular text-[var(--lw-text-primary)]">
-                {track.qualityTier === 'atmos' ? 'Dolby Atmos' : `${track.bitDepth}-bit`}
-              </span>
-            </div>
+          <div class="lw-menu-sep"></div>
+          <div class="lw-menu-row pointer-events-none">
+            <WaveIcon name="music" size={15} />
+            <span class="min-w-0 flex-1 truncate lw-tabular">
+              Sample rate · {(track.sampleRateHz / 1000).toFixed(track.sampleRateHz % 1000 === 0 ? 0 : 1)} kHz{track.codec.toLowerCase().includes('opus') ? ' (Opus)' : ''}
+            </span>
           </div>
+          <div class="lw-menu-row pointer-events-none">
+            <WaveIcon name="speaker" size={15} />
+            <span class="min-w-0 flex-1 truncate">
+              Output · {featuresStore.selectedDevice?.name ?? 'System default'}
+            </span>
+          </div>
+          <div class="lw-menu-row pointer-events-none">
+            <WaveIcon name="layers" size={15} />
+            <span class="min-w-0 flex-1 truncate lw-tabular">
+              {track.qualityTier === 'atmos' ? 'Spatial Audio · Dolby Atmos' : `Bit depth · ${track.bitDepth}-bit`}
+            </span>
+          </div>
+          {#if track.bitrateKbps > 0}
+            <div class="lw-menu-row pointer-events-none">
+              <WaveIcon name="clock" size={15} />
+              <span class="min-w-0 flex-1 truncate lw-tabular">Bitrate · {track.bitrateKbps} kbps</span>
+            </div>
+          {/if}
+          <div class="lw-menu-sep"></div>
+          <button
+            type="button"
+            onclick={() => {
+              qualityOpen = false;
+              router.navigate('/settings/audio');
+            }}
+            class="lw-menu-row"
+          >
+            <WaveIcon name="settings" size={15} />
+            <span class="min-w-0 flex-1 truncate">Quality settings</span>
+          </button>
         </div>
       </div>
     {/if}
@@ -501,11 +563,11 @@
       <div
         data-open={volumeFlyoutOpen}
         inert={!volumeFlyoutOpen}
-        class="lw-popover absolute right-0 bottom-10 z-40 w-[210px] rounded-[12px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] p-3 text-[12px] shadow-[var(--lw-shadow-flyout)]"
+        class="lw-popover lw-flyout-surface absolute right-0 bottom-10 z-40 w-[224px] p-3 text-[12.5px]"
+        style:--lw-popover-origin="bottom right"
       >
-        <div class="mb-1.5 flex items-center justify-between font-semibold">
-          <span>Volume</span>
-          <span class="lw-tabular text-[var(--lw-text-secondary)]">{volPct}%</span>
+        <div class="mb-2 flex items-center justify-between font-semibold">
+          <span>Volume {volPct}%</span>
         </div>
         <WaveSlider
           min={0}
@@ -550,12 +612,24 @@
       <WaveIcon name="minimize" size={15} />
     </button>
 
-    <!-- Overflow menu (_DockOverflow: Output, Speed, Sleep timer, Download) -->
-    <div class="relative" use:dismissFlyout={{ open: overflowOpen, close: () => (overflowOpen = false) }}>
+    <!-- Overflow menu (_DockOverflow: Output, Speed, Sleep timer, Download — matches player_dock.dart) -->
+    <div
+      class="relative"
+      use:dismissFlyout={{
+        open: overflowOpen,
+        close: () => {
+          overflowOpen = false;
+          dockSubmenu = null;
+        },
+      }}
+    >
       <button
         type="button"
         class="dock-glyph dock-press"
-        onclick={() => (overflowOpen = !overflowOpen)}
+        onclick={() => {
+          overflowOpen = !overflowOpen;
+          if (!overflowOpen) dockSubmenu = null;
+        }}
         use:waveTooltip={'More'}
         aria-label="More playback controls"
         aria-expanded={overflowOpen}
@@ -566,81 +640,209 @@
       <div
         data-open={overflowOpen}
         inert={!overflowOpen}
-        class="lw-popover absolute right-0 bottom-10 z-40 w-[230px] rounded-[12px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] p-1 text-[12.5px] shadow-[var(--lw-shadow-flyout)]"
+        style:--lw-popover-origin="bottom right"
+        class="lw-popover lw-has-cascade lw-flyout-surface absolute right-0 bottom-10 z-40 w-[256px]"
       >
-        <button
-          type="button"
-          onclick={() => {
-            overflowOpen = false;
-            windowState.toggleRightPanel('output');
-          }}
-          class="flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-2.5 py-1.5 text-left hover:bg-[var(--lw-wash-hover)]"
+        <!-- Output cascading submenu -->
+        <div
+          role="presentation"
+          class="relative"
+          onpointerenter={() => hoverDockSubmenu('output')}
+          onpointerleave={scheduleCloseDockSubmenu}
         >
-          <WaveIcon name="speaker" size={14} /> Audio output
-        </button>
-        <button
-          type="button"
-          onclick={() => {
-            overflowOpen = false;
-            router.navigate('/now-playing');
-          }}
-          class="flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-2.5 py-1.5 text-left hover:bg-[var(--lw-wash-hover)]"
-        >
-          <WaveIcon name="maximize" size={14} /> Open Now Playing
-        </button>
-        <div class="my-1 border-t border-[var(--lw-divider)]"></div>
-        <button
-          type="button"
-          onclick={() => {
-            playerStore.cycleSpeed();
-          }}
-          class="flex w-full cursor-pointer items-center justify-between rounded-[8px] px-2.5 py-1.5 text-left hover:bg-[var(--lw-wash-hover)]"
-        >
-          <span class="flex items-center gap-2.5"><WaveIcon name="activity" size={14} /> Playback speed</span>
-          <span class="text-[11px] text-[var(--lw-text-tertiary)] lw-tabular">{speedLabel}</span>
-        </button>
-        <div class="px-2.5 pt-1.5 pb-0.5 text-[10px] font-bold tracking-[0.8px] text-[var(--lw-text-tertiary)] uppercase">
-          Sleep timer {playerStore.sleepTimerMin ? `· ${playerStore.sleepTimerMin}m` : ''}
-        </div>
-        <div class="flex items-center gap-1 px-2 py-1">
-          {#each [0, 15, 30, 60] as mins (mins)}
-            <button
-              type="button"
-              onclick={() => {
-                playerStore.setSleepTimer(mins === 0 ? null : mins);
-                overflowOpen = false;
-              }}
-              class="flex-1 cursor-pointer rounded-[6px] py-1 text-[11px] font-semibold transition-colors {(mins === 0 && playerStore.sleepTimerMin === null) || playerStore.sleepTimerMin === mins
-                ? 'bg-[var(--lw-accent)] text-[var(--lw-on-accent)]'
-                : 'bg-[var(--lw-surface)] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)]'}"
+          <button
+            type="button"
+            data-highlighted={dockSubmenu === 'output'}
+            onclick={() => (dockSubmenu = dockSubmenu === 'output' ? null : 'output')}
+            class="lw-menu-row"
+          >
+            <WaveIcon name="speaker" size={15} />
+            <span class="min-w-0 flex-1 truncate">
+              Output · {featuresStore.selectedDevice?.name ?? 'System default'}
+            </span>
+            <WaveIcon name="chevronRight" size={12} class="text-[var(--lw-text-tertiary)]" />
+          </button>
+
+          {#if dockSubmenu === 'output'}
+            <div
+              role="menu"
+              tabindex="-1"
+              onpointerenter={keepDockSubmenu}
+              onpointerleave={scheduleCloseDockSubmenu}
+              class="absolute right-full bottom-[-4px] z-50 w-[264px] pr-1.5"
             >
-              {mins === 0 ? 'Off' : `${mins}m`}
-            </button>
-          {/each}
-          <button
-            type="button"
-            onclick={() => {
-              overflowOpen = false;
-              sleepDialogOpen = true;
-            }}
-            class="cursor-pointer rounded-[6px] bg-[var(--lw-surface)] px-2 py-1 text-[11px] font-semibold text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)]"
-          >
-            …
-          </button>
+              <div class="lw-flyout-surface max-h-[340px] overflow-y-auto">
+                <button
+                  type="button"
+                  onclick={() => {
+                    featuresStore.selectDevice('');
+                    overflowOpen = false;
+                    dockSubmenu = null;
+                  }}
+                  class="lw-menu-row"
+                >
+                  <span class="flex w-[14px] shrink-0 items-center justify-center text-[var(--lw-accent)]">
+                    {#if !featuresStore.selectedDeviceId}
+                      <WaveIcon name="check" size={13} />
+                    {/if}
+                  </span>
+                  <span class="min-w-0 flex-1 truncate">System default</span>
+                </button>
+                {#each featuresStore.devices.slice(0, 8) as dev (dev.id)}
+                  <button
+                    type="button"
+                    onclick={() => {
+                      featuresStore.selectDevice(dev.id);
+                      overflowOpen = false;
+                      dockSubmenu = null;
+                    }}
+                    class="lw-menu-row"
+                  >
+                    <span class="flex w-[14px] shrink-0 items-center justify-center text-[var(--lw-accent)]">
+                      {#if featuresStore.selectedDeviceId === dev.id}
+                        <WaveIcon name="check" size={13} />
+                      {/if}
+                    </span>
+                    <span class="min-w-0 flex-1 truncate">{dev.name}</span>
+                  </button>
+                {/each}
+                <div class="lw-menu-sep"></div>
+                <div class="lw-menu-row pointer-events-none">
+                  <WaveIcon name="activity" size={15} />
+                  <span class="min-w-0 flex-1 truncate">
+                    {settingsStore.platform === 'windows'
+                      ? settingsStore.exclusiveMode
+                        ? 'WASAPI · Exclusive'
+                        : 'WASAPI · Shared'
+                      : 'System output'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onclick={() => {
+                    overflowOpen = false;
+                    dockSubmenu = null;
+                    router.navigate('/settings/audio');
+                  }}
+                  class="lw-menu-row"
+                >
+                  <WaveIcon name="settings" size={15} />
+                  <span class="min-w-0 flex-1 truncate">Output settings</span>
+                </button>
+              </div>
+            </div>
+          {/if}
         </div>
-        {#if track}
-          <div class="my-1 border-t border-[var(--lw-divider)]"></div>
+
+        <button
+          type="button"
+          onpointerenter={scheduleCloseDockSubmenu}
+          onclick={() => playerStore.cycleSpeed()}
+          class="lw-menu-row"
+        >
+          <WaveIcon name="activity" size={15} />
+          <span class="min-w-0 flex-1 truncate lw-tabular">Speed {speedLabel}</span>
+        </button>
+
+        <!-- Sleep timer cascading submenu -->
+        <div
+          role="presentation"
+          class="relative"
+          onpointerenter={() => hoverDockSubmenu('sleep')}
+          onpointerleave={scheduleCloseDockSubmenu}
+        >
           <button
             type="button"
-            onclick={() => {
-              overflowOpen = false;
-              void downloadTrack(track);
-            }}
-            class="flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-2.5 py-1.5 text-left hover:bg-[var(--lw-wash-hover)]"
+            data-highlighted={dockSubmenu === 'sleep'}
+            onclick={() => (dockSubmenu = dockSubmenu === 'sleep' ? null : 'sleep')}
+            class="lw-menu-row"
           >
-            <WaveIcon name="download" size={14} /> Download this track
+            <WaveIcon name="clock" size={15} />
+            <span class="min-w-0 flex-1 truncate lw-tabular">
+              {playerStore.sleepTimerMin ? `Sleep · ${playerStore.sleepTimerMin}m` : 'Sleep timer'}
+            </span>
+            <WaveIcon name="chevronRight" size={12} class="text-[var(--lw-text-tertiary)]" />
           </button>
-        {/if}
+
+          {#if dockSubmenu === 'sleep'}
+            <div
+              role="menu"
+              tabindex="-1"
+              onpointerenter={keepDockSubmenu}
+              onpointerleave={scheduleCloseDockSubmenu}
+              class="absolute right-full bottom-[-4px] z-50 w-[196px] pr-1.5"
+            >
+              <div class="lw-flyout-surface">
+                <button
+                  type="button"
+                  onclick={() => {
+                    playerStore.setSleepTimer(null);
+                    overflowOpen = false;
+                    dockSubmenu = null;
+                  }}
+                  class="lw-menu-row"
+                >
+                  <span class="flex w-[14px] shrink-0 items-center justify-center text-[var(--lw-accent)]">
+                    {#if playerStore.sleepTimerMin === null}
+                      <WaveIcon name="check" size={13} />
+                    {/if}
+                  </span>
+                  <span class="min-w-0 flex-1 truncate">Off</span>
+                </button>
+                {#each [15, 30, 60] as mins (mins)}
+                  <button
+                    type="button"
+                    onclick={() => {
+                      playerStore.setSleepTimer(mins);
+                      overflowOpen = false;
+                      dockSubmenu = null;
+                    }}
+                    class="lw-menu-row"
+                  >
+                    <span class="flex w-[14px] shrink-0 items-center justify-center text-[var(--lw-accent)]">
+                      {#if playerStore.sleepTimerMin === mins}
+                        <WaveIcon name="check" size={13} />
+                      {/if}
+                    </span>
+                    <span class="min-w-0 flex-1 truncate">{mins} minutes</span>
+                  </button>
+                {/each}
+                <button
+                  type="button"
+                  onclick={() => {
+                    overflowOpen = false;
+                    dockSubmenu = null;
+                    sleepDialogOpen = true;
+                  }}
+                  class="lw-menu-row"
+                >
+                  <span class="flex w-[14px] shrink-0 items-center justify-center text-[var(--lw-accent)]">
+                    {#if playerStore.sleepTimerMin !== null && ![15, 30, 60].includes(playerStore.sleepTimerMin)}
+                      <WaveIcon name="check" size={13} />
+                    {/if}
+                  </span>
+                  <span class="min-w-0 flex-1 truncate">Custom…</span>
+                </button>
+              </div>
+            </div>
+          {/if}
+        </div>
+
+        <button
+          type="button"
+          disabled={!track}
+          onpointerenter={scheduleCloseDockSubmenu}
+          onclick={() => {
+            if (!track) return;
+            overflowOpen = false;
+            dockSubmenu = null;
+            void downloadTrack(track);
+          }}
+          class="lw-menu-row"
+        >
+          <WaveIcon name="download" size={15} />
+          <span class="min-w-0 flex-1 truncate">Download this track</span>
+        </button>
       </div>
     </div>
   </div>

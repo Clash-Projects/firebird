@@ -8,6 +8,7 @@
     playTrackNow,
     toggleTrackLike,
   } from '$src/app/trackActions';
+  import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
   import { uiSlots } from '$src/lib/plugins/uiSlots.svelte';
   import { featuresStore } from '$src/state/features.svelte';
   import { libraryStore } from '$src/state/library.svelte';
@@ -16,16 +17,14 @@
   import Buttons from '$src/ui/components/Buttons.svelte';
   import Input from '$src/ui/components/Input.svelte';
   import { goAlbum, goArtist } from '$src/ui/navigation/waveNav';
-  import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
-  import WaveHaze from '$src/ui/theme/WaveHaze.svelte';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
-  import Artwork from './Artwork.svelte';
   import { contextMenu } from './contextMenuState.svelte';
 
   let track = $derived(contextMenu.track);
   let menu = $state<HTMLDivElement>();
   let submenuOpen = $state(false);
   let submenuFlipLeft = $state(false);
+  let submenuOpenUp = $state(false);
   let previousFocus: HTMLElement | null = null;
   let liked = $derived(track ? libraryStore.isLiked(track.id) : false);
   let customPlaylists = $derived(
@@ -37,6 +36,7 @@
   let newPlDialog = $state<HTMLDialogElement | null>(null);
   let newPlName = $state('');
   let pendingTrackForPlaylist = $state<Track | null>(null);
+  let hoverTimer: ReturnType<typeof setTimeout> | null = null;
   let closeSubmenuTimer: ReturnType<typeof setTimeout> | null = null;
 
   $effect(() => {
@@ -49,11 +49,14 @@
     void tick().then(() => {
       if (!menu || !contextMenu.open) return;
       const rect = menu.getBoundingClientRect();
-      contextMenu.clampToViewport(rect.width, rect.height);
-      const scaleRaw = getComputedStyle(document.documentElement).getPropertyValue('--lw-ui-scale');
-      const scale = parseFloat(scaleRaw) > 0 ? parseFloat(scaleRaw) : 1;
-      submenuFlipLeft = contextMenu.x + rect.width + 216 > window.innerWidth / scale;
-      menu.querySelector<HTMLButtonElement>('button[role="menuitem"]')?.focus({ preventScroll: true });
+      const scale =
+        menu.offsetWidth > 0 && rect.width > 0 ? rect.width / menu.offsetWidth : 1;
+      const vw = window.innerWidth / scale;
+      const vh = window.innerHeight / scale;
+      contextMenu.clampToViewport(rect.width / scale, rect.height / scale);
+      submenuFlipLeft = contextMenu.x + rect.width / scale + 236 > vw;
+      submenuOpenUp = contextMenu.y + rect.height / scale * 0.5 + 220 > vh;
+      menu.querySelector<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)')?.focus({ preventScroll: true });
     });
   });
 
@@ -66,19 +69,44 @@
     }
   });
 
-  function openSubmenu() {
+  function cancelSubmenuTimers() {
+    if (hoverTimer) {
+      clearTimeout(hoverTimer);
+      hoverTimer = null;
+    }
     if (closeSubmenuTimer) {
       clearTimeout(closeSubmenuTimer);
       closeSubmenuTimer = null;
     }
+  }
+
+  function hoverSubmenuRow() {
+    if (closeSubmenuTimer) {
+      clearTimeout(closeSubmenuTimer);
+      closeSubmenuTimer = null;
+    }
+    if (submenuOpen) return;
+    if (hoverTimer) clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => {
+      submenuOpen = true;
+    }, 180);
+  }
+
+  function openSubmenuNow() {
+    cancelSubmenuTimers();
     submenuOpen = true;
   }
 
   function scheduleCloseSubmenu() {
+    if (hoverTimer) {
+      clearTimeout(hoverTimer);
+      hoverTimer = null;
+    }
+    if (!submenuOpen) return;
     if (closeSubmenuTimer) clearTimeout(closeSubmenuTimer);
     closeSubmenuTimer = setTimeout(() => {
       submenuOpen = false;
-    }, 120);
+    }, 320);
   }
 
   function onMenuKeydown(event: KeyboardEvent) {
@@ -95,7 +123,7 @@
 
     if (event.key === 'ArrowRight' && document.activeElement?.getAttribute('data-submenu-trigger') === 'true') {
       event.preventDefault();
-      submenuOpen = true;
+      openSubmenuNow();
       void tick().then(() => {
         menu?.querySelector<HTMLButtonElement>('[data-submenu-panel] button[role="menuitem"]')?.focus();
       });
@@ -113,7 +141,7 @@
     const scope = submenuOpen
       ? menu.querySelector('[data-submenu-panel]') ?? menu
       : menu;
-    const items = Array.from(scope.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]'));
+    const items = Array.from(scope.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)'));
     if (!items.length) return;
     event.preventDefault();
     const current = items.findIndex((item) => item === document.activeElement);
@@ -151,18 +179,47 @@
     return match?.id ?? null;
   }
 
+  function trackShareLink(t: Track): string | null {
+    const vid = t.videoId?.trim() || (t.id && !t.id.startsWith('local-') && t.id.length === 11 ? t.id : '');
+    if (vid) return `https://music.youtube.com/watch?v=${vid}`;
+    if (t.localPath) return t.localPath;
+    return null;
+  }
+
+  async function copyLink(t: Track) {
+    const link = trackShareLink(t);
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      featuresStore.showToast({ title: 'Link copied', severity: 'success' });
+    } catch {
+      featuresStore.showToast({ title: 'Could not copy link', severity: 'warning' });
+    }
+  }
+
   async function copyTitleArtist(t: Track) {
     const text = `${t.title} — ${t.artist}`;
     try {
       await navigator.clipboard.writeText(text);
       featuresStore.showToast({
-        title: 'Copied to clipboard',
-        subtitle: text,
+        title: 'Title and artist copied',
         severity: 'success',
       });
     } catch {
       featuresStore.showToast({ title: 'Could not copy to clipboard', severity: 'warning' });
     }
+  }
+
+  async function excludeTrack(t: Track) {
+    if (isTauriRuntime()) {
+      await ipcInvoke('library_exclusions_add', { name: t.title, artist: t.artist }).catch(() => null);
+      void libraryStore.loadHomeFeed(true);
+    }
+    featuresStore.showToast({
+      title: "Won't recommend",
+      subtitle: `${t.title} — ${t.artist}`,
+      severity: 'info',
+    });
   }
 
   function startNewPlaylistForTrack(t: Track) {
@@ -188,11 +245,25 @@
   }
 
   let albumTarget = $derived(track ? resolveAlbumId(track) : null);
+  let shareLink = $derived(track ? trackShareLink(track) : null);
+  let artistList = $derived.by(() => {
+    if (!track) return [];
+    if (track.artists.length > 0) return track.artists.slice(0, 4);
+    return track.artist ? [track.artist] : [];
+  });
   let propDownload = $derived(
     contextMenu.propertiesTrack
       ? libraryStore.downloads.find((d) => d.trackId === contextMenu.propertiesTrack!.id)
       : undefined
   );
+  let propOrigin = $derived.by(() => {
+    const pt = contextMenu.propertiesTrack;
+    if (!pt) return { kind: 'Stream', path: '' };
+    if (pt.localPath) return { kind: 'Local file', path: pt.localPath };
+    if (pt.isLocal) return { kind: 'Local file', path: '' };
+    if (propDownload?.localPath) return { kind: 'Download', path: propDownload.localPath };
+    return { kind: 'Stream', path: '' };
+  });
 </script>
 
 <svelte:window
@@ -206,7 +277,8 @@
     aria-label="Track actions"
     bind:this={menu}
     tabindex="-1"
-    class="lw-popover fixed z-50"
+    data-lw="context-menu"
+    class="lw-popover lw-has-cascade lw-flyout-surface fixed z-50 w-[264px]"
     data-open={contextMenu.open}
     inert={!contextMenu.open}
     style:left="{contextMenu.x}px"
@@ -215,232 +287,329 @@
     onclick={(e) => e.stopPropagation()}
     onkeydown={onMenuKeydown}
   >
-    <WaveHaze
-      level="l3"
-      dataLw="context-menu"
-      class="relative w-[236px] rounded-[10px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] p-1 shadow-[var(--lw-shadow-flyout)]"
+    <button
+      type="button"
+      role="menuitem"
+      tabindex="-1"
+      onpointerenter={scheduleCloseSubmenu}
+      onclick={() => run(() => playTrackNow(track))}
+      class="lw-menu-row"
     >
-      <div class="flex items-center gap-2.5 border-b border-[var(--lw-divider)] px-2.5 py-2">
-        <Artwork src={track.artworkUrl} label={track.title} artist={track.artist} kind="track" size={30} radius={6} />
-        <div class="min-w-0 flex-1">
-          <div class="truncate text-[12.5px] font-semibold leading-tight text-[var(--lw-text-primary)]">{track.title}</div>
-          <div class="truncate text-[11px] leading-tight text-[var(--lw-text-secondary)]">{track.artist}</div>
-        </div>
-      </div>
+      <WaveIcon name="play" size={15} />
+      <span class="min-w-0 flex-1 truncate">Play</span>
+      <span class="lw-menu-hint">Enter</span>
+    </button>
 
-      <div class="mt-1 space-y-0.5 text-[12.5px]">
-        <button type="button" role="menuitem" tabindex="-1" onclick={() => run(() => playTrackNow(track))} class="ctx-item">
-          <WaveIcon name="play" size={14} />
-          <span class="flex-1 truncate">Play</span>
-          <span class="ctx-hint">Enter</span>
-        </button>
-        <button type="button" role="menuitem" tabindex="-1" onclick={() => run(() => playTrackNext(track))} class="ctx-item">
-          <WaveIcon name="next" size={14} />
-          <span class="flex-1 truncate">Play next</span>
-        </button>
-        <button type="button" role="menuitem" tabindex="-1" onclick={() => run(() => enqueueTrack(track))} class="ctx-item">
-          <WaveIcon name="addToQueue" size={14} />
-          <span class="flex-1 truncate">Add to queue</span>
-        </button>
+    <button
+      type="button"
+      role="menuitem"
+      tabindex="-1"
+      onpointerenter={scheduleCloseSubmenu}
+      onclick={() => run(() => playTrackNext(track))}
+      class="lw-menu-row"
+    >
+      <WaveIcon name="plus" size={15} />
+      <span class="min-w-0 flex-1 truncate">Play next</span>
+    </button>
 
-        <div class="my-1 h-px bg-[var(--lw-divider)]"></div>
+    <button
+      type="button"
+      role="menuitem"
+      tabindex="-1"
+      onpointerenter={scheduleCloseSubmenu}
+      onclick={() => run(() => enqueueTrack(track))}
+      class="lw-menu-row"
+    >
+      <WaveIcon name="queue" size={15} />
+      <span class="min-w-0 flex-1 truncate">Add to queue</span>
+    </button>
 
-        <button type="button" role="menuitem" tabindex="-1" onclick={() => run(() => toggleTrackLike(track))} class="ctx-item">
-          <WaveIcon name="heart" size={14} filled={liked} />
-          <span class="flex-1 truncate">{liked ? 'Unlike' : 'Like'}</span>
-        </button>
-        <button type="button" role="menuitem" tabindex="-1" onclick={() => run(() => downloadTrack(track))} class="ctx-item">
-          <WaveIcon name="download" size={14} />
-          <span class="flex-1 truncate">Download</span>
-          <span class="ctx-hint">Ctrl+D</span>
-        </button>
+    <div class="lw-menu-sep"></div>
 
-        <!-- Submenu cascade: Add to playlist -->
+    <button
+      type="button"
+      role="menuitem"
+      tabindex="-1"
+      onpointerenter={scheduleCloseSubmenu}
+      onclick={() => run(() => toggleTrackLike(track))}
+      class="lw-menu-row"
+    >
+      <WaveIcon name="heart" size={15} filled={liked} />
+      <span class="min-w-0 flex-1 truncate">{liked ? 'Unlike' : 'Like'}</span>
+    </button>
+
+    <button
+      type="button"
+      role="menuitem"
+      tabindex="-1"
+      onpointerenter={scheduleCloseSubmenu}
+      onclick={() => run(() => downloadTrack(track))}
+      class="lw-menu-row"
+    >
+      <WaveIcon name="download" size={15} />
+      <span class="min-w-0 flex-1 truncate">Download</span>
+      <span class="lw-menu-hint">Ctrl+D</span>
+    </button>
+
+    <!-- Submenu cascade: Add to playlist (matches waveAddToPlaylistEntry in menus.dart) -->
+    <div
+      class="relative"
+      role="none"
+      onpointerenter={hoverSubmenuRow}
+      onpointerleave={scheduleCloseSubmenu}
+    >
+      <button
+        type="button"
+        role="menuitem"
+        tabindex="-1"
+        aria-haspopup="menu"
+        aria-expanded={submenuOpen}
+        data-submenu-trigger="true"
+        data-highlighted={submenuOpen}
+        onclick={(e) => {
+          e.stopPropagation();
+          openSubmenuNow();
+        }}
+        class="lw-menu-row"
+      >
+        <WaveIcon name="addToQueue" size={15} />
+        <span class="min-w-0 flex-1 truncate">Add to playlist</span>
+        <WaveIcon name="chevronRight" size={12} class="text-[var(--lw-text-tertiary)]" />
+      </button>
+
+      {#if submenuOpen}
+        <!-- 6px padded bridge prevents diagonal mouse gap from closing submenu -->
         <div
-          class="relative"
-          role="none"
-          onmouseenter={openSubmenu}
-          onmouseleave={scheduleCloseSubmenu}
+          role="menu"
+          data-submenu-panel
+          tabindex="-1"
+          onpointerenter={cancelSubmenuTimers}
+          onpointerleave={scheduleCloseSubmenu}
+          class="absolute z-20 w-[236px] {submenuOpenUp ? 'bottom-[-4px]' : 'top-[-4px]'} {submenuFlipLeft ? 'right-full pr-1.5' : 'left-full pl-1.5'}"
         >
-          <button
-            type="button"
-            role="menuitem"
-            tabindex="-1"
-            aria-haspopup="menu"
-            aria-expanded={submenuOpen}
-            data-submenu-trigger="true"
-            onclick={(e) => {
-              e.stopPropagation();
-              submenuOpen = !submenuOpen;
-            }}
-            class="ctx-item"
-          >
-            <WaveIcon name="plus" size={14} />
-            <span class="flex-1 truncate">Add to playlist</span>
-            <WaveIcon name="chevronRight" size={12} class="text-[var(--lw-text-tertiary)]" />
-          </button>
-
-          {#if submenuOpen}
-            <div
-              role="menu"
-              data-submenu-panel
-              tabindex="-1"
-              onmouseenter={openSubmenu}
-              onmouseleave={scheduleCloseSubmenu}
-              class="absolute top-[-4px] z-10 w-[208px] {submenuFlipLeft ? 'right-full mr-1' : 'left-full ml-1'}"
-            >
-              <WaveHaze
-                level="l3"
-                class="rounded-[10px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] p-1 shadow-[var(--lw-shadow-flyout)]"
+          <div class="lw-flyout-surface max-h-[300px] overflow-y-auto">
+            {#each customPlaylists as pl (pl.id)}
+              <button
+                type="button"
+                role="menuitem"
+                tabindex="-1"
+                onclick={() =>
+                  run(() => {
+                    libraryStore.addTrackToPlaylist(pl.id, track.id);
+                    featuresStore.showToast({
+                      title: `Added to ${pl.name}`,
+                      subtitle: track.title,
+                      severity: 'success',
+                    });
+                  })}
+                class="lw-menu-row"
               >
-                <div use:waveSmoothScroll class="lw-scroll max-h-[260px]">
-                <button
-                  type="button"
-                  role="menuitem"
-                  tabindex="-1"
-                  onclick={() => startNewPlaylistForTrack(track)}
-                  class="ctx-item font-medium text-[var(--lw-accent)]"
-                >
-                  <WaveIcon name="plus" size={13} />
-                  <span class="truncate">New playlist...</span>
-                </button>
-                {#if customPlaylists.length > 0}
-                  <div class="my-1 h-px bg-[var(--lw-divider)]"></div>
-                  {#each customPlaylists as pl (pl.id)}
-                    <button
-                      type="button"
-                      role="menuitem"
-                      tabindex="-1"
-                      onclick={() =>
-                        run(() => {
-                          libraryStore.addTrackToPlaylist(pl.id, track.id);
-                          featuresStore.showToast({
-                            title: `Added to ${pl.name}`,
-                            subtitle: track.title,
-                            severity: 'success',
-                          });
-                        })}
-                      class="ctx-item"
-                    >
-                      <WaveIcon name="queue" size={13} />
-                      <span class="truncate">{pl.name}</span>
-                    </button>
-                  {/each}
-                {/if}
-                </div>
-              </WaveHaze>
-            </div>
-          {/if}
-        </div>
+                <WaveIcon name="queue" size={15} />
+                <span class="min-w-0 flex-1 truncate">{pl.name}</span>
+              </button>
+            {/each}
 
-        <div class="my-1 h-px bg-[var(--lw-divider)]"></div>
+            {#if customPlaylists.length > 0}
+              <div class="lw-menu-sep"></div>
+            {/if}
 
-        {#if albumTarget}
-          <button type="button" role="menuitem" tabindex="-1" onclick={() => run(() => goAlbum(albumTarget))} class="ctx-item">
-            <WaveIcon name="album" size={14} />
-            <span class="flex-1 truncate">Go to album</span>
-          </button>
-        {/if}
-
-        {#each track.artists.slice(0, 3) as artistName (artistName)}
-          <button type="button" role="menuitem" tabindex="-1" onclick={() => run(() => openArtistTrack(artistName))} class="ctx-item">
-            <WaveIcon name="artist" size={14} />
-            <span class="flex-1 truncate">Go to {artistName}</span>
-          </button>
-        {/each}
-
-        <div class="my-1 h-px bg-[var(--lw-divider)]"></div>
-
-        <button type="button" role="menuitem" tabindex="-1" onclick={() => run(() => void copyTitleArtist(track))} class="ctx-item">
-          <WaveIcon name="copy" size={14} />
-          <span class="flex-1 truncate">Copy title and artist</span>
-        </button>
-
-        <button type="button" role="menuitem" tabindex="-1" onclick={() => contextMenu.openProperties(track)} class="ctx-item">
-          <WaveIcon name="info" size={14} />
-          <span class="flex-1 truncate">Properties</span>
-        </button>
-
-        {#if contextMenu.removeLabel && contextMenu.onRemove}
-          <div class="my-1 h-px bg-[var(--lw-divider)]"></div>
-          <button
-            type="button"
-            role="menuitem"
-            tabindex="-1"
-            onclick={() => run(() => contextMenu.onRemove?.())}
-            class="ctx-item text-[var(--lw-danger)]"
-          >
-            <WaveIcon name="trash" size={14} />
-            <span class="flex-1 truncate">{contextMenu.removeLabel}</span>
-            <span class="ctx-hint">Del</span>
-          </button>
-        {/if}
-
-        {#if uiSlots.trackContextMenuItems.length > 0}
-          <div class="my-1 h-px bg-[var(--lw-divider)]"></div>
-          {#each uiSlots.trackContextMenuItems as item (item.id)}
-            <button type="button" role="menuitem" tabindex="-1" onclick={() => run(() => item.onClick(track))} class="ctx-item">
-              <WaveIcon name="plugin" size={14} />
-              <span class="flex-1 truncate">{item.label}</span>
+            <button
+              type="button"
+              role="menuitem"
+              tabindex="-1"
+              onclick={() => startNewPlaylistForTrack(track)}
+              class="lw-menu-row"
+            >
+              <WaveIcon name="plus" size={15} />
+              <span class="min-w-0 flex-1 truncate">New playlist…</span>
             </button>
-          {/each}
-        {/if}
-      </div>
-    </WaveHaze>
+          </div>
+        </div>
+      {/if}
+    </div>
+
+    <div class="lw-menu-sep"></div>
+
+    <button
+      type="button"
+      role="menuitem"
+      tabindex="-1"
+      disabled={!albumTarget}
+      onpointerenter={scheduleCloseSubmenu}
+      onclick={() => albumTarget && run(() => goAlbum(albumTarget))}
+      class="lw-menu-row"
+    >
+      <WaveIcon name="album" size={15} />
+      <span class="min-w-0 flex-1 truncate">Go to album</span>
+    </button>
+
+    {#each artistList as artistName (artistName)}
+      <button
+        type="button"
+        role="menuitem"
+        tabindex="-1"
+        onpointerenter={scheduleCloseSubmenu}
+        onclick={() => run(() => openArtistTrack(artistName))}
+        class="lw-menu-row"
+      >
+        <WaveIcon name="artist" size={15} />
+        <span class="min-w-0 flex-1 truncate">Go to {artistName}</span>
+      </button>
+    {/each}
+
+    <div class="lw-menu-sep"></div>
+
+    <button
+      type="button"
+      role="menuitem"
+      tabindex="-1"
+      disabled={!shareLink}
+      onpointerenter={scheduleCloseSubmenu}
+      onclick={() => run(() => void copyLink(track))}
+      class="lw-menu-row"
+    >
+      <WaveIcon name="share" size={15} />
+      <span class="min-w-0 flex-1 truncate">Copy link</span>
+    </button>
+
+    <button
+      type="button"
+      role="menuitem"
+      tabindex="-1"
+      onpointerenter={scheduleCloseSubmenu}
+      onclick={() => run(() => void copyTitleArtist(track))}
+      class="lw-menu-row"
+    >
+      <WaveIcon name="copy" size={15} />
+      <span class="min-w-0 flex-1 truncate">Copy title and artist</span>
+    </button>
+
+    <button
+      type="button"
+      role="menuitem"
+      tabindex="-1"
+      onpointerenter={scheduleCloseSubmenu}
+      onclick={() => contextMenu.openProperties(track)}
+      class="lw-menu-row"
+    >
+      <WaveIcon name="info" size={15} />
+      <span class="min-w-0 flex-1 truncate">Properties</span>
+    </button>
+
+    {#if contextMenu.removeLabel && contextMenu.onRemove}
+      <div class="lw-menu-sep"></div>
+      <button
+        type="button"
+        role="menuitem"
+        tabindex="-1"
+        onpointerenter={scheduleCloseSubmenu}
+        onclick={() => run(() => contextMenu.onRemove?.())}
+        class="lw-menu-row"
+      >
+        <WaveIcon name="trash" size={15} />
+        <span class="min-w-0 flex-1 truncate">{contextMenu.removeLabel}</span>
+        <span class="lw-menu-hint">Del</span>
+      </button>
+    {/if}
+
+    <div class="lw-menu-sep"></div>
+
+    <button
+      type="button"
+      role="menuitem"
+      tabindex="-1"
+      onpointerenter={scheduleCloseSubmenu}
+      onclick={() => run(() => void excludeTrack(track))}
+      class="lw-menu-row"
+    >
+      <svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true" class="shrink-0">
+        <circle cx="10" cy="10" r="7.2" stroke="currentColor" stroke-width="1.5" />
+        <path d="M5 15L15 5" stroke="currentColor" stroke-width="1.5" />
+      </svg>
+      <span class="min-w-0 flex-1 truncate">Don't recommend</span>
+    </button>
+
+    {#if uiSlots.trackContextMenuItems.length > 0}
+      <div class="lw-menu-sep"></div>
+      {#each uiSlots.trackContextMenuItems as item (item.id)}
+        <button
+          type="button"
+          role="menuitem"
+          tabindex="-1"
+          onpointerenter={scheduleCloseSubmenu}
+          onclick={() => run(() => item.onClick(track))}
+          class="lw-menu-row"
+        >
+          <WaveIcon name="plugin" size={15} />
+          <span class="min-w-0 flex-1 truncate">{item.label}</span>
+        </button>
+      {/each}
+    {/if}
   </div>
 {/if}
 
-<!-- Track Properties dialog -->
+<!-- Track Properties dialog (matches showWaveTrackProperties in menus.dart) -->
 <dialog
   bind:this={propsDialog}
   closedby="any"
   use:dismissDialogOnBackdrop={() => contextMenu.closeProperties()}
   onclose={() => contextMenu.closeProperties()}
-  aria-label="Track properties"
-  class="w-[min(440px,calc(100vw-32px))] p-5 text-[var(--lw-text-primary)]"
+  aria-label="Properties"
+  class="w-[min(440px,calc(100vw-32px))] p-6 text-[var(--lw-text-primary)]"
 >
   {#if contextMenu.propertiesTrack}
     {@const pt = contextMenu.propertiesTrack}
-    <div class="flex items-center gap-3.5">
-      <Artwork src={pt.artworkUrl} label={pt.title} artist={pt.artist} kind="track" size={68} radius={10} shadow="lift" />
-      <div class="min-w-0 flex-1">
-        <h2 class="truncate text-[16px] font-semibold text-[var(--lw-text-primary)]">{pt.title}</h2>
-        <p class="truncate text-[13px] text-[var(--lw-text-secondary)]">{pt.artist}</p>
-        {#if pt.album}
-          <p class="truncate text-[12px] text-[var(--lw-text-tertiary)]">{pt.album}</p>
-        {/if}
+    <h2 class="text-[19px] font-semibold tracking-[-0.3px]">Properties</h2>
+
+    <div class="mt-4 space-y-3.5 select-text">
+      <div>
+        <div class="text-[12px] text-[var(--lw-text-secondary)]">Title</div>
+        <div class="mt-0.5 text-[15px] font-semibold leading-snug">{pt.title}</div>
       </div>
+
+      <div>
+        <div class="text-[12px] text-[var(--lw-text-secondary)]">Artist</div>
+        <div class="mt-0.5 text-[15px] font-semibold leading-snug">{pt.artist}</div>
+      </div>
+
+      {#if pt.album}
+        <div>
+          <div class="text-[12px] text-[var(--lw-text-secondary)]">Album</div>
+          <div class="mt-0.5 text-[15px] font-semibold leading-snug">{pt.album}</div>
+        </div>
+      {/if}
+
+      <div>
+        <div class="text-[12px] text-[var(--lw-text-secondary)]">Duration</div>
+        <div class="mt-0.5 text-[15px] font-semibold leading-snug lw-tabular">
+          {pt.durationSec > 0 ? formatDuration(pt.durationSec) : 'Unknown'}
+        </div>
+      </div>
+
+      <div>
+        <div class="text-[12px] text-[var(--lw-text-secondary)]">Source</div>
+        <div class="mt-0.5 text-[15px] font-semibold leading-snug">{propOrigin.kind}</div>
+      </div>
+
+      {#if pt.codec}
+        <div>
+          <div class="text-[12px] text-[var(--lw-text-secondary)]">Quality</div>
+          <div class="mt-0.5 text-[15px] font-semibold leading-snug lw-tabular">
+            {pt.codec}{pt.sampleRateHz > 0 ? ` · ${(pt.sampleRateHz / 1000).toFixed(pt.sampleRateHz % 1000 === 0 ? 0 : 1)} kHz` : ''}{pt.bitDepth > 0 ? ` / ${pt.bitDepth}-bit` : ''}{pt.bitrateKbps > 0 ? ` · ${pt.bitrateKbps} kbps` : ''}
+          </div>
+        </div>
+      {/if}
+
+      {#if propOrigin.path}
+        <div>
+          <div class="text-[12px] text-[var(--lw-text-secondary)]">Path</div>
+          <div class="mt-0.5 break-all text-[14px] font-semibold leading-snug">{propOrigin.path}</div>
+        </div>
+      {/if}
     </div>
 
-    <div class="mt-4 divide-y divide-[var(--lw-divider)] border-y border-[var(--lw-divider)] text-[12.5px]">
-      <div class="flex items-center justify-between py-2">
-        <span class="text-[var(--lw-text-secondary)]">Duration</span>
-        <span class="lw-tabular">{formatDuration(pt.durationSec)}</span>
-      </div>
-      <div class="flex items-center justify-between py-2">
-        <span class="text-[var(--lw-text-secondary)]">Format</span>
-        <span>{pt.codec} · {(pt.sampleRateHz / 1000).toFixed(1)} kHz / {pt.bitDepth}-bit</span>
-      </div>
-      <div class="flex items-center justify-between py-2">
-        <span class="text-[var(--lw-text-secondary)]">Bitrate</span>
-        <span class="lw-tabular">{pt.bitrateKbps} kbps</span>
-      </div>
-      <div class="flex items-center justify-between gap-4 py-2">
-        <span class="shrink-0 text-[var(--lw-text-secondary)]">Source</span>
-        <span class="truncate text-right text-[var(--lw-text-primary)]">
-          {propDownload?.localPath ? `Downloaded (${propDownload.localPath})` : 'Streaming catalog'}
-        </span>
-      </div>
-    </div>
-
-    <div class="mt-4 flex justify-end">
-      <button
-        type="button"
-        onclick={() => propsDialog?.close()}
-        class="lw-press cursor-pointer rounded-[8px] border border-[var(--lw-outline)] bg-[var(--lw-surface-overlay)] px-4 py-1.5 text-[12.5px] font-medium hover:bg-[var(--lw-wash-hover)]"
-      >
-        Close
-      </button>
+    <div class="mt-6 flex justify-end">
+      <Buttons variant="primary" size="sm" onclick={() => propsDialog?.close()}>Close</Buttons>
     </div>
   {/if}
 </dialog>
@@ -451,50 +620,21 @@
   closedby="any"
   use:dismissDialogOnBackdrop={() => newPlDialog?.close()}
   aria-label="New playlist"
-  class="w-[min(380px,calc(100vw-32px))] p-5 text-[var(--lw-text-primary)]"
+  class="w-[min(400px,calc(100vw-32px))] p-6 text-[var(--lw-text-primary)]"
 >
   <form onsubmit={submitNewPlaylist}>
-    <h2 class="text-[15px] font-semibold">New playlist</h2>
-    <p class="mt-1 text-[12px] text-[var(--lw-text-secondary)]">
+    <h2 class="text-[18px] font-semibold tracking-[-0.2px]">New playlist</h2>
+    <p class="mt-1 text-[12.5px] text-[var(--lw-text-secondary)]">
       Create a playlist and add {pendingTrackForPlaylist?.title ?? 'this track'}.
     </p>
-    <div class="mt-3">
+    <div class="mt-3.5">
       <Input bind:value={newPlName} autofocus placeholder="Playlist name" />
     </div>
-    <div class="mt-4 flex justify-end gap-2">
-      <Buttons variant="ghost" size="sm" onclick={() => newPlDialog?.close()}>Cancel</Buttons>
+    <div class="mt-5 flex justify-end gap-2">
+      <Buttons variant="secondary" size="sm" onclick={() => newPlDialog?.close()}>Cancel</Buttons>
       <Buttons type="submit" variant="primary" size="sm" disabled={!newPlName.trim()}>
-        Create &amp; add
+        Create
       </Buttons>
     </div>
   </form>
 </dialog>
-
-<style>
-  .ctx-item {
-    display: flex;
-    width: 100%;
-    height: 30px;
-    align-items: center;
-    gap: 10px;
-    border-radius: 6px;
-    padding: 0 9px;
-    text-align: left;
-    cursor: pointer;
-    color: inherit;
-    transition: background-color var(--lw-motion-fast) var(--ease-native);
-  }
-
-  .ctx-item:hover,
-  .ctx-item:focus-visible {
-    background: var(--lw-wash-hover);
-    outline: none;
-  }
-
-  .ctx-hint {
-    margin-left: auto;
-    font-size: 11px;
-    color: var(--lw-text-tertiary);
-    font-variant-numeric: tabular-nums;
-  }
-</style>

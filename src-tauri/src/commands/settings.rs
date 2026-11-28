@@ -172,6 +172,22 @@ pub fn prefs_get_all_settings(state: State<'_, AppState>) -> Value {
     m.insert("preferSpotifyCanvas".into(), Value::Bool(p.prefer_spotify_canvas()));
     m.insert("recommendationSource".into(), Value::String(p.recommendation_source()));
     m.insert("syncYtLibrary".into(), Value::Bool(p.sync_yt_library()));
+    m.insert("syncYtHistory".into(), Value::Bool(p.get_bool("lw_sync_yt_history").unwrap_or(true)));
+    m.insert("hazeMaterial".into(), Value::String(p.haze_material()));
+    m.insert("hazeIntensity".into(), Value::String(p.haze_intensity()));
+    m.insert("ambientStyle".into(), Value::String(p.ambient_style()));
+    m.insert("addonsEnabled".into(), Value::Bool(p.addons_enabled()));
+    m.insert(
+        "addonUrls".into(),
+        Value::Array(p.addon_urls().into_iter().map(Value::String).collect()),
+    );
+    m.insert(
+        "disabledAddonUrls".into(),
+        Value::Array(p.disabled_addon_urls().into_iter().map(Value::String).collect()),
+    );
+    m.insert("lastFmConfigured".into(), Value::Bool(p.is_last_fm_configured()));
+    m.insert("listenBrainzServer".into(), Value::String(p.listen_brainz_server()));
+    m.insert("libreFmServer".into(), Value::String(p.libre_fm_server()));
     m.insert("verboseLogs".into(), Value::Bool(p.verbose_logs()));
     Value::Object(m)
 }
@@ -322,6 +338,98 @@ pub fn diagnostics_export_logs(state: State<'_, AppState>) -> Result<String, Str
     let saved = LogBundle::export_to_path(&report, &dest).map_err(|e| e.to_string())?;
     LogBundle::reveal_file(&saved);
     Ok(saved.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub fn diagnostics_open_log_folder(state: State<'_, AppState>) {
+    if let Some(first) = DiagnosticsLog::session_files().into_iter().next() {
+        if let Some(parent) = first.parent() {
+            LogBundle::open_folder(parent);
+            return;
+        }
+    }
+    let logs_dir = state.app_support_dir.join("logs");
+    let _ = std::fs::create_dir_all(&logs_dir);
+    LogBundle::open_folder(&logs_dir);
+}
+
+#[tauri::command]
+pub async fn dialog_pick_folder(title: Option<String>) -> Result<Option<String>, String> {
+    let dialog_title = title.unwrap_or_else(|| "Select folder".to_string());
+    tokio::task::spawn_blocking(move || pick_folder_blocking(&dialog_title))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(windows)]
+fn pick_folder_blocking(title: &str) -> Option<String> {
+    use windows::core::HSTRING;
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
+        COINIT_APARTMENTTHREADED,
+    };
+    use windows::Win32::UI::Shell::{
+        FileOpenDialog, IFileOpenDialog, FOS_FORCEFILESYSTEM, FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
+    };
+
+    unsafe {
+        let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let should_uninit = hr.is_ok();
+        let result = (|| -> Option<String> {
+            let dialog: IFileOpenDialog =
+                CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER).ok()?;
+            let opts = dialog.GetOptions().ok()?;
+            dialog
+                .SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM)
+                .ok()?;
+            let htitle = HSTRING::from(title);
+            let _ = dialog.SetTitle(&htitle);
+            dialog.Show(None).ok()?;
+            let item = dialog.GetResult().ok()?;
+            let pwstr = item.GetDisplayName(SIGDN_FILESYSPATH).ok()?;
+            let path = pwstr.to_string().ok();
+            windows::Win32::System::Com::CoTaskMemFree(Some(pwstr.0 as *const _));
+            path
+        })();
+        if should_uninit {
+            CoUninitialize();
+        }
+        result
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn pick_folder_blocking(title: &str) -> Option<String> {
+    let escaped = title.replace('"', "\\\"");
+    let script = format!("POSIX path of (choose folder with prompt \"{escaped}\")");
+    let out = std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(script)
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if p.is_empty() { None } else { Some(p) }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn pick_folder_blocking(title: &str) -> Option<String> {
+    let out = std::process::Command::new("zenity")
+        .args(["--file-selection", "--directory", "--title", title])
+        .output()
+        .or_else(|_| {
+            std::process::Command::new("kdialog")
+                .args(["--getexistingdirectory", ".", "--title", title])
+                .output()
+        })
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if p.is_empty() { None } else { Some(p) }
 }
 
 #[derive(Clone, Copy)]

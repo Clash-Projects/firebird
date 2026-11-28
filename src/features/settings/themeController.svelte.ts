@@ -15,14 +15,14 @@ export function syncThemeDocument() {
     mode: settingsStore.themeMode,
     customBase: settingsStore.customThemeBase,
     accent: accent.color || WaveColors.defaultAccent,
-    glass: settingsStore.performanceMode ? false : settingsStore.glassmorphism,
+    glass: settingsStore.glassmorphism,
     fontFamily: resolvedFont,
     uiScale: settingsStore.uiScale,
     artworkColor: playerStore.currentTrack?.accentColor ?? null,
-    hazeMaterial: settingsStore.performanceMode ? 'solid' : settingsStore.hazeMaterial,
+    hazeMaterial: settingsStore.hazeMaterial,
     hazeIntensity: settingsStore.hazeIntensity,
-    liquidGlass: settingsStore.performanceMode ? false : settingsStore.liquidGlass,
-    performanceMode: settingsStore.performanceMode,
+    liquidGlass: settingsStore.liquidGlass,
+    performanceMode: false,
   });
 }
 

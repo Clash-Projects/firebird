@@ -348,7 +348,7 @@
       }}
     >
       <form onsubmit={submitSearch} class="relative flex items-center">
-        <WaveIcon name="search" size={13} class="pointer-events-none absolute left-2.5 text-[var(--lw-text-tertiary)]" />
+        <WaveIcon name="search" size={14} class="pointer-events-none absolute left-2.5 text-[var(--lw-text-tertiary)]" />
         <input
           type="text"
           data-lw="title-search"
@@ -368,41 +368,43 @@
           >
             <WaveIcon name="close" size={11} />
           </button>
+        {:else if !searchFocused}
+          <span
+            aria-hidden="true"
+            class="pointer-events-none absolute right-2 text-[10px] font-medium tracking-[0.2px] text-[var(--lw-text-tertiary)]/70"
+          >
+            Ctrl F
+          </span>
         {/if}
       </form>
 
       <div
         data-open={showSearchSuggestions}
         inert={!showSearchSuggestions}
-        class="lw-popover absolute top-9 left-0 z-50 w-full min-w-[320px] rounded-[10px] border border-[var(--lw-divider)] bg-[var(--lw-surface-raised)] p-1 shadow-[var(--lw-shadow-flyout)]"
+        class="lw-popover lw-flyout-surface absolute top-9 left-0 z-50 w-full min-w-[320px]"
         style:--lw-popover-origin="top left"
       >
-        {#if !searchQuery.trim()}
-          <div class="px-2 py-1 text-[10px] font-bold tracking-[0.8px] text-[var(--lw-text-tertiary)] uppercase">
-            Recent
-          </div>
-        {/if}
         {#each searchHits as hit, i (`${hit.kind}-${hit.label}-${i}`)}
           <button
             type="button"
             onclick={hit.onSelect}
             oncontextmenu={(e) => hit.track && contextMenu.showForTrack(e, hit.track)}
-            class="flex w-full cursor-pointer items-center gap-2.5 rounded-[7px] px-2 py-1.5 text-left transition-colors {selectedIdx === i
+            class="flex w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 py-1.5 text-left transition-colors {selectedIdx === i
               ? 'bg-[var(--lw-wash-pressed)]'
               : 'hover:bg-[var(--lw-wash-hover)]'}"
           >
-            {#if hit.kind === 'recent'}
-              <WaveIcon name="clock" size={14} class="text-[var(--lw-text-tertiary)]" />
-            {:else if hit.kind === 'seeAll'}
-              <WaveIcon name="search" size={14} class="text-[var(--lw-text-secondary)]" />
-            {:else}
-              <Artwork src={hit.art} label={hit.label} size={28} radius={6} circle={Boolean(hit.circle)} />
-            {/if}
-            <div class="min-w-0 flex-1">
-              <div class="truncate text-[12.5px] font-semibold text-[var(--lw-text-primary)]">{hit.label}</div>
-              {#if hit.kind !== 'recent'}
-                <div class="truncate text-[11px] text-[var(--lw-text-secondary)]">{hit.sub}</div>
+            <span class="flex h-7 w-7 shrink-0 items-center justify-center">
+              {#if hit.kind === 'recent'}
+                <WaveIcon name="clock" size={15} class="text-[var(--lw-text-secondary)]" />
+              {:else if hit.kind === 'seeAll'}
+                <WaveIcon name="search" size={15} class="text-[var(--lw-text-secondary)]" />
+              {:else}
+                <Artwork src={hit.art} label={hit.label} size={28} radius={8} circle={Boolean(hit.circle)} />
               {/if}
+            </span>
+            <div class="min-w-0 flex-1">
+              <div class="truncate text-[13px] font-semibold text-[var(--lw-text-primary)]">{hit.label}</div>
+              <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{hit.sub}</div>
             </div>
           </button>
         {/each}
@@ -481,45 +483,45 @@
         <div
           data-open={profileMenuOpen}
           inert={!profileMenuOpen}
-          class="lw-popover absolute top-9 right-0 z-50 w-[236px] rounded-[12px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] p-1 text-[12.5px] shadow-[var(--lw-shadow-flyout)]"
+          class="lw-popover lw-flyout-surface absolute top-9 right-0 z-50 w-[248px]"
         >
           <button
             type="button"
             onclick={openNameEditor}
-            class="flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left hover:bg-[var(--lw-wash-hover)]"
+            class="lw-menu-row"
           >
-            <WaveIcon name="wand" size={14} class="text-[var(--lw-text-secondary)]" />
-            <span class="truncate">{settingsStore.displayName.trim() ? `Name: ${settingsStore.displayName.trim()}` : 'Set your name…'}</span>
+            <WaveIcon name="wand" size={15} class="text-[var(--lw-text-secondary)]" />
+            <span class="min-w-0 flex-1 truncate">{settingsStore.displayName.trim() ? `Name: ${settingsStore.displayName.trim()}` : 'Set your name…'}</span>
           </button>
           <button
             type="button"
             onclick={() => avatarFileInput?.click()}
-            class="flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left hover:bg-[var(--lw-wash-hover)]"
+            class="lw-menu-row"
           >
-            <WaveIcon name="palette" size={14} class="text-[var(--lw-text-secondary)]" />
-            <span>{settingsStore.profilePictureUrl ? 'Change local picture…' : 'Choose local picture…'}</span>
+            <WaveIcon name="palette" size={15} class="text-[var(--lw-text-secondary)]" />
+            <span class="min-w-0 flex-1 truncate">{settingsStore.profilePictureUrl ? 'Change local picture…' : 'Choose local picture…'}</span>
           </button>
           {#if settingsStore.profilePictureUrl}
             <button
               type="button"
               onclick={removeProfilePicture}
-              class="flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left hover:bg-[var(--lw-wash-hover)]"
+              class="lw-menu-row"
             >
-              <WaveIcon name="trash" size={14} class="text-[var(--lw-text-secondary)]" />
-              <span>Remove local picture</span>
+              <WaveIcon name="trash" size={15} class="text-[var(--lw-text-secondary)]" />
+              <span class="min-w-0 flex-1 truncate">Remove local picture</span>
             </button>
           {/if}
-          <div class="my-1 border-t border-[var(--lw-divider)]"></div>
+          <div class="lw-menu-sep"></div>
           <button
             type="button"
             onclick={() => {
               profileMenuOpen = false;
               router.navigate('/settings/integrations');
             }}
-            class="flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left hover:bg-[var(--lw-wash-hover)]"
+            class="lw-menu-row"
           >
-            <WaveIcon name="globe" size={14} class="text-[var(--lw-text-secondary)]" />
-            <span class="truncate">
+            <WaveIcon name="globe" size={15} class="text-[var(--lw-text-secondary)]" />
+            <span class="min-w-0 flex-1 truncate">
               {settingsStore.ytConnected
                 ? settingsStore.ytAccountName
                   ? `YouTube: ${settingsStore.ytAccountName}`
@@ -546,7 +548,7 @@
           id="lw-app-menu"
           data-open={menuOpen}
           inert={!menuOpen}
-          class="lw-popover absolute top-9 right-0 z-50 w-[196px] rounded-[12px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] p-1 text-[12.5px] shadow-[var(--lw-shadow-flyout)]"
+          class="lw-popover lw-flyout-surface absolute top-9 right-0 z-50 w-[216px]"
         >
           <button
             type="button"
@@ -554,21 +556,23 @@
               menuOpen = false;
               router.navigate('/search');
             }}
-            class="flex w-full cursor-pointer items-center justify-between rounded-[8px] px-2.5 py-1.5 text-left hover:bg-[var(--lw-wash-hover)]"
+            class="lw-menu-row"
           >
-            <span class="flex items-center gap-2"><WaveIcon name="search" size={14} /> Search</span>
-            <span class="text-[10.5px] text-[var(--lw-text-tertiary)]">Ctrl+K</span>
+            <WaveIcon name="search" size={15} />
+            <span class="min-w-0 flex-1 truncate">Search</span>
+            <span class="lw-menu-hint">Ctrl+K</span>
           </button>
-          <div class="my-1 border-t border-[var(--lw-divider)]"></div>
+          <div class="lw-menu-sep"></div>
           <button
             type="button"
             onclick={() => {
               menuOpen = false;
               router.navigate('/history');
             }}
-            class="flex w-full cursor-pointer items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-left hover:bg-[var(--lw-wash-hover)]"
+            class="lw-menu-row"
           >
-            <WaveIcon name="clock" size={14} /> History
+            <WaveIcon name="clock" size={15} />
+            <span class="min-w-0 flex-1 truncate">History</span>
           </button>
           <button
             type="button"
@@ -576,20 +580,22 @@
               menuOpen = false;
               router.navigate('/store');
             }}
-            class="flex w-full cursor-pointer items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-left hover:bg-[var(--lw-wash-hover)]"
+            class="lw-menu-row"
           >
-            <WaveIcon name="plugin" size={14} /> Plugins & Themes
+            <WaveIcon name="plugin" size={15} />
+            <span class="min-w-0 flex-1 truncate">Plugins &amp; Themes</span>
           </button>
-          <div class="my-1 border-t border-[var(--lw-divider)]"></div>
+          <div class="lw-menu-sep"></div>
           <button
             type="button"
             onclick={() => {
               menuOpen = false;
               router.navigate('/settings');
             }}
-            class="flex w-full cursor-pointer items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-left hover:bg-[var(--lw-wash-hover)]"
+            class="lw-menu-row"
           >
-            <WaveIcon name="settings" size={14} /> Settings
+            <WaveIcon name="settings" size={15} />
+            <span class="min-w-0 flex-1 truncate">Settings</span>
           </button>
         </div>
       </div>

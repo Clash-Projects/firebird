@@ -387,7 +387,7 @@ dialog {
   background: var(--lw-surface-raised);
   color: var(--lw-text-primary);
   border: 1px solid var(--lw-outline);
-  border-radius: 14px;
+  border-radius: 20px;
   box-shadow: var(--lw-shadow-modal);
   padding: 0;
   max-width: min(560px, calc(100vw - 32px));
@@ -411,32 +411,174 @@ dialog::backdrop {
 dialog[open] {
   opacity: 1;
   transform: none;
-  transition-duration: var(--lw-motion-slow);
+  transition-duration: var(--lw-motion-normal);
 }
 
 dialog[open]::backdrop {
   opacity: 1;
-  transition-duration: var(--lw-motion-slow);
+  transition-duration: var(--lw-motion-normal);
+}
+
+/* Canonical WaveFlyoutPanel surface & WaveMenuRow (matches menus.dart 1:1) */
+.lw-flyout-surface {
+  box-sizing: border-box;
+  border-radius: 14px;
+  padding: 4px;
+  background: var(--lw-surface-raised);
+  border: 1px solid var(--lw-divider);
+  box-shadow: var(--lw-shadow-flyout);
+  color: var(--lw-text-primary);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.lw-flyout-surface::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+:root[data-glass="true"]:not([data-haze-material="solid"]) .lw-flyout-surface {
+  background: rgba(20, 20, 24, 0.64);
+  border-color: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(30px) saturate(1.2);
+  -webkit-backdrop-filter: blur(30px) saturate(1.2);
+}
+
+:root[data-theme="light"][data-glass="true"]:not([data-haze-material="solid"]) .lw-flyout-surface {
+  background: rgba(245, 245, 247, 0.78);
+  border-color: rgba(0, 0, 0, 0.10);
+}
+
+.lw-menu-row {
+  display: flex;
+  width: 100%;
+  min-height: 32px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px 6px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--lw-text-primary);
+  font-family: inherit;
+  font-size: 13.5px;
+  letter-spacing: -0.15px;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 90ms var(--ease-native), color 90ms var(--ease-native);
+}
+
+.lw-menu-row:hover,
+.lw-menu-row:focus-visible,
+.lw-menu-row[data-highlighted="true"] {
+  background: var(--lw-wash-hover);
+  outline: none;
+}
+
+.lw-menu-row:active {
+  background: var(--lw-wash-pressed);
+}
+
+.lw-menu-row:disabled {
+  opacity: 0.42;
+  cursor: default;
+  pointer-events: none;
+}
+
+.lw-menu-sep {
+  height: 1px;
+  margin: 5px 0;
+  border: 0;
+  background: var(--lw-divider);
+}
+
+.lw-menu-hint {
+  margin-left: auto;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--lw-text-tertiary);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* Canonical 2-tier Fluent _Group card (matches settings_page.dart _Group) */
+.lw-settings-group {
+  position: relative;
+  border-radius: 20px;
+  transition: box-shadow 180ms var(--ease-native);
+}
+
+.lw-settings-group[data-spotlight="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  border: 1.5px solid var(--lw-accent);
+  background: color-mix(in srgb, var(--lw-accent) 7%, transparent);
+  pointer-events: none;
+}
+
+.lw-settings-group-head {
+  padding: 12px 16px 10px 16px;
+  background: var(--lw-surface);
+  border: 1px solid var(--lw-outline-soft);
+  border-radius: 20px 20px 0 0;
+}
+
+.lw-settings-group-body {
+  padding: 16px;
+  background: color-mix(in srgb, var(--lw-surface) 64%, var(--lw-bg));
+  border-left: 1px solid var(--lw-outline-soft);
+  border-right: 1px solid var(--lw-outline-soft);
+  border-bottom: 1px solid var(--lw-outline-soft);
+  border-radius: 0 0 20px 20px;
+}
+
+:root[data-theme="light"] .lw-settings-group-body {
+  background: #f9f9f9;
+}
+
+:root[data-glass="true"] .lw-settings-group-body {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+:root[data-theme="light"][data-glass="true"] .lw-settings-group-body {
+  background: rgba(0, 0, 0, 0.025);
 }
 
 .lw-popover {
   display: none;
   overflow-y: auto;
   overscroll-behavior: contain;
-  max-height: min(360px, 65dvh);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  max-height: min(380px, 65dvh);
   opacity: 0;
-  transform: translateY(calc(-4px * var(--lw-motion-factor))) scale(calc(1 - 0.025 * var(--lw-motion-factor)));
+  transform: translateY(calc(-6px * var(--lw-motion-factor)));
   transform-origin: var(--lw-popover-origin, top right);
-  transition: opacity var(--lw-motion-fast) var(--ease-wave), transform var(--lw-motion-fast) var(--ease-wave),
-    display var(--lw-motion-fast);
+  transition: opacity 90ms var(--ease-native), transform 90ms var(--ease-native),
+    display 90ms;
   transition-behavior: allow-discrete;
+}
+
+.lw-popover::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .lw-popover[data-open="true"] {
   display: block;
   opacity: 1;
   transform: none;
-  transition-duration: var(--lw-motion-normal);
+  transition-duration: 90ms;
+}
+
+.lw-popover.lw-has-cascade {
+  overflow: visible;
+  max-height: none;
 }
 
 .lw-tooltip {
@@ -505,14 +647,15 @@ button.lw-press:enabled:active { scale: calc(1 - 0.035 * var(--lw-motion-factor)
 }
 
 .lw-text-field {
-  transition: background-color var(--lw-motion-fast) var(--ease-wave);
+  transition: background-color var(--lw-motion-fast) var(--ease-wave), border-color var(--lw-motion-fast) var(--ease-wave);
 }
 
-input.lw-text-field:focus {
-  background-color: color-mix(in srgb, var(--lw-surface) 88%, var(--lw-text-primary));
-  border-color: var(--lw-outline);
+input.lw-text-field:focus,
+textarea.lw-text-field:focus {
+  background-color: var(--lw-surface-raised);
+  border-color: var(--lw-accent);
   outline: none;
-  box-shadow: none;
+  box-shadow: inset 0 -1px 0 0 var(--lw-accent);
 }
 
 @media (forced-colors: active) {

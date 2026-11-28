@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { dismissDialogOnBackdrop } from '$src/app/accessibility';
   import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
+  import { syncThemeDocument } from '$src/features/settings/themeController.svelte';
   import { featuresStore } from '$src/state/features.svelte';
   import { libraryStore } from '$src/state/library.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
@@ -7,28 +9,59 @@
 
   let fileInput: HTMLInputElement | undefined = $state();
   let busy = $state(false);
+  let status = $state('');
+  let overwriteDialog = $state<HTMLDialogElement | null>(null);
+  let pendingContent = $state('');
+  let newerPlaylistNames = $state('');
 
   async function exportBackup() {
     if (busy) return;
     busy = true;
+    status = '';
     try {
       const payload = isTauriRuntime()
         ? (await ipcInvoke<string>('library_backup_export')) ?? ''
         : JSON.stringify({ playlists: libraryStore.playlists, likedIds: libraryStore.likedIds }, null, 2);
       if (!payload) {
-        featuresStore.showToast({ title: 'Backup export failed', severity: 'error' });
+        status = 'Backup export failed.';
         return;
       }
       const blob = new Blob([payload], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `lastwave-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = 'lastwave-backup.json';
       a.click();
       URL.revokeObjectURL(url);
-      featuresStore.showToast({ title: 'Backup exported', subtitle: a.download, severity: 'success' });
+      status = 'Saved backup.';
+      featuresStore.showToast({ title: 'Saved backup.', severity: 'success' });
+    } catch (err) {
+      status = err instanceof Error ? err.message : 'Backup export failed.';
     } finally {
       busy = false;
+    }
+  }
+
+  async function applyRestore(content: string, overwriteNewer: boolean) {
+    busy = true;
+    try {
+      await ipcInvoke<number>('library_backup_restore_file', {
+        content,
+        overwriteNewer,
+      });
+      await Promise.allSettled([
+        libraryStore.loadLocalStorage(),
+        settingsStore.loadFromBackend(),
+      ]);
+      syncThemeDocument();
+      status = overwriteNewer
+        ? 'Backup restored, including newer local playlists.'
+        : 'Backup merged. Newer local playlists were kept.';
+    } catch (err) {
+      status = err instanceof Error ? err.message : 'Could not restore backup.';
+    } finally {
+      busy = false;
+      pendingContent = '';
     }
   }
 
@@ -38,7 +71,7 @@
     input.value = '';
     if (!file || !isTauriRuntime() || busy) return;
 
-    busy = true;
+    status = '';
     try {
       const content = await file.text();
       const preview = await ipcInvoke<{
@@ -49,57 +82,84 @@
         newerLocalTitles?: string[];
       }>('library_backup_preview', { content });
       if (!preview?.valid) {
-        featuresStore.showToast({
-          title: 'Invalid backup file',
-          subtitle: preview?.invalidReason ?? 'That file is not a LastWave backup.',
-          severity: 'error',
-        });
+        status = preview?.invalidReason ?? 'That file is not a LastWave backup.';
         return;
       }
-      const hasNewer = Array.isArray(preview.newerLocalTitles) && preview.newerLocalTitles.length > 0;
-      const restored = await ipcInvoke<number>('library_backup_restore_file', {
-        content,
-        overwriteNewer: !hasNewer,
-      });
-      await Promise.allSettled([
-        libraryStore.loadLocalStorage(),
-        settingsStore.loadFromBackend(),
-      ]);
-      featuresStore.showToast({
-        title: 'Backup restored',
-        subtitle: `${restored ?? preview.playlistCount} playlists · ${preview.exclusionCount} exclusions`,
-        severity: 'success',
-      });
+      const newer = Array.isArray(preview.newerLocalTitles) ? preview.newerLocalTitles : [];
+      if (newer.length > 0) {
+        pendingContent = content;
+        newerPlaylistNames = newer.join(', ');
+        overwriteDialog?.showModal();
+        return;
+      }
+      await applyRestore(content, false);
     } catch (err) {
-      featuresStore.showToast({
-        title: 'Restore failed',
-        subtitle: err instanceof Error ? err.message : 'Could not restore backup',
-        severity: 'error',
-      });
-    } finally {
-      busy = false;
+      status = err instanceof Error ? err.message : 'That file is not a LastWave backup.';
     }
   }
 </script>
 
-<div class="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-4">
-  <div>
-    <div class="text-[13.5px] font-semibold">Settings & Playlist Backup</div>
-    <p class="text-[12px] text-[var(--lw-text-secondary)]">Export or restore your liked songs, playlists, and preferences.</p>
-  </div>
-  <div class="flex gap-2">
-    <input
-      bind:this={fileInput}
-      type="file"
-      accept=".json,application/json"
-      class="hidden"
-      onchange={(e) => void handleRestoreFile(e)}
-    />
+<div>
+  <div class="text-[13.5px] font-semibold text-[var(--lw-text-primary)]">Backup</div>
+  <p class="mt-1 text-[12px] leading-relaxed text-[var(--lw-text-secondary)]">
+    Playlists, hidden recommendations, home layout and settings. Accounts, cookies and keys are never included.
+  </p>
+
+  <input
+    bind:this={fileInput}
+    type="file"
+    accept=".json,application/json"
+    class="hidden"
+    onchange={(e) => void handleRestoreFile(e)}
+  />
+
+  <div class="mt-2.5 flex flex-wrap gap-2">
+    <Buttons variant="primary" size="sm" disabled={busy} onclick={() => void exportBackup()}>
+      Export backup
+    </Buttons>
     <Buttons variant="secondary" size="sm" disabled={busy} onclick={() => fileInput?.click()}>
-      Restore JSON
-    </Buttons>
-    <Buttons variant="secondary" size="sm" disabled={busy} onclick={() => void exportBackup()}>
-      {busy ? 'Working...' : 'Export JSON'}
+      Import backup
     </Buttons>
   </div>
+
+  {#if status}
+    <p class="mt-2 text-[12px] text-[var(--lw-text-secondary)]">{status}</p>
+  {/if}
 </div>
+
+<dialog
+  bind:this={overwriteDialog}
+  closedby="any"
+  use:dismissDialogOnBackdrop={() => overwriteDialog?.close()}
+  aria-label="Import backup"
+  class="w-[min(440px,calc(100vw-32px))] p-6 text-[var(--lw-text-primary)]"
+>
+  <h2 class="text-[18px] font-semibold">Import backup</h2>
+  <p class="mt-2 text-[13px] leading-relaxed text-[var(--lw-text-secondary)]">
+    These playlists are newer on this device and will be kept unless you overwrite them: {newerPlaylistNames}
+  </p>
+  <div class="mt-5 flex justify-end gap-2">
+    <Buttons
+      variant="secondary"
+      size="sm"
+      onclick={() => {
+        const c = pendingContent;
+        overwriteDialog?.close();
+        if (c) void applyRestore(c, false);
+      }}
+    >
+      Keep newer
+    </Buttons>
+    <Buttons
+      variant="primary"
+      size="sm"
+      onclick={() => {
+        const c = pendingContent;
+        overwriteDialog?.close();
+        if (c) void applyRestore(c, true);
+      }}
+    >
+      Overwrite
+    </Buttons>
+  </div>
+</dialog>

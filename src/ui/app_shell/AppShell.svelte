@@ -52,13 +52,26 @@
   let customApp = $derived(uiSlots.customAppRoutes.find((a) => a.route === router.path) ?? null);
   let isNowPlaying = $derived(router.path === '/now-playing');
   let isImmersive = $derived(isNowPlaying && immersiveState.isImmersive);
-  let floatDock = $derived(
-    !settingsStore.performanceMode && settingsStore.glassmorphism && !isImmersive
-  );
+  let floatDock = $derived(settingsStore.glassmorphism && !isImmersive);
   let openPanels = $derived(
     windowState.activeRightPanel === 'none' ? [] : [windowState.activeRightPanel]
   );
+
+  function onShellContextMenu(e: MouseEvent) {
+    if (e.defaultPrevented) return;
+    const target = e.target as HTMLElement | null;
+    if (
+      target?.closest(
+        'input, textarea, [contenteditable="true"], [data-allow-native-menu="true"]'
+      )
+    ) {
+      return;
+    }
+    e.preventDefault();
+  }
 </script>
+
+<svelte:window oncontextmenu={onShellContextMenu} />
 
 <GlassStage />
 

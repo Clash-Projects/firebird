@@ -11,7 +11,8 @@
   }
 
   let { artworkUrl, intensity = 0.28, class: className = '' }: Props = $props();
-  let disabled = $derived(settingsStore.performanceMode || settingsStore.ambientStyle === 'off');
+  let disabled = $derived(settingsStore.ambientStyle === 'off');
+  let isSoftWash = $derived(settingsStore.ambientStyle === 'soft' || settingsStore.ambientStyle === 'wash');
   let reducedMotion = $derived(settingsStore.reduceMotion || prefersReducedMotion.current);
 </script>
 
@@ -25,7 +26,7 @@
     {#key artworkUrl}
       <div
         class="ambient-art absolute inset-0"
-        class:wash={settingsStore.ambientStyle === 'wash'}
+        class:wash={isSoftWash}
         transition:fade={{ duration: reducedMotion ? 0 : 480, easing: cubicOut }}
       >
         <img

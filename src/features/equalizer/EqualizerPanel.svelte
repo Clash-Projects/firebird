@@ -17,6 +17,12 @@
   import WaveHaze from '$src/ui/theme/WaveHaze.svelte';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
 
+  interface Props {
+    embedded?: boolean;
+  }
+
+  let { embedded = false }: Props = $props();
+
   let selectedTab = $state<'eq' | 'clarity'>('eq');
 
   const presetNames = Object.keys(EQ_PRESETS);
@@ -89,19 +95,22 @@
 </script>
 
 <WaveHaze
-  level="l2"
+  level={embedded ? 'l1' : 'l2'}
+  enableBlur={!embedded}
   dataLw="equalizer-panel"
-  class="flex h-full w-[min(390px,100vw)] shrink-0 flex-col border-l border-[var(--lw-divider)] bg-[var(--lw-panel-translucent)] shadow-[var(--lw-shadow-panel)]"
+  class={embedded
+    ? 'flex w-full flex-col rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)]'
+    : 'flex h-full w-[min(390px,100vw)] shrink-0 flex-col border-l border-[var(--lw-divider)] bg-[var(--lw-panel-translucent)] shadow-[var(--lw-shadow-panel)]'}
 >
   <!-- Header -->
-  <div class="flex h-[56px] shrink-0 items-center gap-2.5 border-b border-[var(--lw-divider)] px-4">
+  <div class="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-[var(--lw-divider)] px-4">
     <WaveIcon
       name="eq"
-      size={17}
+      size={16}
       class={isProcessing ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'}
     />
     <div class="min-w-0 flex-1">
-      <h2 class="truncate text-[14px] font-semibold text-[var(--lw-text-primary)]">Equalizer &amp; Sound FX</h2>
+      <h2 class="truncate text-[13.5px] font-semibold text-[var(--lw-text-primary)]">Equalizer &amp; Sound FX</h2>
       <p
         class="truncate text-[11px] {isProcessing
           ? featuresStore.studioClarity
@@ -124,20 +133,22 @@
       use:waveTooltip={'Reset all bands to flat (0 dB)'}
       onclick={() => featuresStore.resetEq()}
       aria-label="Reset equalizer to flat"
-      class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-[6px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
+      class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-[8px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
     >
       <WaveIcon name="refresh" size={13} />
     </button>
 
-    <button
-      type="button"
-      use:waveTooltip={'Close panel'}
-      onclick={() => windowState.closeRightPanel()}
-      aria-label="Close equalizer"
-      class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-[6px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
-    >
-      <WaveIcon name="close" size={14} />
-    </button>
+    {#if !embedded}
+      <button
+        type="button"
+        use:waveTooltip={'Close panel'}
+        onclick={() => windowState.closeRightPanel()}
+        aria-label="Close equalizer"
+        class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-[8px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
+      >
+        <WaveIcon name="close" size={14} />
+      </button>
+    {/if}
   </div>
 
   <!-- Tab Selector -->

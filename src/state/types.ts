@@ -20,6 +20,7 @@ export interface Track {
   bitrateKbps: number;
   isExplicit?: boolean;
   isLocal?: boolean;
+  localPath?: string;
   isDownloaded?: boolean;
   bpm?: number;
   key?: string;

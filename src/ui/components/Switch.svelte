@@ -1,51 +1,129 @@
 <script lang="ts">
-  let { checked = $bindable(false), label, onchange }: {
+  interface Props {
     checked?: boolean;
+    disabled?: boolean;
     label?: string;
     onchange?: (checked: boolean) => void;
-  } = $props();
+  }
+
+  let {
+    checked = $bindable(false),
+    disabled = false,
+    label,
+    onchange,
+  }: Props = $props();
 </script>
 
-<span class="switch">
-  <span class="switch-state" aria-hidden="true">{checked ? 'On' : 'Off'}</span>
-  <span class="switch-control">
-    <input
-      type="checkbox"
-      role="switch"
-      aria-label={label}
-      bind:checked
-      onchange={(event) => onchange?.(event.currentTarget.checked)}
-    />
-    <span class="switch-track" aria-hidden="true"></span>
+<span class="lw-switch" data-disabled={disabled}>
+  <input
+    type="checkbox"
+    role="switch"
+    aria-label={label}
+    {disabled}
+    bind:checked
+    onchange={(event) => onchange?.(event.currentTarget.checked)}
+  />
+  <span class="lw-switch-track" aria-hidden="true">
+    <span class="lw-switch-knob"></span>
   </span>
 </span>
 
 <style>
-  .switch { display: inline-flex; flex: none; align-items: center; gap: 10px; }
-  .switch-state { min-inline-size: 2em; color: var(--lw-text-secondary); font-size: 12.5px; text-align: end; }
-  .switch-control { position: relative; display: grid; inline-size: 40px; block-size: 22px; }
-  input { position: absolute; z-index: 1; inset: 0; inline-size: 100%; block-size: 100%; margin: 0; opacity: 0; cursor: pointer; }
+  .lw-switch {
+    position: relative;
+    display: inline-grid;
+    flex: none;
+    inline-size: 40px;
+    block-size: 20px;
+    vertical-align: middle;
+  }
 
-  .switch-track {
+  .lw-switch[data-disabled="true"] {
+    opacity: 0.42;
+  }
+
+  input {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  input:disabled {
+    cursor: default;
+  }
+
+  .lw-switch-track {
     display: flex;
     align-items: center;
     padding-inline: 3px;
     border: 1px solid var(--lw-text-tertiary);
     border-radius: 999px;
-    transition: background-color var(--lw-motion-fast), border-color var(--lw-motion-fast);
+    background: rgba(255, 255, 255, 0.02);
+    transition:
+      background-color 120ms var(--ease-native),
+      border-color 120ms var(--ease-native);
   }
 
-  .switch-track::before {
+  :global(:root[data-theme="light"]) .lw-switch-track {
+    background: rgba(0, 0, 0, 0.02);
+  }
+
+  .lw-switch-knob {
     inline-size: 12px;
     block-size: 12px;
-    border-radius: 50%;
-    background: var(--lw-text-tertiary);
-    content: '';
-    transition: transform var(--lw-motion-normal) var(--ease-wave), background-color var(--lw-motion-fast);
+    border-radius: 999px;
+    background: var(--lw-text-secondary);
+    transition:
+      transform 150ms var(--ease-wave),
+      inline-size 110ms var(--ease-native),
+      block-size 110ms var(--ease-native),
+      background-color 120ms var(--ease-native);
   }
 
-  input:checked + .switch-track { border-color: var(--lw-accent); background: var(--lw-accent); }
-  input:checked + .switch-track::before { transform: translateX(20px); background: var(--lw-on-accent); }
-  input:dir(rtl):checked + .switch-track::before { transform: translateX(-20px); }
-  input:focus-visible + .switch-track { outline: 2px solid var(--lw-focus-ring); outline-offset: 3px; }
+  input:not(:disabled):hover + .lw-switch-track {
+    border-color: var(--lw-text-secondary);
+    background: var(--lw-wash-hover);
+  }
+
+  input:not(:disabled):hover + .lw-switch-track .lw-switch-knob {
+    transform: scale(1.1);
+  }
+
+  input:not(:disabled):active + .lw-switch-track .lw-switch-knob {
+    inline-size: 15px;
+  }
+
+  input:checked + .lw-switch-track {
+    border-color: var(--lw-accent);
+    background: var(--lw-accent);
+  }
+
+  input:checked:not(:disabled):hover + .lw-switch-track {
+    border-color: var(--lw-accent);
+    background: color-mix(in srgb, var(--lw-accent) 90%, transparent);
+  }
+
+  input:checked + .lw-switch-track .lw-switch-knob {
+    transform: translateX(20px);
+    background: var(--lw-on-accent);
+  }
+
+  input:checked:not(:disabled):hover + .lw-switch-track .lw-switch-knob {
+    transform: translateX(20px) scale(1.1);
+  }
+
+  input:checked:not(:disabled):active + .lw-switch-track .lw-switch-knob {
+    transform: translateX(17px);
+    inline-size: 15px;
+  }
+
+  input:focus-visible + .lw-switch-track {
+    outline: 2px solid var(--lw-focus-ring);
+    outline-offset: 2px;
+  }
 </style>
