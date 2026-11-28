@@ -6,18 +6,34 @@
  * chasing at rAF cadence turns successive wheel notches into one continuous
  * glide without restarting an ease curve. Trackpad fine deltas pass natively.
  */
-export function waveSmoothScroll(
-  node: HTMLElement,
-  opts: { axis?: 'y' | 'x'; drag?: boolean } = {}
-) {
+interface ScrollOptions {
+  axis?: 'y' | 'x';
+  drag?: boolean;
+  snap?: () => void;
+}
+
+export function waveSmoothScroll(node: HTMLElement, opts: ScrollOptions = {}) {
   let axis = opts.axis ?? 'y';
   let allowDrag = opts.drag ?? axis === 'x';
+  let snap = opts.snap;
 
   const TAU_SEC = 0.085;
   let rafId = 0;
   let lastTime = 0;
   let target = axis === 'x' ? node.scrollLeft : node.scrollTop;
+  let glidePosition = target;
   let activeGlide = false;
+  let dragging = false;
+  let precisionTimer = 0;
+  let manualScroll = false;
+
+  const updateSnap = () => {
+    const scrolling = Boolean(snap) && (activeGlide || dragging || precisionTimer !== 0);
+    if (scrolling === manualScroll) return;
+    manualScroll = scrolling;
+    node.toggleAttribute('data-manual-scroll', scrolling);
+    if (!scrolling) snap?.();
+  };
 
   const stopGlide = () => {
     activeGlide = false;
@@ -25,6 +41,7 @@ export function waveSmoothScroll(
       cancelAnimationFrame(rafId);
       rafId = 0;
     }
+    updateSnap();
   };
 
   const getMax = () =>
@@ -44,7 +61,8 @@ export function waveSmoothScroll(
     lastTime = now;
     const max = getMax();
     target = Math.max(0, Math.min(max, target));
-    const current = getCurrent();
+    // Keep fractional progress when the browser rounds scroll offsets to pixels.
+    const current = snap ? glidePosition : getCurrent();
     const remaining = target - current;
 
     if (Math.abs(remaining) < 0.6) {
@@ -54,39 +72,67 @@ export function waveSmoothScroll(
     }
 
     const delta = remaining * (1 - Math.exp(-dt / TAU_SEC));
-    setCurrent(current + delta);
+    glidePosition = current + delta;
+    setCurrent(glidePosition);
     rafId = requestAnimationFrame(step);
   };
 
   const onWheel = (e: WheelEvent) => {
-    if (e.ctrlKey || e.metaKey) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    if (document.documentElement.hasAttribute('data-reduced-motion')) return;
+    if (!e.cancelable || e.defaultPrevented || e.ctrlKey || e.metaKey) return;
 
-    const rawDelta =
-      axis === 'x' ? (Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) : e.deltaY;
+    // Keep vertical wheel gestures available to the page when the pointer is over a shelf.
+    const horizontal = e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY);
+    if (horizontal !== (axis === 'x')) {
+      if (axis === 'x') stopGlide();
+      return;
+    }
+
+    const rawDelta = horizontal ? e.deltaX || e.deltaY : e.deltaY;
     if (rawDelta === 0) return;
 
-    // Fine trackpad precision gestures pass straight through natively.
+    // Native diagonal scrolling can move both a shelf and its parent at once.
+    const lockAxis = e.deltaX !== 0 && e.deltaY !== 0 && (
+      axis === 'x' ||
+      e.composedPath().some((element) => element instanceof Element && element.classList.contains('lw-scroll-x'))
+    );
     const isNotchedWheel = e.deltaMode !== 0 || (Number.isInteger(rawDelta) && Math.abs(rawDelta) >= 40);
-    if (!isNotchedWheel) return;
+    const reduceMotion = document.documentElement.hasAttribute('data-reduced-motion') ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const glide = isNotchedWheel && !reduceMotion;
+    if (!glide && !lockAxis) return;
 
+    const pageSize = horizontal ? node.clientWidth : node.clientHeight;
     const pixelDelta =
-      e.deltaMode === 1 ? rawDelta * 32 : e.deltaMode === 2 ? rawDelta * node.clientHeight * 0.8 : rawDelta;
+      e.deltaMode === 1 ? rawDelta * 32 : e.deltaMode === 2 ? rawDelta * pageSize * 0.8 : rawDelta;
 
     const max = getMax();
-    if (max <= 0) return;
+    if (max <= 0 && !lockAxis) return;
     const cur = getCurrent();
     const atStart = cur <= 0.5;
     const atEnd = cur >= max - 0.5;
-    if (!activeGlide && ((pixelDelta < 0 && atStart) || (pixelDelta > 0 && atEnd))) {
+    if (!lockAxis && !activeGlide && ((pixelDelta < 0 && atStart) || (pixelDelta > 0 && atEnd))) {
       return; // Bubble to parent scrollable when already at boundary
     }
 
     e.preventDefault();
+    if (!glide) {
+      stopGlide();
+      if (snap) {
+        window.clearTimeout(precisionTimer);
+        precisionTimer = window.setTimeout(() => {
+          precisionTimer = 0;
+          updateSnap();
+        }, 120);
+        updateSnap();
+      }
+      node.scrollBy(horizontal ? { left: pixelDelta, behavior: 'instant' } : { top: pixelDelta, behavior: 'instant' });
+      return;
+    }
     if (!activeGlide) {
       target = cur + pixelDelta;
+      glidePosition = cur;
       activeGlide = true;
+      updateSnap();
       lastTime = 0;
       rafId = requestAnimationFrame(step);
     } else {
@@ -95,7 +141,6 @@ export function waveSmoothScroll(
   };
 
   // Optional mouse drag for horizontal shelves
-  let dragging = false;
   let moved = false;
   let dragStartX = 0;
   let dragStartScroll = 0;
@@ -104,6 +149,7 @@ export function waveSmoothScroll(
     stopGlide();
     if (!allowDrag || axis !== 'x' || e.button !== 0 || e.pointerType !== 'mouse') return;
     dragging = true;
+    updateSnap();
     moved = false;
     dragStartX = e.clientX;
     dragStartScroll = node.scrollLeft;
@@ -121,6 +167,7 @@ export function waveSmoothScroll(
   const onPointerUp = () => {
     if (!dragging) return;
     dragging = false;
+    updateSnap();
     if (moved) {
       const swallow = (ce: MouseEvent) => {
         ce.preventDefault();
@@ -136,6 +183,7 @@ export function waveSmoothScroll(
   node.addEventListener('pointerdown', onPointerDown);
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('pointercancel', onPointerUp);
 
   // Auto-hiding Fluent overlay scrollbar (matches WaveThinScrollbar: 6px, fades after 800ms idle)
   let thumb: HTMLDivElement | null = null;
@@ -243,13 +291,18 @@ export function waveSmoothScroll(
   }
 
   return {
-    update(next: { axis?: 'y' | 'x'; drag?: boolean } = {}) {
+    update(next: ScrollOptions = {}) {
       axis = next.axis ?? 'y';
       allowDrag = next.drag ?? axis === 'x';
+      snap = next.snap;
+      updateSnap();
       updateThumb();
     },
     destroy() {
+      snap = undefined;
       stopGlide();
+      window.clearTimeout(precisionTimer);
+      node.removeAttribute('data-manual-scroll');
       if (fadeTimer) clearTimeout(fadeTimer);
       node.removeEventListener('wheel', onWheel);
       node.removeEventListener('pointerdown', onPointerDown);
@@ -258,6 +311,7 @@ export function waveSmoothScroll(
       thumb?.removeEventListener('pointerdown', onThumbDown);
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
       window.removeEventListener('pointermove', onThumbMove);
       window.removeEventListener('pointerup', onThumbUp);
       resizeObs?.disconnect();

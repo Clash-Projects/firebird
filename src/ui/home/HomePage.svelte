@@ -9,7 +9,6 @@
   import ShelfRail from '$src/ui/components/ShelfRail.svelte';
   import { contextMenu } from '$src/ui/components/contextMenuState.svelte';
   import { goAlbum, goArtist, goPlaylist } from '$src/ui/navigation/waveNav';
-  import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
   import WaveEntrance from '$src/ui/theme/WaveEntrance.svelte';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import HomeSpotlight from './HomeSpotlight.svelte';
@@ -134,135 +133,130 @@
 
   {#if shelves.length > 0}
     {#each shelves as shelf, sIdx (`${shelf.title}-${sIdx}`)}
-      <WaveEntrance index={Math.min(sIdx + 2, 6)}>
-        <section class="space-y-3">
-          <div class="flex items-end justify-between gap-2">
-            <div>
-              {#if shelf.subtitle}
-                <div class="text-[10px] font-bold tracking-[1px] text-[var(--lw-text-tertiary)] uppercase">
-                  {shelf.subtitle}
-                </div>
-              {/if}
-              <h2 class="text-[15.5px] font-semibold tracking-[-0.1px]">{shelf.title}</h2>
-            </div>
+      {@const playList = shelf.tracks.length > 0 ? shelf.tracks : shelf.trackCards}
+      {#snippet playAll()}
+        <button
+          type="button"
+          onclick={() => playList[0] && playTrackNow(playList[0], playList)}
+          class="cursor-pointer rounded-[6px] px-2 py-1 text-[12px] font-medium text-[var(--lw-accent)] hover:underline"
+        >
+          Play all
+        </button>
+      {/snippet}
 
-            {#if shelf.tracks.length > 0 || shelf.trackCards.length > 0}
-              {@const list = shelf.tracks.length > 0 ? shelf.tracks : shelf.trackCards}
+      {#snippet trackList()}
+        {#if shelf.tracks.length > 0}
+          {@const gridCount = shelf.tracks.length >= 9 ? 9 : shelf.tracks.length >= 6 ? 6 : shelf.tracks.length}
+          <div class="quick-picks-grid">
+            {#each shelf.tracks.slice(0, gridCount) as track (`${shelf.title}-${track.id}`)}
+              {@const playing = playerStore.currentTrack?.id === track.id}
               <button
                 type="button"
-                onclick={() => list[0] && playTrackNow(list[0], list)}
-                class="cursor-pointer rounded-[6px] px-2 py-1 text-[12px] font-medium text-[var(--lw-accent)] hover:underline"
+                onclick={() => playTrackNow(track, shelf.tracks)}
+                oncontextmenu={(e) => contextMenu.showForTrack(e, track)}
+                class="group flex h-[56px] w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-1.5 py-1 text-left transition-colors {playing
+                  ? 'bg-[var(--lw-accent-subtle)]'
+                  : 'hover:bg-[var(--lw-wash-hover)]'}"
               >
-                Play all
-              </button>
-            {/if}
-          </div>
-
-          {#if shelf.tracks.length > 0}
-            {@const gridCount = shelf.tracks.length >= 9 ? 9 : shelf.tracks.length >= 6 ? 6 : shelf.tracks.length}
-            <div class="quick-picks-grid">
-              {#each shelf.tracks.slice(0, gridCount) as track (`${shelf.title}-${track.id}`)}
-                {@const playing = playerStore.currentTrack?.id === track.id}
-                <button
-                  type="button"
-                  onclick={() => playTrackNow(track, shelf.tracks)}
-                  oncontextmenu={(e) => contextMenu.showForTrack(e, track)}
-                  class="group flex h-[56px] w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-1.5 py-1 text-left transition-colors {playing
-                    ? 'bg-[var(--lw-accent-subtle)]'
-                    : 'hover:bg-[var(--lw-wash-hover)]'}"
-                >
-                  <div class="relative h-[44px] w-[44px] shrink-0 overflow-hidden rounded-[8px]">
-                    <Artwork src={track.artworkUrl} label={track.title} artist={track.artist} kind="track" alt={track.title} size={44} radius={8} />
-                    <div
-                      class="absolute inset-0 flex items-center justify-center bg-black/55 text-white transition-opacity {playing
-                        ? 'opacity-100'
-                        : 'opacity-0 group-hover:opacity-100'}"
-                    >
-                      <WaveIcon name={playing && playerStore.isPlaying ? 'pause' : 'play'} size={15} filled />
-                    </div>
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <div class="truncate text-[13px] font-semibold {playing ? 'text-[var(--lw-accent)]' : ''}">
-                      {track.title}
-                    </div>
-                    <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{track.artist}</div>
-                  </div>
-                  {#if track.durationSec > 0}
-                    <span class="pr-2 text-[11px] text-[var(--lw-text-tertiary)] lw-tabular">
-                      {formatDuration(track.durationSec)}
-                    </span>
-                  {/if}
-                </button>
-              {/each}
-            </div>
-          {/if}
-
-          {#if shelf.trackCards.length > 0 || shelf.entities.length > 0}
-            <div use:waveSmoothScroll={{ axis: 'x', drag: true }} class="lw-scroll-x flex gap-3.5 py-1">
-              {#each shelf.trackCards as track (`card-${shelf.title}-${track.id}`)}
-                <button
-                  type="button"
-                  onclick={() => playTrackNow(track, shelf.trackCards)}
-                  oncontextmenu={(e) => contextMenu.showForTrack(e, track)}
-                  class="group w-[160px] shrink-0 cursor-pointer text-left"
-                >
-                  <div class="relative overflow-hidden rounded-[12px] transition-all duration-[110ms] ease-[var(--ease-wave)] group-hover:scale-[1.03] group-hover:shadow-[var(--lw-shadow-lift)] group-active:scale-[0.97]">
-                    <Artwork src={track.artworkUrl} label={track.title} artist={track.artist} kind="track" alt={track.title} size={160} radius={12} />
-                    <div class="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-transparent to-black/55 opacity-0 transition-opacity duration-[110ms] group-hover:opacity-100">
-                      <div class="flex h-11 w-11 scale-75 items-center justify-center rounded-full bg-[var(--lw-accent)] text-[var(--lw-on-accent)] shadow-[0_4px_12px_rgba(0,0,0,0.4)] transition-transform duration-[110ms] group-hover:scale-100">
-                        <WaveIcon name="play" size={18} filled />
-                      </div>
-                    </div>
-                  </div>
-                  <div class="mt-2 w-0 min-w-full truncate text-[13px] font-semibold">{track.title}</div>
-                  <div class="w-0 min-w-full truncate text-[11.5px] text-[var(--lw-text-secondary)]">{track.artist}</div>
-                </button>
-              {/each}
-
-              {#each shelf.entities as entity (`ent-${shelf.title}-${entity.id}`)}
-                {#if entity.kind === 'artist'}
-                  <button
-                    type="button"
-                    onclick={() => openEntity(entity)}
-                    class="group w-[144px] shrink-0 cursor-pointer text-center"
+                <div class="relative h-[44px] w-[44px] shrink-0 overflow-hidden rounded-[8px]">
+                  <Artwork src={track.artworkUrl} label={track.title} artist={track.artist} kind="track" alt={track.title} size={44} radius={8} />
+                  <div
+                    class="absolute inset-0 flex items-center justify-center bg-black/55 text-white transition-opacity {playing
+                      ? 'opacity-100'
+                      : 'opacity-0 group-hover:opacity-100'}"
                   >
-                    <div class="mx-auto w-[124px] transition-transform duration-[110ms] ease-[var(--ease-wave)] group-hover:scale-[1.03] group-active:scale-[0.97]">
-                      <Artwork src={entity.artworkUrl} label={entity.name} kind="artist" alt={entity.name} size={124} circle shadow="lift" />
-                    </div>
-                    <div class="mt-2.5 truncate text-[13px] font-semibold">{entity.name}</div>
-                    <div class="truncate text-[11.5px] text-[var(--lw-text-tertiary)]">{entity.subtitle || 'Artist'}</div>
-                  </button>
-                {:else}
-                  <button
-                    type="button"
-                    onclick={() => openEntity(entity)}
-                    class="group w-[160px] shrink-0 cursor-pointer text-left"
-                  >
-                    <div class="relative overflow-hidden rounded-[12px] transition-all duration-[110ms] ease-[var(--ease-wave)] group-hover:scale-[1.03] group-hover:shadow-[var(--lw-shadow-lift)] group-active:scale-[0.97]">
-                      <Artwork
-                        src={entity.artworkUrl}
-                        label={entity.name}
-                        artist={entity.subtitle}
-                        kind="album"
-                        upgrade={!entity.artworkUrl && entity.kind === 'album'}
-                        alt={entity.name}
-                        size={160}
-                        radius={12}
-                      />
-                      <div class="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-transparent to-black/55 opacity-0 transition-opacity duration-[110ms] group-hover:opacity-100">
-                        <div class="flex h-11 w-11 scale-75 items-center justify-center rounded-full bg-[var(--lw-accent)] text-[var(--lw-on-accent)] shadow-[0_4px_12px_rgba(0,0,0,0.4)] transition-transform duration-[110ms] group-hover:scale-100">
-                          <WaveIcon name="play" size={18} filled />
-                        </div>
-                      </div>
-                    </div>
-                    <div class="mt-2 truncate text-[13px] font-semibold">{entity.name}</div>
-                    <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{entity.subtitle}</div>
-                  </button>
+                    <WaveIcon name={playing && playerStore.isPlaying ? 'pause' : 'play'} size={15} filled />
+                  </div>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="truncate text-[13px] font-semibold {playing ? 'text-[var(--lw-accent)]' : ''}">
+                    {track.title}
+                  </div>
+                  <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{track.artist}</div>
+                </div>
+                {#if track.durationSec > 0}
+                  <span class="pr-2 text-[11px] text-[var(--lw-text-tertiary)] lw-tabular">
+                    {formatDuration(track.durationSec)}
+                  </span>
                 {/if}
-              {/each}
+              </button>
+            {/each}
+          </div>
+        {/if}
+      {/snippet}
+
+      {#snippet cards()}
+        {#each shelf.trackCards as track (`card-${shelf.title}-${track.id}`)}
+          <button
+            type="button"
+            onclick={() => playTrackNow(track, shelf.trackCards)}
+            oncontextmenu={(e) => contextMenu.showForTrack(e, track)}
+            class="group min-w-0 cursor-pointer text-left"
+          >
+            <div class="relative aspect-square overflow-hidden rounded-[12px] transition-all duration-[110ms] ease-[var(--ease-wave)] group-hover:scale-[1.03] group-hover:shadow-[var(--lw-shadow-lift)] group-active:scale-[0.97]">
+              <Artwork src={track.artworkUrl} label={track.title} artist={track.artist} kind="track" alt={track.title} class="h-full w-full" radius={12} />
+              <div class="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-transparent to-black/55 opacity-0 transition-opacity duration-[110ms] group-hover:opacity-100">
+                <div class="flex h-11 w-11 scale-75 items-center justify-center rounded-full bg-[var(--lw-accent)] text-[var(--lw-on-accent)] shadow-[0_4px_12px_rgba(0,0,0,0.4)] transition-transform duration-[110ms] group-hover:scale-100">
+                  <WaveIcon name="play" size={18} filled />
+                </div>
+              </div>
             </div>
+            <div class="mt-2 w-0 min-w-full truncate text-[13px] font-semibold">{track.title}</div>
+            <div class="w-0 min-w-full truncate text-[11.5px] text-[var(--lw-text-secondary)]">{track.artist}</div>
+          </button>
+        {/each}
+
+        {#each shelf.entities as entity (`ent-${shelf.title}-${entity.id}`)}
+          {#if entity.kind === 'artist'}
+            <button
+              type="button"
+              onclick={() => openEntity(entity)}
+              class="group min-w-0 cursor-pointer text-center"
+            >
+              <div class="mx-auto aspect-square w-full max-w-[124px] transition-transform duration-[110ms] ease-[var(--ease-wave)] group-hover:scale-[1.03] group-active:scale-[0.97]">
+                <Artwork src={entity.artworkUrl} label={entity.name} kind="artist" alt={entity.name} class="h-full w-full" circle shadow="lift" />
+              </div>
+              <div class="mt-2.5 truncate text-[13px] font-semibold">{entity.name}</div>
+              <div class="truncate text-[11.5px] text-[var(--lw-text-tertiary)]">{entity.subtitle || 'Artist'}</div>
+            </button>
+          {:else}
+            <button
+              type="button"
+              onclick={() => openEntity(entity)}
+              class="group min-w-0 cursor-pointer text-left"
+            >
+              <div class="relative aspect-square overflow-hidden rounded-[12px] transition-all duration-[110ms] ease-[var(--ease-wave)] group-hover:scale-[1.03] group-hover:shadow-[var(--lw-shadow-lift)] group-active:scale-[0.97]">
+                <Artwork
+                  src={entity.artworkUrl}
+                  label={entity.name}
+                  artist={entity.subtitle}
+                  kind="album"
+                  upgrade={!entity.artworkUrl && entity.kind === 'album'}
+                  alt={entity.name}
+                  class="h-full w-full"
+                  radius={12}
+                />
+                <div class="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-transparent to-black/55 opacity-0 transition-opacity duration-[110ms] group-hover:opacity-100">
+                  <div class="flex h-11 w-11 scale-75 items-center justify-center rounded-full bg-[var(--lw-accent)] text-[var(--lw-on-accent)] shadow-[0_4px_12px_rgba(0,0,0,0.4)] transition-transform duration-[110ms] group-hover:scale-100">
+                    <WaveIcon name="play" size={18} filled />
+                  </div>
+                </div>
+              </div>
+              <div class="mt-2 truncate text-[13px] font-semibold">{entity.name}</div>
+              <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{entity.subtitle}</div>
+            </button>
           {/if}
-        </section>
+        {/each}
+      {/snippet}
+
+      <WaveEntrance index={Math.min(sIdx + 2, 6)}>
+        <ShelfRail
+          title={shelf.title}
+          eyebrow={shelf.subtitle}
+          headerAction={playList.length > 0 ? playAll : undefined}
+          beforeCards={shelf.tracks.length > 0 ? trackList : undefined}
+          children={shelf.trackCards.length > 0 || shelf.entities.length > 0 ? cards : undefined}
+        />
       </WaveEntrance>
     {/each}
   {/if}
@@ -327,10 +321,10 @@
           <button
             type="button"
             onclick={() => goAlbum(album.id)}
-            class="lw-press group w-[160px] shrink-0 cursor-pointer text-left"
+            class="lw-press group min-w-0 cursor-pointer text-left"
           >
-            <div class="relative overflow-hidden rounded-[12px]">
-              <Artwork src={album.artworkUrl} alt={album.title} size={160} radius={12} />
+            <div class="relative aspect-square overflow-hidden rounded-[12px]">
+              <Artwork src={album.artworkUrl} alt={album.title} class="h-full w-full" radius={12} />
               <div class="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-transparent to-black/55 opacity-0 transition-opacity group-hover:opacity-100">
                 <div class="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--lw-accent)] text-[var(--lw-on-accent)] shadow-[0_4px_12px_rgba(0,0,0,0.4)]">
                   <WaveIcon name="arrowRight" size={18} />
@@ -352,10 +346,10 @@
           <button
             type="button"
             onclick={() => goArtist(artist.id)}
-            class="lw-press group w-[144px] shrink-0 cursor-pointer text-center"
+            class="lw-press group min-w-0 cursor-pointer text-center"
           >
-            <div class="mx-auto w-[124px]">
-              <Artwork src={artist.artworkUrl} alt={artist.name} size={124} circle shadow="lift" />
+            <div class="mx-auto aspect-square w-full max-w-[124px]">
+              <Artwork src={artist.artworkUrl} alt={artist.name} class="h-full w-full" circle shadow="lift" />
             </div>
             <div class="mt-2.5 truncate text-[13px] font-semibold">{artist.name}</div>
             <div class="truncate text-[11.5px] text-[var(--lw-text-tertiary)]">{artist.monthlyListeners}</div>
