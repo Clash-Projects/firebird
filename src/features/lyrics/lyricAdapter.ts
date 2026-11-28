@@ -5,6 +5,7 @@ export type VocalRole = 'leadLeft' | 'duetRight' | 'unisonCenter';
 export interface KaraokeWordGroup {
   syllables: LyricWord[];
   hasTrailingSpace: boolean;
+  canWrap: boolean;
 }
 
 /** True when every cue shares the same timestamp (e.g. untimed 0ms transcripts). */
@@ -177,48 +178,67 @@ export function interpolateLineWords(
   return out;
 }
 
-/** Group syllables into unbreakable word runs (matches OG `groupSyllablesIntoWords`). */
+/** Use the displayed lyric for word boundaries and the provider tokens for timing. */
 export function groupSyllablesIntoWords(
   syllables: LyricWord[],
   lineText: string
 ): KaraokeWordGroup[] {
-  const groups: KaraokeWordGroup[] = [];
-  let current: LyricWord[] = [];
+  const displayWords = lineText.normalize('NFC').trim().split(/\s+/u).filter(Boolean);
+  if (displayWords.length === 0) return [];
+  const text = displayWords.join('');
+  const searchText = text.replace(/[‘’]/g, "'");
+  const canWrap = (word: string) => /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u.test(word);
 
-  for (let i = 0; i < syllables.length; i++) {
-    const syl = syllables[i];
-    current.push(syl);
+  function fallback(): KaraokeWordGroup[] {
+    const start = syllables[0]?.startMs ?? 0;
+    const end = syllables.reduce((latest, segment) => Math.max(latest, segment.endMs), start);
+    return interpolateLineWords(lineText, start, end - start).map((segment, index, segments) => ({
+      syllables: [{ ...segment, text: segment.text.trim() }],
+      hasTrailingSpace: index < segments.length - 1,
+      canWrap: canWrap(segment.text),
+    }));
+  }
 
-    let isWordEnd = false;
-    if (syl.text.endsWith(' ')) {
-      isWordEnd = true;
-    } else if (i === syllables.length - 1) {
-      isWordEnd = true;
-    } else {
-      const nextSyl = syllables[i + 1];
-      if (nextSyl.text.startsWith(' ')) {
-        isWordEnd = true;
-      } else {
-        const combined = `${syl.text}${nextSyl.text}`;
-        if (!lineText.includes(combined)) {
-          isWordEnd = true;
-        }
-      }
-    }
+  const ranges: Array<{ start: number; end: number; syllable: LyricWord }> = [];
+  let cursor = 0;
+  for (const syllable of syllables) {
+    const token = syllable.text.normalize('NFC').replace(/\s+/gu, '').replace(/[‘’]/g, "'");
+    if (!token) continue;
+    const match = searchText.indexOf(token, cursor);
+    if (match < 0 || !/^[\p{P}\p{S}]*$/u.test(text.slice(cursor, match))) return fallback();
+    // Preserve punctuation omitted by the timing provider.
+    ranges.push({ start: cursor, end: match + token.length, syllable });
+    cursor = match + token.length;
+  }
+  const last = ranges.at(-1);
+  if (!last || !/^[\p{P}\p{S}]*$/u.test(text.slice(cursor))) return fallback();
+  last.end = text.length;
 
-    if (isWordEnd) {
-      groups.push({
-        syllables: current,
-        hasTrailingSpace: i < syllables.length - 1,
+  let rangeIndex = 0;
+  let wordStart = 0;
+  return displayWords.map((word, index) => {
+    const wordEnd = wordStart + word.length;
+    const segments: LyricWord[] = [];
+    while (rangeIndex < ranges.length && ranges[rangeIndex].start < wordEnd) {
+      const range = ranges[rangeIndex];
+      const { syllable } = range;
+      const start = Math.max(wordStart, range.start);
+      const end = Math.min(wordEnd, range.end);
+      const duration = syllable.endMs - syllable.startMs;
+      const size = range.end - range.start;
+      // A provider can time two displayed words as one token.
+      segments.push({
+        ...syllable,
+        text: text.slice(start, end),
+        startMs: syllable.startMs + duration * (start - range.start) / size,
+        endMs: syllable.startMs + duration * (end - range.start) / size,
       });
-      current = [];
+      if (range.end > wordEnd) break;
+      rangeIndex++;
     }
-  }
-
-  if (current.length > 0) {
-    groups.push({ syllables: current, hasTrailingSpace: false });
-  }
-  return groups;
+    wordStart = wordEnd;
+    return { syllables: segments, hasTrailingSpace: index < displayWords.length - 1, canWrap: canWrap(word) };
+  });
 }
 
 /** Viewport alignment for follow-scroll (18% desktop golden-ratio upper-third anchor). */

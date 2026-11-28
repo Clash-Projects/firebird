@@ -7,6 +7,7 @@
     posMs: number;
     isRtl?: boolean;
     animationStyle?: string;
+    animateMotion?: boolean;
     activeShadow?: string;
   }
 
@@ -15,6 +16,7 @@
     posMs,
     isRtl = false,
     animationStyle = 'apple_fluid',
+    animateMotion = true,
     activeShadow = 'none',
   }: Props = $props();
 
@@ -38,7 +40,7 @@
 
   // Per-syllable live motion matching `_KaraokeSyllablePainter` in `karaoke_lyrics_view.dart`
   let motion = $derived.by(() => {
-    if (sylState !== 'singing' || progress <= 0 || progress >= 1) {
+    if (!animateMotion || sylState !== 'singing' || progress <= 0 || progress >= 1) {
       return { transform: 'none', trailA: '', trailB: '' };
     }
     const p = progress;
@@ -158,7 +160,7 @@
   let wipeMask = $derived.by(() => {
     if (sylState !== 'singing') return 'none';
     const frontPct = Math.max(0, Math.min(100, progress * 100));
-    const featherPct = Math.min(10, frontPct * 0.8);
+    const featherPct = Math.min(10, frontPct * 0.8, (100 - frontPct) * 0.8);
     const innerPct = Math.max(0, frontPct - featherPct);
     const mid1 = innerPct + featherPct * 0.33;
     const mid2 = innerPct + featherPct * 0.66;
@@ -169,7 +171,7 @@
   // Compact Canvas VFX for `hyper_warp` (shockwaves + 8 speed streaks) and `chaos_vortex` (prism ring + 8 confetti shards)
   let vfxCanvas = $state<HTMLCanvasElement | null>(null);
   let usesVfx = $derived(
-    sylState === 'singing' && (animationStyle === 'hyper_warp' || animationStyle === 'chaos_vortex')
+    animateMotion && sylState === 'singing' && (animationStyle === 'hyper_warp' || animationStyle === 'chaos_vortex')
   );
 
   $effect(() => {
@@ -241,19 +243,14 @@
 </script>
 
 {#if text}
-  {#if sylState === 'sung'}
-    <span class="inline-block text-[var(--lw-lyric-ink)]" style:text-shadow={activeShadow}>{text}</span>
-  {:else if sylState === 'idle'}
-    <span class="inline-block text-[var(--lw-lyric-ink)]" style:opacity={0.38} style:text-shadow="none">{text}</span>
-  {:else}
-    <span class="relative inline-block select-none">
-      <!-- Base unsung syllable (group opacity avoids double-blending in joined scripts) -->
-      <span
-        class="inline-block text-[var(--lw-lyric-ink)]"
-        style:opacity={0.38}
-        style:text-shadow="none"
-      >{text}</span>
-
+  <span
+    data-singing={sylState === 'singing' ? '' : undefined}
+    class="relative inline-block select-none"
+  ><span
+      class="inline-block text-[var(--lw-lyric-ink)]"
+      style:opacity={sylState === 'sung' ? 1 : 0.38}
+      style:text-shadow={sylState === 'sung' ? activeShadow : 'none'}
+    >{text}</span>{#if sylState === 'singing'}<span aria-hidden="true" class="pointer-events-none absolute inset-0">
       {#if usesVfx}
         <canvas
           bind:this={vfxCanvas}
@@ -299,13 +296,12 @@
       <!-- Active feathered wipe layer -->
       <span
         aria-hidden="true"
-        class="pointer-events-none absolute inset-0 z-2 inline-block whitespace-pre text-[var(--lw-lyric-ink)] will-change-transform"
+        class="pointer-events-none absolute inset-0 z-2 inline-block whitespace-pre text-[var(--lw-lyric-ink)]"
         style:text-shadow={joined ? 'none' : activeShadow}
         style:transform={motion.transform}
         style:transform-origin="center center"
         style:-webkit-mask-image={wipeMask}
         style:mask-image={wipeMask}
       >{text}</span>
-    </span>
-  {/if}
+    </span>{/if}</span>
 {/if}

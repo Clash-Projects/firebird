@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, untrack } from 'svelte';
+  import { prefersReducedMotion } from 'svelte/motion';
   import { dismissFlyout } from '$src/app/accessibility';
   import {
     featuresStore,
@@ -52,6 +53,8 @@
 
   let baseFontSize = $derived((fontSize ?? (compact ? 26 : 36)) * featuresStore.lyricsFontScale);
   let animStyle = $derived(featuresStore.lyricsAnimation);
+  let reduceMotion = $derived(settingsStore.reduceMotion || prefersReducedMotion.current);
+  let playbackAdvancing = $derived(playerStore.isPlaying && !playerStore.isBuffering);
 
   // Follow-scroll & Multi-line Share Card selection state
   let following = $state(true);
@@ -120,6 +123,7 @@
     sampledAt: 0,
     playing: false,
     speed: 1,
+    revision: 0,
   });
   let liveAudioMs = $state(0);
 
@@ -127,7 +131,7 @@
     const tid = track?.id ?? null;
     const seekRev = playerStore.seekRevision;
     const speed = playerStore.speed > 0 ? playerStore.speed : 1;
-    const playing = playerStore.isPlaying && !playerStore.isBuffering;
+    const playing = playbackAdvancing;
     const audioMs = playerStore.positionSec * 1000;
     const now = performance.now();
     const prev = untrack(() => playbackAnchor);
@@ -137,65 +141,72 @@
       seekRev !== prev.seekRev ||
       playing !== prev.playing ||
       speed !== prev.speed ||
-      Math.abs(audioMs - predicted) > 85;
+      Math.abs(audioMs - predicted) > 500;
 
-    if (jumped || !playing) {
-      playbackAnchor = { trackId: tid, seekRev, audioMs, sampledAt: now, playing, speed };
-      liveAudioMs = audioMs;
-    }
+    playbackAnchor = { trackId: tid, seekRev, audioMs, sampledAt: now, playing, speed, revision: prev.revision + Number(jumped) };
+    if (jumped || !playing) liveAudioMs = audioMs;
   });
 
   let untimed = $derived(!doc?.synced || (doc ? lyricsAreUntimed(doc.lines) : true));
   let isWordKaraoke = $derived(Boolean(doc?.synced && !untimed && featuresStore.wordByWord));
-  let usesReactor = $derived(animStyle === 'hyper_warp' || animStyle === 'chaos_vortex');
-
+  let wordGroupsByLine = $derived(isWordKaraoke ? doc?.lines.map(lineWordsForKaraoke) ?? [] : []);
   $effect(() => {
-    const anchor = playbackAnchor;
-    if (!anchor.playing || !doc?.synced || untimed) return;
+    if (!playbackAdvancing || !doc?.synced || untimed) return;
 
     let rafId = 0;
-    let wakeTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastFrame = 0;
+    let lastFrame = performance.now();
+    let frameRevision = -1;
+    let lyricTime = 0;
 
     const tick = (now: number) => {
-      if (now - lastFrame >= 15) {
-        lastFrame = now;
-        const currentAudio = anchor.audioMs + Math.max(0, now - anchor.sampledAt) * anchor.speed;
-        liveAudioMs = currentAudio;
-
-        // Sleep during pre-cue intros or long inter-line breaks when no reactor/dots need rAF
-        if (!isWordKaraoke && !usesReactor && doc && doc.lines.length > 0) {
-          const effMs = currentAudio - offsetMs;
-          const idx = activeLineIndex(doc.lines, effMs, true);
-          const nextLine = doc.lines[idx + 1];
-          if (nextLine) {
-            const delayMs = Math.max(16, Math.round((nextLine.startMs - effMs - 40) / anchor.speed));
-            if (delayMs > 220 && delayMs < 120_000) {
-              wakeTimer = setTimeout(() => {
-                wakeTimer = null;
-                rafId = requestAnimationFrame(tick);
-              }, delayMs);
-              return;
-            }
-          }
-        }
+      const sample = playbackAnchor;
+      const target = sample.audioMs + Math.max(0, now - sample.sampledAt) * sample.speed;
+      if (frameRevision === sample.revision) {
+        const advance = Math.max(0, now - lastFrame) * sample.speed;
+        const predicted = lyricTime + advance;
+        // Ease into routine playback corrections without rewinding the words.
+        const correction = Math.max(-advance * 0.25, Math.min(advance * 0.25, target - predicted));
+        lyricTime = predicted + correction;
+      } else {
+        lyricTime = target;
+        frameRevision = sample.revision;
       }
+      lastFrame = now;
+      liveAudioMs = lyricTime;
       rafId = requestAnimationFrame(tick);
     };
 
     rafId = requestAnimationFrame(tick);
-    return () => {
-      cancelAnimationFrame(rafId);
-      if (wakeTimer) clearTimeout(wakeTimer);
-    };
+    return () => cancelAnimationFrame(rafId);
   });
 
   // Effective lyrics timestamp (`audioMs - offsetMs` matching OG Flutter `karaoke_lyrics_view.dart`)
   let posMs = $derived(liveAudioMs - offsetMs);
   let activeIdx = $derived(doc ? activeLineIndex(doc.lines, posMs, doc.synced) : -1);
 
-  // Pulsing phase (0..1..0 on 1400ms cycle) for glowing `♪ • • •` instrumental break dots
-  let breakPulse = $derived(0.5 - 0.5 * Math.cos(((Math.max(0, liveAudioMs) % 1400) / 1400) * Math.PI * 2));
+  let timedWordEnds = $derived(doc?.lines.map((line) =>
+    line.words?.reduce((end, word) => Math.max(end, word.endMs), line.startMs) ?? line.startMs
+  ) ?? []);
+  let heldIdx = $derived(
+    isWordKaraoke && doc?.wordSynced && activeIdx > 0 && posMs < timedWordEnds[activeIdx - 1]
+      ? activeIdx - 1
+      : -1
+  );
+  let followIdx = $derived(heldIdx >= 0 ? heldIdx : activeIdx);
+  let instrumentalBreaks = $derived(doc?.lines.map((line, i, lines) => {
+    const start = i === 0 ? 0 : Math.max(timedWordEnds[i - 1], lines[i - 1].endMs);
+    return line.startMs - start >= (i === 0 ? 2500 : 3000) ? { start, end: line.startMs } : null;
+  }) ?? []);
+  let breakIdx = $derived.by(() => {
+    if (untimed) return -1;
+    const next = activeIdx + 1;
+    const gap = instrumentalBreaks[next];
+    return gap && posMs >= gap.start && posMs < gap.end ? next : -1;
+  });
+  let breakProgress = $derived.by(() => {
+    const gap = instrumentalBreaks[breakIdx];
+    return gap ? (posMs - gap.start) / (gap.end - gap.start) : 0;
+  });
 
   // Spatial Duet roles
   let vocalRoles = $derived(doc && track ? computeVocalRoles(doc.lines, track.artist) : []);
@@ -290,8 +301,10 @@
         return 'scale(1.025)';
       case 'elastic_tilt':
         return `perspective(833px) rotateY(${(-3.72 * dir).toFixed(2)}deg) scale(1.03)`;
+      case 'karaoke_bounce':
+        return 'translate3d(0, -2px, 0)';
       default:
-        return 'scale(1.02)';
+        return 'none';
     }
   }
 
@@ -339,16 +352,15 @@
     const maxScroll = Math.max(0, scrollEl.scrollHeight - viewH);
     if (maxScroll <= 0) return;
 
-    const anchor = lyricFollowAlignment(clampedIdx, compact, 0.18);
+    // Keep an opening countdown below the viewport's edge fade, including on the first cue.
+    const anchor = clampedIdx === 0 && instrumentalBreaks[0]
+      ? 0.10
+      : lyricFollowAlignment(clampedIdx, compact, 0.18);
     const nodeTop = targetNode.offsetTop;
     const desiredTop = Math.max(0, Math.min(maxScroll, nodeTop - viewH * anchor));
 
     cancelAnimationFrame(scrollAnimId);
-    const reduced =
-      settingsStore.reduceMotion ||
-      (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches);
-
-    if (!animate || reduced || Math.abs(desiredTop - scrollEl.scrollTop) < 2) {
+    if (!animate || reduceMotion || Math.abs(desiredTop - scrollEl.scrollTop) < 2) {
       programmaticScrollUntil = performance.now() + 120;
       scrollEl.scrollTop = desiredTop;
       return;
@@ -391,7 +403,7 @@
 
   $effect(() => {
     const tid = doc?.trackId ?? '';
-    const idx = activeIdx;
+    const idx = followIdx;
     const isFollow = following;
     if (!doc || !isFollow || untimed) return;
 
@@ -426,7 +438,7 @@
 
   function resumeFollowing() {
     following = true;
-    scrollToIndex(Math.max(0, activeIdx), true);
+    scrollToIndex(Math.max(0, followIdx), true);
   }
 
   function seekToLine(line: LyricLine, idx: number) {
@@ -496,16 +508,6 @@
       Math.max(80, line.endMs - line.startMs)
     );
     return groupSyllablesIntoWords(interpolated, line.text);
-  }
-
-  function prevEndForBreak(lines: LyricLine[], idx: number): number {
-    if (idx <= 0) return 0;
-    const prev = lines[idx - 1];
-    if (prev.words && prev.words.length > 0) {
-      const lastW = prev.words[prev.words.length - 1];
-      return lastW.endMs;
-    }
-    return Math.max(prev.endMs, prev.startMs + 1000);
   }
 
   function distanceOpacity(idx: number, active: number): number {
@@ -585,6 +587,7 @@
 <div
   data-lw="lyrics-view"
   data-animation={animStyle}
+  class:reduce-motion={reduceMotion}
   onpointerenter={pokeControls}
   onpointermove={pokeControls}
   class="lw-karaoke-root relative flex h-full min-h-0 w-full flex-col"
@@ -1102,7 +1105,8 @@
       >
         <div class="mx-auto flex w-full max-w-[740px] flex-col">
           {#each doc.lines as line, i (`${doc.trackId}-${i}-${line.startMs}`)}
-            {@const isActive = !untimed && i === activeIdx}
+            {@const isCurrent = !untimed && i === activeIdx}
+            {@const isActive = isCurrent || i === heldIdx}
             {@const rtl = isRtlText(line.text)}
             {@const joined = isJoinedScript(line.text)}
             {@const tracking = joined ? 0 : baseStyleTracking}
@@ -1115,52 +1119,37 @@
               (trimmedText.startsWith('(') && trimmedText.endsWith(')'))}
             {@const effectiveSize = isBackground ? baseFontSize * 0.65 : baseFontSize}
             {@const subFontSize = Math.max(12, effectiveSize * 0.52)}
-            {@const prevEndMs = prevEndForBreak(doc.lines, i)}
-            {@const gapMs = line.startMs - prevEndMs}
-            {@const hasBreak = !untimed && (i === 0 ? line.startMs >= 2500 : gapMs >= 3000)}
-            {@const breakActive = hasBreak && posMs >= prevEndMs && posMs < line.startMs}
-            {@const lineAlpha = distanceOpacity(i, activeIdx)}
+            {@const instrumentalBreak = !untimed ? instrumentalBreaks[i] : null}
+            {@const lineAlpha = isActive ? 1 : distanceOpacity(i, activeIdx)}
             {@const selected = selectedIndices.includes(i)}
             {@const canTap = selectMode || (!untimed && doc.synced)}
+            {@const wordGroups = wordGroupsByLine[i]}
 
             <div
               data-lw="lyrics-line"
               data-lyric-idx={i}
-              data-active={isActive}
+              data-active={isCurrent}
               class="mb-1 flex flex-col {isDuetRight
                 ? 'items-end'
                 : isUnison
                   ? 'items-center'
                   : 'items-start'}"
             >
-              <!-- Glowing `♪ • • •` Instrumental Countdown Dots -->
-              {#if breakActive}
-                {@const breakProg = Math.max(0, Math.min(1, (posMs - prevEndMs) / Math.max(1, line.startMs - prevEndMs)))}
-                {@const dotBase = effectiveSize * 0.22}
+              {#if instrumentalBreak}
+                {@const breakActive = i === breakIdx}
+                {@const progress = breakActive ? breakProgress : activeIdx >= i ? 1 : 0}
+                <!-- Keep the gap's height after its countdown fades. -->
                 <div
-                  aria-label="Instrumental break"
-                  class="flex items-center py-2.5 {compact ? 'px-2' : 'px-3'}"
-                  style:gap={`${(effectiveSize * 0.18).toFixed(1)}px`}
+                  aria-label={breakActive ? 'Instrumental break' : undefined}
+                  aria-hidden={!breakActive}
+                  class="lyric-break flex items-center py-2.5 {compact ? 'px-2' : 'px-3'}"
+                  class:break-active={breakActive}
+                  class:break-playing={breakActive && playbackAdvancing}
+                  style:font-size={`${effectiveSize.toFixed(1)}px`}
                 >
-                  <span
-                    class="font-bold text-[var(--lw-lyric-ink)]"
-                    style:font-size={`${effectiveSize.toFixed(1)}px`}
-                    style:line-height="1.1"
-                    style:margin-right={`${(effectiveSize * 0.17).toFixed(1)}px`}
-                    style:text-shadow={`0 0 ${(8 + 8 * breakPulse).toFixed(1)}px color-mix(in srgb, var(--lw-lyric-ink) ${Math.round((0.55 + 0.35 * breakPulse) * 100)}%, transparent)`}
-                  >♪</span>
-                  {#each [0, 1, 2] as dotIdx (dotIdx)}
-                    {@const isLit = breakProg >= (dotIdx + 1) / 4}
-                    {@const dSize = isLit ? dotBase * 1.15 : dotBase * 0.85}
-                    <span
-                      class="inline-block rounded-full transition-all duration-150"
-                      style:width={`${dSize.toFixed(1)}px`}
-                      style:height={`${dSize.toFixed(1)}px`}
-                      style:background={isLit ? 'var(--lw-lyric-ink)' : 'color-mix(in srgb, var(--lw-lyric-ink) 28%, transparent)'}
-                      style:box-shadow={isLit
-                        ? `0 0 ${(6 + 4 * breakPulse).toFixed(1)}px color-mix(in srgb, var(--lw-lyric-ink) ${Math.round((0.65 + 0.35 * breakPulse) * 100)}%, transparent)`
-                        : 'none'}
-                    ></span>
+                  <span class="break-note" aria-hidden="true">♪</span>
+                  {#each [0.25, 0.5, 0.75] as threshold (threshold)}
+                    <span class="break-dot" class:lit={progress >= threshold} aria-hidden="true"></span>
                   {/each}
                 </div>
               {/if}
@@ -1188,13 +1177,13 @@
                   style:padding-right={!rtl ? (compact ? '16px' : '26px') : undefined}
                   style:padding-left={rtl ? (compact ? '16px' : '26px') : undefined}
                   style:opacity={lineAlpha}
-                  style:transform={isActive ? activeLineTransform(rtl) : 'none'}
+                  style:transform={isActive && !reduceMotion ? activeLineTransform(rtl) : 'none'}
                   style:transform-origin={rtl || isDuetRight
                     ? 'right center'
                     : isUnison
                       ? 'center center'
                       : 'left center'}
-                  style:transition={`transform ${lineTransitionDuration} ${lineTransitionCurve}, opacity 220ms cubic-bezier(0.22, 1, 0.36, 1), background-color 150ms ease`}
+                  style:transition={reduceMotion ? 'none' : `transform ${lineTransitionDuration} ${lineTransitionCurve}, opacity 220ms cubic-bezier(0.22, 1, 0.36, 1), background-color 150ms ease`}
                 >
                   <!-- Main Sung Text / Progressive Word-by-Word Karaoke Wipe -->
                   <div
@@ -1205,25 +1194,20 @@
                     style:line-height="1.42"
                     style:letter-spacing={`${tracking}px`}
                   >
-                    {#if isActive && isWordKaraoke}
-                      {@const wordGroups = lineWordsForKaraoke(line)}
+                    {#if wordGroups?.length}
                       <span
-                        class="inline-flex flex-wrap items-center"
-                        class:justify-end={isDuetRight}
-                        class:justify-center={isUnison}
+                        class="text-[var(--lw-lyric-ink)] transition-opacity duration-180"
+                        style:opacity={isActive ? 1 : 0.44}
                       >
                         {#each wordGroups as wg, wgi (wgi)}
-                          <span class="inline-flex items-center whitespace-pre">
-                            {#each wg.syllables as syl, si (`${syl.startMs}-${si}`)}
-                              <KaraokeSyllable
-                                syllable={syl}
-                                {posMs}
-                                isRtl={rtl}
-                                animationStyle={animStyle}
-                                {activeShadow}
-                              />
-                            {/each}{#if wg.hasTrailingSpace}<span class="inline-block text-[var(--lw-lyric-ink)]" style:opacity={0.38}>&nbsp;</span>{/if}
-                          </span>
+                          <span class="lyric-word" class:wrap-syllables={wg.canWrap}>{#each wg.syllables as syl, si (si)}{#if isActive}<KaraokeSyllable
+                              syllable={syl}
+                              {posMs}
+                              isRtl={rtl}
+                              animationStyle={animStyle}
+                              animateMotion={!reduceMotion}
+                              {activeShadow}
+                            />{:else}<span class="inline-block">{syl.text}</span>{/if}{/each}</span>{#if wg.hasTrailingSpace}{' '}{/if}
                         {/each}
                       </span>
                     {:else}
@@ -1314,6 +1298,88 @@
     display: none;
     width: 0;
     height: 0;
+  }
+  .lyric-word {
+    display: inline-block;
+    white-space: nowrap;
+  }
+  .lyric-word.wrap-syllables {
+    display: inline;
+    white-space: normal;
+  }
+  .lyric-break {
+    gap: 0.18em;
+    line-height: 1.1;
+    color: var(--lw-lyric-ink);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px) scale(0.96);
+    transform-origin: left center;
+    transition:
+      opacity var(--lw-motion-slow) var(--ease-native),
+      transform var(--lw-motion-slow) var(--ease-native);
+  }
+  .lyric-break.break-active {
+    opacity: 1;
+    transform: none;
+    transition-duration: var(--lw-motion-normal);
+  }
+  .break-note {
+    margin-inline-end: 0.17em;
+    font-weight: 700;
+    text-shadow: 0 0 10px color-mix(in srgb, var(--lw-lyric-ink) 60%, transparent);
+    animation: lyric-break-pulse 1400ms ease-in-out infinite;
+    animation-play-state: paused;
+  }
+  .break-dot {
+    width: 0.22em;
+    height: 0.22em;
+    flex: none;
+    opacity: 0.72;
+    transform: scale(0.94);
+    transition: opacity var(--lw-motion-normal) ease, transform var(--lw-motion-normal) var(--ease-native);
+  }
+  .break-dot::before {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: currentColor;
+    content: '';
+    animation: lyric-dot-pulse 1400ms ease-in-out infinite;
+    animation-play-state: paused;
+  }
+  .break-dot + .break-dot::before {
+    animation-delay: 120ms;
+  }
+  .break-dot + .break-dot + .break-dot::before {
+    animation-delay: 240ms;
+  }
+  .break-playing .break-note,
+  .break-playing .break-dot::before {
+    animation-play-state: running;
+  }
+  .break-dot.lit {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  @keyframes lyric-break-pulse {
+    0%, 100% { opacity: 0.8; }
+    50% { opacity: 1; }
+  }
+  @keyframes lyric-dot-pulse {
+    0%, 100% { opacity: 0.88; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.13); }
+  }
+  .reduce-motion :is(.lyric-break, .break-dot, .lw-lyric-main > span) {
+    transition: none;
+  }
+  .reduce-motion :is(.lyric-break, .break-dot) {
+    transform: none;
+  }
+  .reduce-motion .break-note,
+  .reduce-motion .break-dot::before {
+    animation: none;
   }
   @media (hover: hover) and (pointer: fine) {
     .lw-lyric-btn:not(:disabled):hover {
