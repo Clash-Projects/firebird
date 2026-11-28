@@ -4,15 +4,16 @@
   import { playTrackNow } from '$src/app/trackActions';
   import { windowState } from '$src/app/window.svelte';
   import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
-  import { libraryStore, mapYtAlbum, mapYtArtist, mapYtTrack } from '$src/state/library.svelte';
+  import { libraryStore } from '$src/state/library.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
-  import type { Album, Artist, Track } from '$src/state/types';
+  import type { Track } from '$src/state/types';
   import Artwork from '$src/ui/components/Artwork.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import Input from '$src/ui/components/Input.svelte';
   import { contextMenu } from '$src/ui/components/contextMenuState.svelte';
   import { waveTooltip } from '$src/ui/components/tooltip';
   import { goAlbum, goArtist } from '$src/ui/navigation/waveNav';
+  import { exactArtist, fetchSearchResults, rememberSearchResults, searchMatches, type SearchResults } from '$src/ui/search/searchResults';
   import WaveHaze from '$src/ui/theme/WaveHaze.svelte';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -22,9 +23,9 @@
   const DISCORD_URL = 'https://discord.com/invite/TMCEPSUNk2';
 
   let searchQuery = $state('');
-  let liveQuery = $state('');
   let searchFocused = $state(false);
-  let selectedIdx = $state(-1);
+  let searchRoot = $state<HTMLDivElement>();
+  let selectedKey = $state<string | null>(null);
   let menuOpen = $state(false);
   let profileMenuOpen = $state(false);
   let nameModalOpen = $state(false);
@@ -32,48 +33,35 @@
   let nameDialogEl = $state<HTMLDialogElement | null>(null);
   let avatarFileInput: HTMLInputElement | undefined = $state();
 
-  let remoteSongs = $state<Track[]>([]);
-  let remoteAlbums = $state<Album[]>([]);
-  let remoteArtists = $state<Artist[]>([]);
-  let searchSeq = 0;
+  let remoteSearch = $state<{ query: string; results: SearchResults } | null>(null);
+  let pendingSearch: { query: string; promise: Promise<SearchResults> } | null = null;
+  let submitRevision = 0;
+
+  function requestSearch(query: string): Promise<SearchResults> {
+    if (remoteSearch?.query === query) return Promise.resolve(remoteSearch.results);
+    if (pendingSearch?.query === query) return pendingSearch.promise;
+
+    const promise = fetchSearchResults(query, { tracks: 6, albums: 4, artists: 5 }).then((results) => {
+      if (pendingSearch?.promise === promise) {
+        pendingSearch = null;
+        if (searchQuery.trim() === query) {
+          rememberSearchResults(results);
+          remoteSearch = { query, results };
+        }
+      }
+      return results;
+    });
+    pendingSearch = { query, promise };
+    return promise;
+  }
 
   $effect(() => {
-    const q = searchQuery.trim();
-    selectedIdx = -1;
-    if (!q) {
-      liveQuery = '';
-      remoteSongs = [];
-      remoteAlbums = [];
-      remoteArtists = [];
-      return;
-    }
-    const seq = ++searchSeq;
-    const timer = setTimeout(async () => {
-      liveQuery = q;
-      if (!isTauriRuntime()) return;
-      try {
-        const [songsRes, albumsRes, artistsRes] = await Promise.all([
-          ipcInvoke<any[]>('yt_search_songs', { query: q, limit: 2 }).catch(() => []),
-          ipcInvoke<any[]>('yt_search_albums', { query: q, limit: 1 }).catch(() => []),
-          ipcInvoke<any[]>('yt_search_artists', { query: q, limit: 1 }).catch(() => []),
-        ]);
-        if (seq !== searchSeq) return;
-        const songs = Array.isArray(songsRes) ? songsRes.map(mapYtTrack) : [];
-        const albums = Array.isArray(albumsRes) ? albumsRes.map(mapYtAlbum) : [];
-        const artists = Array.isArray(artistsRes) ? artistsRes.map(mapYtArtist) : [];
-        remoteSongs = songs;
-        remoteAlbums = albums;
-        remoteArtists = artists;
-        libraryStore.upsertTracks(songs);
-        libraryStore.upsertAlbums(albums);
-        libraryStore.upsertArtists(artists);
-      } catch {
-        // Fallback to local matches cleanly
-      }
-    }, 250);
+    const query = searchQuery.trim();
+    selectedKey = null;
+    if (!query || !isTauriRuntime()) return;
+    const timer = setTimeout(() => void requestSearch(query), 250);
     return () => clearTimeout(timer);
   });
-
   $effect(() => {
     if (!nameDialogEl) return;
     if (nameModalOpen && !nameDialogEl.open) nameDialogEl.showModal();
@@ -94,19 +82,25 @@
   );
 
   interface SearchHit {
+    key: string;
     kind: 'recent' | 'track' | 'album' | 'artist' | 'seeAll';
     label: string;
     sub: string;
     art?: string;
-    circle?: boolean;
     track?: Track;
     onSelect: () => void;
   }
 
+  let matches = $derived(searchMatches(
+    searchQuery,
+    remoteSearch?.query === searchQuery.trim() ? remoteSearch.results : undefined,
+  ));
+
   let searchHits = $derived.by<SearchHit[]>(() => {
-    const q = searchQuery.trim();
-    if (!q) {
+    const query = searchQuery.trim();
+    if (!query) {
       return libraryStore.searchHistory.slice(0, 4).map((item) => ({
+        key: `recent:${item}`,
         kind: 'recent',
         label: item,
         sub: 'Recent',
@@ -117,118 +111,134 @@
       }));
     }
 
-    const ql = q.toLowerCase();
-    const songs =
-      liveQuery === q && remoteSongs.length > 0
-        ? remoteSongs
-        : libraryStore.tracks
-            .filter(
-              (t) =>
-                t.title.toLowerCase().includes(ql) ||
-                t.artist.toLowerCase().includes(ql)
-            )
-            .slice(0, 2);
-
-    const albums =
-      liveQuery === q && remoteAlbums.length > 0
-        ? remoteAlbums
-        : libraryStore.albums
-            .filter(
-              (a) =>
-                a.title.toLowerCase().includes(ql) ||
-                a.artist.toLowerCase().includes(ql)
-            )
-            .slice(0, 1);
-
-    const artists =
-      liveQuery === q && remoteArtists.length > 0
-        ? remoteArtists
-        : libraryStore.artists
-            .filter((a) => a.name.toLowerCase().includes(ql))
-            .slice(0, 1);
-
-    const out: SearchHit[] = [];
-    for (const s of songs.slice(0, 2)) {
-      out.push({
-        kind: 'track',
-        label: s.title,
-        sub: s.artist ? `Song · ${s.artist}` : 'Song',
-        art: s.artworkUrl,
-        track: s,
-        onSelect: () => {
-          searchFocused = false;
-          playTrackNow(s);
-        },
-      });
+    const limits = { track: 2, album: 1, artist: 1 };
+    const hits: SearchHit[] = [];
+    for (const match of matches) {
+      if (limits[match.kind] === 0) continue;
+      limits[match.kind] -= 1;
+      const key = `${match.kind}:${match.item.id}`;
+      if (match.kind === 'track') {
+        const track = match.item;
+        hits.push({
+          key,
+          kind: 'track',
+          label: track.title,
+          sub: track.artist ? `Song · ${track.artist}` : 'Song',
+          art: track.artworkUrl,
+          track,
+          onSelect: () => {
+            closeSearch();
+            libraryStore.pushSearchHistory(query);
+            playTrackNow(track);
+          },
+        });
+      } else if (match.kind === 'artist') {
+        const artist = match.item;
+        hits.push({
+          key,
+          kind: 'artist',
+          label: artist.name,
+          sub: 'Artist',
+          art: artist.artworkUrl,
+          onSelect: () => openArtistResult(artist.id, query),
+        });
+      } else {
+        const album = match.item;
+        hits.push({
+          key,
+          kind: 'album',
+          label: album.title,
+          sub: album.artist ? `Album · ${album.artist}` : 'Album',
+          art: album.artworkUrl,
+          onSelect: () => {
+            closeSearch();
+            libraryStore.pushSearchHistory(query);
+            goAlbum(album.id);
+          },
+        });
+      }
     }
-    for (const a of albums.slice(0, 1)) {
-      out.push({
-        kind: 'album',
-        label: a.title,
-        sub: a.artist ? `Album · ${a.artist}` : 'Album',
-        art: a.artworkUrl,
-        onSelect: () => {
-          searchFocused = false;
-          goAlbum(a.id);
-        },
-      });
-    }
-    for (const ar of artists.slice(0, 1)) {
-      out.push({
-        kind: 'artist',
-        label: ar.name,
-        sub: 'Artist',
-        art: ar.artworkUrl,
-        circle: true,
-        onSelect: () => {
-          searchFocused = false;
-          goArtist(ar.id);
-        },
-      });
-    }
-    out.push({
+    hits.push({
+      key: 'all',
       kind: 'seeAll',
-      label: `See all results for “${q}”`,
+      label: `See all results for “${query}”`,
       sub: 'Open Search page',
-      onSelect: () => openSearch(q),
+      onSelect: () => openSearch(query),
     });
-    return out;
+    return hits;
   });
 
-  function submitSearch(e: SubmitEvent) {
-    e.preventDefault();
-    if (selectedIdx >= 0 && selectedIdx < searchHits.length) {
-      searchHits[selectedIdx].onSelect();
+  function closeSearch() {
+    submitRevision += 1;
+    searchFocused = false;
+    selectedKey = null;
+  }
+
+  function isInsideSearch(target: EventTarget | null): boolean {
+    if (!(target instanceof Element)) return false;
+    return Boolean(searchRoot?.contains(target) || (
+      contextMenu.open && target.closest('[data-lw="context-menu"]')
+    ));
+  }
+
+  function dismissSearchOutside(event: Event) {
+    if (searchFocused && !isInsideSearch(event.target)) closeSearch();
+  }
+
+  function openSearchTrackMenu(event: MouseEvent, track: Track) {
+    submitRevision += 1;
+    contextMenu.showForTrack(event, track);
+  }
+
+  function openArtistResult(id: string, query: string) {
+    closeSearch();
+    libraryStore.pushSearchHistory(query);
+    goArtist(id);
+  }
+
+  async function submitSearch(event: SubmitEvent) {
+    event.preventDefault();
+    const selected = searchFocused && searchHits.find((hit) => hit.key === selectedKey);
+    if (selected) {
+      selected.onSelect();
       return;
     }
-    openSearch(searchQuery);
+
+    const query = searchQuery.trim();
+    if (query && isTauriRuntime() && remoteSearch?.query !== query) {
+      const revision = ++submitRevision;
+      const path = router.path;
+      await requestSearch(query);
+      if (revision !== submitRevision || !searchFocused || query !== searchQuery.trim() || path !== router.path) return;
+    }
+
+    const artist = exactArtist(matches);
+    if (artist) openArtistResult(artist.id, query);
+    else openSearch(query);
   }
 
   function onSearchKeyDown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
-      searchFocused = false;
-      selectedIdx = -1;
+      closeSearch();
       (event.currentTarget as HTMLInputElement).blur();
       return;
     }
-    if (event.key === 'ArrowDown' && searchHits.length > 0) {
-      event.preventDefault();
-      searchFocused = true;
-      selectedIdx = Math.min(searchHits.length - 1, selectedIdx + 1);
-    } else if (event.key === 'ArrowUp' && searchHits.length > 0) {
-      event.preventDefault();
-      selectedIdx = Math.max(-1, selectedIdx - 1);
-    }
+    if (!['ArrowDown', 'ArrowUp'].includes(event.key) || searchHits.length === 0) return;
+    event.preventDefault();
+    searchFocused = true;
+    const index = searchHits.findIndex((hit) => hit.key === selectedKey);
+    const next = event.key === 'ArrowDown'
+      ? Math.min(searchHits.length - 1, index + 1)
+      : Math.max(-1, index - 1);
+    selectedKey = searchHits[next]?.key ?? null;
   }
 
   function openSearch(query: string) {
     const trimmed = query.trim();
+    closeSearch();
     if (trimmed) libraryStore.pushSearchHistory(trimmed);
-    searchFocused = false;
-    selectedIdx = -1;
     router.navigate(trimmed ? `/search/${encodeURIComponent(trimmed)}` : '/search');
   }
-
   function openExternal(url: string) {
     window.open(url, '_blank', 'noopener,noreferrer');
   }
@@ -295,6 +305,8 @@
   }
 </script>
 
+<svelte:window onpointerdown={dismissSearchOutside} onfocusin={dismissSearchOutside} />
+
 <WaveHaze
   level="l1"
   enableBlur={false}
@@ -338,12 +350,13 @@
     </div>
 
     <div
+      bind:this={searchRoot}
       class="relative ml-2 w-[clamp(140px,28vw,300px)]"
       role="search"
       onfocusin={() => (searchFocused = true)}
       onfocusout={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-          searchFocused = false;
+        if (!isInsideSearch(event.relatedTarget)) {
+          closeSearch();
         }
       }}
     >
@@ -353,7 +366,10 @@
           type="text"
           data-lw="title-search"
           bind:value={searchQuery}
-          oninput={() => (searchFocused = true)}
+          oninput={() => {
+            submitRevision += 1;
+            searchFocused = true;
+          }}
           onkeydown={onSearchKeyDown}
           aria-label="Search songs, albums and artists"
           placeholder="Search"
@@ -384,29 +400,46 @@
         class="lw-popover lw-flyout-surface absolute top-9 left-0 z-50 w-full min-w-[320px]"
         style:--lw-popover-origin="top left"
       >
-        {#each searchHits as hit, i (`${hit.kind}-${hit.label}-${i}`)}
-          <button
-            type="button"
-            onclick={hit.onSelect}
-            oncontextmenu={(e) => hit.track && contextMenu.showForTrack(e, hit.track)}
-            class="flex w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 py-1.5 text-left transition-colors {selectedIdx === i
-              ? 'bg-[var(--lw-wash-pressed)]'
-              : 'hover:bg-[var(--lw-wash-hover)]'}"
-          >
-            <span class="flex h-7 w-7 shrink-0 items-center justify-center">
-              {#if hit.kind === 'recent'}
-                <WaveIcon name="clock" size={15} class="text-[var(--lw-text-secondary)]" />
-              {:else if hit.kind === 'seeAll'}
-                <WaveIcon name="search" size={15} class="text-[var(--lw-text-secondary)]" />
-              {:else}
-                <Artwork src={hit.art} label={hit.label} size={28} radius={8} circle={Boolean(hit.circle)} />
-              {/if}
-            </span>
-            <div class="min-w-0 flex-1">
-              <div class="truncate text-[13px] font-semibold text-[var(--lw-text-primary)]">{hit.label}</div>
-              <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{hit.sub}</div>
-            </div>
-          </button>
+        {#each searchHits as hit (hit.key)}
+          {@const track = hit.track}
+          <div class="relative">
+            <button
+              type="button"
+              data-search-result={hit.kind}
+              onclick={hit.onSelect}
+              oncontextmenu={(e) => track && openSearchTrackMenu(e, track)}
+              class="flex w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 py-1.5 text-left transition-colors {track ? 'pr-10' : ''} {selectedKey === hit.key
+                ? 'bg-[var(--lw-wash-pressed)]'
+                : 'hover:bg-[var(--lw-wash-hover)]'}"
+            >
+              <span class="flex h-7 w-7 shrink-0 items-center justify-center">
+                {#if hit.kind === 'recent'}
+                  <WaveIcon name="clock" size={15} class="text-[var(--lw-text-secondary)]" />
+                {:else if hit.kind === 'seeAll'}
+                  <WaveIcon name="search" size={15} class="text-[var(--lw-text-secondary)]" />
+                {:else}
+                  <Artwork src={hit.art} label={hit.label} size={28} radius={8} circle={hit.kind === 'artist'} />
+                {/if}
+              </span>
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-[13px] font-semibold text-[var(--lw-text-primary)]">{hit.label}</div>
+                <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{hit.sub}</div>
+              </div>
+            </button>
+            {#if track}
+              <button
+                type="button"
+                aria-label={`Options for ${track.title}`}
+                aria-haspopup="menu"
+                use:waveTooltip={'Track options'}
+                onclick={(e) => openSearchTrackMenu(e, track)}
+                oncontextmenu={(e) => openSearchTrackMenu(e, track)}
+                class="bar-btn absolute right-1 top-1/2 -translate-y-1/2 text-[var(--lw-text-secondary)]"
+              >
+                <WaveIcon name="more" size={14} />
+              </button>
+            {/if}
+          </div>
         {/each}
       </div>
     </div>

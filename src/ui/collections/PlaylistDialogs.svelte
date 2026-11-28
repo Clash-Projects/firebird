@@ -1,5 +1,6 @@
 <script lang="ts">
   import { dismissDialogOnBackdrop } from '$src/app/accessibility';
+  import { featuresStore } from '$src/state/features.svelte';
   import { libraryStore } from '$src/state/library.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import Input from '$src/ui/components/Input.svelte';
@@ -14,6 +15,7 @@
   let dialogEl = $state<HTMLDialogElement | null>(null);
   let name = $state('');
   let description = $state('');
+  let creating = $state(false);
 
   $effect(() => {
     if (!dialogEl) return;
@@ -26,9 +28,17 @@
     }
   });
 
-  function submit(e: SubmitEvent) {
+  async function submit(e: SubmitEvent) {
     e.preventDefault();
-    const pl = libraryStore.createPlaylist(name, description);
+    if (creating) return;
+    creating = true;
+    const pl = await libraryStore.createPlaylist(name, description);
+    creating = false;
+    if (!pl) {
+      featuresStore.showToast({ title: 'Could not create playlist', severity: 'warning' });
+      return;
+    }
+    if (!open) return;
     onCreated?.(pl.id);
     onClose();
   }
@@ -50,7 +60,7 @@
     </div>
     <div class="mt-5 flex justify-end gap-2">
       <Buttons variant="ghost" onclick={onClose}>Cancel</Buttons>
-      <Buttons type="submit" variant="primary">Create</Buttons>
+      <Buttons type="submit" variant="primary" disabled={creating}>Create</Buttons>
     </div>
   </form>
 </dialog>

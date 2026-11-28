@@ -1,8 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
-  import { libraryStore, mapYtAlbum, mapYtArtist, mapYtTrack } from '$src/state/library.svelte';
-  import type { Album, Artist, Track } from '$src/state/types';
+  import { isTauriRuntime } from '$src/lib/ipc';
+  import { libraryStore } from '$src/state/library.svelte';
   import Artwork from '$src/ui/components/Artwork.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import DesktopTable from '$src/ui/components/DesktopTable.svelte';
@@ -11,6 +10,7 @@
   import States from '$src/ui/components/States.svelte';
   import { goAlbum, goArtist } from '$src/ui/navigation/waveNav';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
+  import { exactArtist, fetchSearchResults, rememberSearchResults, searchMatches, type SearchResults } from './searchResults';
 
   const BROWSE_CATEGORIES = [
     { name: 'Hip-Hop/Rap', tint: '#C45C1A', query: 'hip hop' },
@@ -34,84 +34,40 @@
   let query = $state(untrack(() => initialQuery));
   let filter = $state<'all' | 'tracks' | 'albums' | 'artists'>('all');
   let searching = $state(false);
-  let remoteTracks = $state<Track[]>([]);
-  let remoteAlbums = $state<Album[]>([]);
-  let remoteArtists = $state<Artist[]>([]);
-  let searchSeq = 0;
+  let remoteSearch = $state<{ query: string; results: SearchResults } | null>(null);
 
-  let q = $derived(query.trim().toLowerCase());
+  let q = $derived(query.trim());
+  let matches = $derived(searchMatches(q, remoteSearch?.query === q ? remoteSearch.results : undefined));
+  let tracks = $derived(matches.flatMap((match) => match.kind === 'track' ? [match.item] : []));
+  let albums = $derived(matches.flatMap((match) => match.kind === 'album' ? [match.item] : []));
+  let artists = $derived(matches.flatMap((match) => match.kind === 'artist' ? [match.item] : []));
+  let sectionOrder = $derived(Array.from(new Set(matches.map((match) => match.kind))));
 
   $effect(() => {
-    const trimmed = query.trim();
-    const seq = ++searchSeq;
-    remoteTracks = [];
-    remoteAlbums = [];
-    remoteArtists = [];
-    if (!trimmed) {
-      searching = false;
-      return;
-    }
-    if (!isTauriRuntime()) return;
-
-    searching = true;
+    const trimmed = q;
+    searching = Boolean(trimmed && isTauriRuntime());
+    if (!trimmed || !isTauriRuntime()) return;
+    let current = true;
     const timer = setTimeout(async () => {
-      try {
-        const [songsRes, albumsRes, artistsRes] = await Promise.all([
-          ipcInvoke<any[]>('yt_search_songs', { query: trimmed, limit: 25 }),
-          ipcInvoke<any[]>('yt_search_albums', { query: trimmed, limit: 12 }),
-          ipcInvoke<any[]>('yt_search_artists', { query: trimmed, limit: 12 }),
-        ]);
-        if (seq !== searchSeq) return;
-        const mappedSongs = Array.isArray(songsRes) ? songsRes.map(mapYtTrack) : [];
-        const mappedAlbums = Array.isArray(albumsRes) ? albumsRes.map(mapYtAlbum) : [];
-        const mappedArtists = Array.isArray(artistsRes) ? artistsRes.map(mapYtArtist) : [];
-
-        remoteTracks = mappedSongs;
-        remoteAlbums = mappedAlbums;
-        remoteArtists = mappedArtists;
-        libraryStore.upsertTracks(mappedSongs);
-        libraryStore.upsertAlbums(mappedAlbums);
-        libraryStore.upsertArtists(mappedArtists);
-      } finally {
-        if (seq === searchSeq) searching = false;
-      }
+      const results = await fetchSearchResults(trimmed, { tracks: 25, albums: 12, artists: 12 });
+      if (!current) return;
+      rememberSearchResults(results);
+      remoteSearch = { query: trimmed, results };
+      searching = false;
     }, 280);
-
-    return () => clearTimeout(timer);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
   });
-
-  let tracks = $derived(
-    remoteTracks.length > 0
-      ? remoteTracks
-      : q
-        ? libraryStore.tracks.filter(
-            (t) =>
-              t.title.toLowerCase().includes(q) ||
-              t.artist.toLowerCase().includes(q) ||
-              t.album.toLowerCase().includes(q)
-          )
-        : []
-  );
-  let albums = $derived(
-    remoteAlbums.length > 0
-      ? remoteAlbums
-      : q
-        ? libraryStore.albums.filter(
-            (a) => a.title.toLowerCase().includes(q) || a.artist.toLowerCase().includes(q)
-          )
-        : []
-  );
-  let artists = $derived(
-    remoteArtists.length > 0
-      ? remoteArtists
-      : q
-        ? libraryStore.artists.filter((a) => a.name.toLowerCase().includes(q))
-        : []
-  );
 
   function submitSearch(e: SubmitEvent) {
     e.preventDefault();
     libraryStore.pushSearchHistory(query);
+    if (filter === 'all' || filter === 'artists') {
+      const artist = exactArtist(matches);
+      if (artist) goArtist(artist.id);
+    }
   }
 </script>
 
@@ -180,39 +136,37 @@
   {:else if tracks.length === 0 && albums.length === 0 && artists.length === 0}
     <States icon="search" title="No matches found" description={`No results for "${query}". Try another track or artist name.`} />
   {:else}
-    {#if (filter === 'all' || filter === 'tracks') && tracks.length > 0}
-      <Shelf title="Songs">
-        <DesktopTable {tracks} showQuality={false} />
-      </Shelf>
-    {/if}
-
-    {#if (filter === 'all' || filter === 'albums') && albums.length > 0}
-      <Shelf title="Albums">
-        <div class="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-6">
-          {#each albums as album (album.id)}
-            <button type="button" onclick={() => goAlbum(album.id)} class="cursor-pointer rounded-[12px] p-1.5 text-left transition-colors hover:bg-[var(--lw-wash-hover)]">
-              <Artwork src={album.artworkUrl} label={album.title} artist={album.artist} kind="album" radius={10} class="aspect-square w-full" />
-              <div class="mt-2 truncate text-[13px] font-semibold">{album.title}</div>
-              <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{album.artist}</div>
-            </button>
-          {/each}
-        </div>
-      </Shelf>
-    {/if}
-
-    {#if (filter === 'all' || filter === 'artists') && artists.length > 0}
-      <Shelf title="Artists">
-        <div class="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-6">
-          {#each artists as artist (artist.id)}
-            <button type="button" onclick={() => goArtist(artist.id)} class="cursor-pointer rounded-[12px] p-2 text-center transition-colors hover:bg-[var(--lw-wash-hover)]">
-              <Artwork src={artist.artworkUrl} label={artist.name} kind="artist" circle class="mx-auto aspect-square w-full max-w-[140px]" />
-              <div class="mt-2 truncate text-[13px] font-semibold">{artist.name}</div>
-              <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{artist.monthlyListeners}</div>
-            </button>
-          {/each}
-        </div>
-      </Shelf>
-    {/if}
+    {#each sectionOrder as kind (kind)}
+      {#if kind === 'track' && (filter === 'all' || filter === 'tracks')}
+        <Shelf title="Songs">
+          <DesktopTable {tracks} showQuality={false} />
+        </Shelf>
+      {:else if kind === 'album' && (filter === 'all' || filter === 'albums')}
+        <Shelf title="Albums">
+          <div class="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-6">
+            {#each albums as album (album.id)}
+              <button type="button" onclick={() => goAlbum(album.id)} class="cursor-pointer rounded-[12px] p-1.5 text-left transition-colors hover:bg-[var(--lw-wash-hover)]">
+                <Artwork src={album.artworkUrl} label={album.title} artist={album.artist} kind="album" radius={10} class="aspect-square w-full" />
+                <div class="mt-2 truncate text-[13px] font-semibold">{album.title}</div>
+                <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{album.artist}</div>
+              </button>
+            {/each}
+          </div>
+        </Shelf>
+      {:else if kind === 'artist' && (filter === 'all' || filter === 'artists')}
+        <Shelf title="Artists">
+          <div class="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-6">
+            {#each artists as artist (artist.id)}
+              <button type="button" onclick={() => goArtist(artist.id)} class="cursor-pointer rounded-[12px] p-2 text-center transition-colors hover:bg-[var(--lw-wash-hover)]">
+                <Artwork src={artist.artworkUrl} label={artist.name} kind="artist" circle class="mx-auto aspect-square w-full max-w-[140px]" />
+                <div class="mt-2 truncate text-[13px] font-semibold">{artist.name}</div>
+                <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{artist.monthlyListeners}</div>
+              </button>
+            {/each}
+          </div>
+        </Shelf>
+      {/if}
+    {/each}
   {/if}
 </div>
 

@@ -371,22 +371,31 @@ class LibraryStore {
     }
   }
 
-  createPlaylist(name: string, description = ''): Playlist {
+  async createPlaylist(name: string, description = ''): Promise<Playlist | null> {
     const cleanName = name.trim() || 'Untitled Playlist';
-    const id = `pl-${Date.now()}`;
+    const desktop = isTauriRuntime();
+    const saved = desktop
+      ? await ipcInvoke<BackendSavedPlaylist>('library_playlists_create', { title: cleanName })
+      : null;
+    if (desktop && !saved) return null;
+    const id = saved?.mode === 'liked' ? 'pl-liked' : `pl-${saved?.id ?? Date.now()}`;
+    const existing = this.playlists.find((playlist) => playlist.id === id);
+    if (existing) return existing;
+    const tracks = (saved?.tracks ?? []).map(mapStoredTrack);
+    this.upsertTracks(tracks);
     const pl: Playlist = {
       id,
-      name: cleanName,
-      description,
-      artworkUrl: '',
+      name: saved?.title ?? cleanName,
+      description: saved?.subtitle || description,
+      artworkUrl: saved?.customCoverUri || tracks[0]?.artworkUrl || '',
       accentColor: '#7ca7db',
-      trackIds: [],
+      trackIds: tracks.map((track) => track.id),
+      pinned: Boolean(saved?.isPinned),
       source: 'local',
       owner: 'You',
       updatedAt: 'Just now',
     };
     this.playlists = [pl, ...this.playlists];
-    void ipcInvoke('library_playlists_create', { title: cleanName, subtitle: description });
     return pl;
   }
 
@@ -422,12 +431,34 @@ class LibraryStore {
     }
   }
 
-  addTrackToPlaylist(playlistId: string, trackId: string) {
-    const pl = this.playlists.find((p) => p.id === playlistId);
-    if (pl && !pl.trackIds.includes(trackId)) {
-      pl.trackIds = [...pl.trackIds, trackId];
-      pl.updatedAt = 'Just now';
+  async addTrackToPlaylist(playlistId: string, track: Track): Promise<boolean> {
+    const playlist = this.playlists.find((item) => item.id === playlistId);
+    if (!playlist) return false;
+    if (playlist.trackIds.includes(track.id)) return true;
+    if (isTauriRuntime()) {
+      const id = Number(playlistId.replace(/^pl-/, ''));
+      if (!Number.isSafeInteger(id)) return false;
+      const saved = await ipcInvoke<boolean>('library_playlists_add_track', {
+        id,
+        track: {
+          name: track.title,
+          artist: track.artist,
+          album: track.album,
+          videoId: track.videoId,
+          artworkUrl: track.artworkUrl,
+          durationSeconds: Math.round(track.durationSec),
+          playbackUrl: track.localPath ?? '',
+        } satisfies BackendStoredTrack,
+      });
+      if (!saved) return this.playlists.find((item) => item.id === playlistId)?.trackIds.includes(track.id) ?? false;
     }
+    if (!this.trackById(track.id)) this.upsertTracks([track]);
+    const updated = this.playlists.find((item) => item.id === playlistId);
+    if (updated && !updated.trackIds.includes(track.id)) {
+      updated.trackIds = [...updated.trackIds, track.id];
+      updated.updatedAt = 'Just now';
+    }
+    return true;
   }
 
   removeTrackFromPlaylist(playlistId: string, trackId: string) {

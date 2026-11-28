@@ -13,7 +13,7 @@
   import { featuresStore } from '$src/state/features.svelte';
   import { libraryStore } from '$src/state/library.svelte';
   import { formatDuration } from '$src/state/player.svelte';
-  import type { Track } from '$src/state/types';
+  import type { Playlist, Track } from '$src/state/types';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import Input from '$src/ui/components/Input.svelte';
   import { goAlbum, goArtist } from '$src/ui/navigation/waveNav';
@@ -36,6 +36,7 @@
   let newPlDialog = $state<HTMLDialogElement | null>(null);
   let newPlName = $state('');
   let pendingTrackForPlaylist = $state<Track | null>(null);
+  let savingNewPlaylist = $state(false);
   let hoverTimer: ReturnType<typeof setTimeout> | null = null;
   let closeSubmenuTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -229,17 +230,27 @@
     newPlDialog?.showModal();
   }
 
-  function submitNewPlaylist(e: SubmitEvent) {
+  async function addToPlaylist(playlist: Playlist, track: Track): Promise<boolean> {
+    const added = await libraryStore.addTrackToPlaylist(playlist.id, track);
+    featuresStore.showToast({
+      title: added ? `Added to ${playlist.name}` : `Could not add to ${playlist.name}`,
+      subtitle: track.title,
+      severity: added ? 'success' : 'warning',
+    });
+    return added;
+  }
+
+  async function submitNewPlaylist(e: SubmitEvent) {
     e.preventDefault();
     const clean = newPlName.trim();
-    if (!clean || !pendingTrackForPlaylist) return;
-    const pl = libraryStore.createPlaylist(clean);
-    libraryStore.addTrackToPlaylist(pl.id, pendingTrackForPlaylist.id);
-    featuresStore.showToast({
-      title: `Added to ${pl.name}`,
-      subtitle: pendingTrackForPlaylist.title,
-      severity: 'success',
-    });
+    const track = pendingTrackForPlaylist;
+    if (!clean || !track || savingNewPlaylist) return;
+    savingNewPlaylist = true;
+    const playlist = await libraryStore.createPlaylist(clean);
+    const added = playlist ? await addToPlaylist(playlist, track) : false;
+    savingNewPlaylist = false;
+    if (!playlist) featuresStore.showToast({ title: 'Could not create playlist', severity: 'warning' });
+    if (!added || pendingTrackForPlaylist !== track) return;
     pendingTrackForPlaylist = null;
     newPlDialog?.close();
   }
@@ -394,15 +405,7 @@
                 type="button"
                 role="menuitem"
                 tabindex="-1"
-                onclick={() =>
-                  run(() => {
-                    libraryStore.addTrackToPlaylist(pl.id, track.id);
-                    featuresStore.showToast({
-                      title: `Added to ${pl.name}`,
-                      subtitle: track.title,
-                      severity: 'success',
-                    });
-                  })}
+                onclick={() => run(() => void addToPlaylist(pl, track))}
                 class="lw-menu-row"
               >
                 <WaveIcon name="queue" size={15} />
@@ -633,7 +636,7 @@
     </div>
     <div class="mt-5 flex justify-end gap-2">
       <Buttons variant="secondary" size="sm" onclick={() => newPlDialog?.close()}>Cancel</Buttons>
-      <Buttons type="submit" variant="primary" size="sm" disabled={!newPlName.trim()}>
+      <Buttons type="submit" variant="primary" size="sm" disabled={!newPlName.trim() || savingNewPlaylist}>
         Create
       </Buttons>
     </div>
