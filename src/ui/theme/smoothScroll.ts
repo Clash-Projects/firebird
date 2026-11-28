@@ -142,8 +142,12 @@ export function waveSmoothScroll(node: HTMLElement, opts: ScrollOptions = {}) {
 
   // Optional mouse drag for horizontal shelves
   let moved = false;
+  let capturedPointerId: number | null = null;
   let dragStartX = 0;
   let dragStartScroll = 0;
+  let prevMoveX = 0;
+  let prevMoveTime = 0;
+  let velocityX = 0;
 
   const onPointerDown = (e: PointerEvent) => {
     stopGlide();
@@ -151,23 +155,53 @@ export function waveSmoothScroll(node: HTMLElement, opts: ScrollOptions = {}) {
     dragging = true;
     updateSnap();
     moved = false;
+    capturedPointerId = null;
     dragStartX = e.clientX;
     dragStartScroll = node.scrollLeft;
+    prevMoveX = e.clientX;
+    prevMoveTime = performance.now();
+    velocityX = 0;
   };
 
   const onPointerMove = (e: PointerEvent) => {
     if (!dragging) return;
     const dx = e.clientX - dragStartX;
-    if (Math.abs(dx) > 5) moved = true;
+    if (!moved && Math.abs(dx) > 5) {
+      moved = true;
+      node.style.scrollBehavior = 'auto';
+      try {
+        node.setPointerCapture(e.pointerId);
+        capturedPointerId = e.pointerId;
+      } catch {
+        // Ignore if pointer cannot be captured
+      }
+    }
     if (moved) {
+      const now = performance.now();
+      const dtMs = now - prevMoveTime;
+      if (dtMs > 0) {
+        const instVel = ((prevMoveX - e.clientX) / dtMs) * 1000;
+        velocityX = velocityX * 0.4 + instVel * 0.6;
+        prevMoveX = e.clientX;
+        prevMoveTime = now;
+      }
       node.scrollLeft = dragStartScroll - dx;
     }
   };
 
-  const onPointerUp = () => {
+  const onPointerUp = (e: PointerEvent) => {
     if (!dragging) return;
     dragging = false;
-    updateSnap();
+    if (capturedPointerId !== null) {
+      try {
+        if (node.hasPointerCapture(capturedPointerId)) {
+          node.releasePointerCapture(capturedPointerId);
+        }
+      } catch {
+        // Ignore
+      }
+      capturedPointerId = null;
+    }
     if (moved) {
       const swallow = (ce: MouseEvent) => {
         ce.preventDefault();
@@ -175,8 +209,26 @@ export function waveSmoothScroll(node: HTMLElement, opts: ScrollOptions = {}) {
       };
       node.addEventListener('click', swallow, { capture: true, once: true });
       setTimeout(() => node.removeEventListener('click', swallow, { capture: true }), 40);
+
+      const stale = performance.now() - prevMoveTime > 90;
+      const reducedMotion =
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+        document.documentElement.hasAttribute('data-reduced-motion');
+      if (!stale && !reducedMotion && Math.abs(velocityX) > 60) {
+        target = Math.max(0, Math.min(getMax(), node.scrollLeft + velocityX * 0.14));
+        glidePosition = node.scrollLeft;
+        activeGlide = true;
+        updateSnap();
+        lastTime = 0;
+        rafId = requestAnimationFrame(step);
+      } else {
+        updateSnap();
+      }
+    } else {
+      updateSnap();
     }
     moved = false;
+    velocityX = 0;
   };
 
   node.addEventListener('wheel', onWheel, { passive: false });
