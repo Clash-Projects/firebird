@@ -510,27 +510,6 @@ pub async fn yt_fetch_history(
 }
 
 #[tauri::command]
-pub async fn yt_record_watch_history(
-    state: State<'_, AppState>,
-    video_id: String,
-    watched_seconds: i64,
-    duration_seconds: Option<i64>,
-    cpn: Option<String>,
-    watch_url: Option<String>,
-) -> Result<bool, String> {
-    Ok(state
-        .tube
-        .record_watch_history(
-            &video_id,
-            watched_seconds,
-            duration_seconds.unwrap_or(0),
-            cpn.as_deref(),
-            watch_url.as_deref().unwrap_or(""),
-        )
-        .await)
-}
-
-#[tauri::command]
 pub async fn yt_fetch_account_playlists(
     state: State<'_, AppState>,
 ) -> Result<Vec<YouTubePlaylistSummary>, String> {

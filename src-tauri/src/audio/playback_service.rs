@@ -134,9 +134,6 @@ impl PrefsHandle {
     pub fn scrobbler_enabled(&self) -> bool {
         self.prefs.scrobbler_enabled()
     }
-    pub fn sync_yt_history(&self) -> bool {
-        self.prefs.sync_yt_history()
-    }
     pub fn crossfade_enabled(&self) -> bool {
         self.prefs.crossfade_enabled()
     }
@@ -995,10 +992,6 @@ struct PlaybackData {
     scrobble_track: Option<PlayableTrack>,
     scrobble_duration_sec: i64,
     scrobbled_this_window: bool,
-    yt_history_pushed_this_window: bool,
-    yt_history_cpn: String,
-    watchtime_urls: HashMap<String, String>,
-    watchtime_order: VecDeque<String>,
 
     endless_radio: bool,
     spotify_radio: Option<SpotifyRadioFn>,
@@ -1104,10 +1097,6 @@ impl Default for PlaybackData {
             scrobble_track: None,
             scrobble_duration_sec: 0,
             scrobbled_this_window: false,
-            yt_history_pushed_this_window: false,
-            yt_history_cpn: String::new(),
-            watchtime_urls: HashMap::new(),
-            watchtime_order: VecDeque::new(),
             endless_radio: false,
             spotify_radio: None,
             radio_seeds: HashSet::new(),
@@ -1467,27 +1456,6 @@ impl PlaybackService {
         } else {
             Duration::from_secs(self.prefs.crossfade_seconds().clamp(3, 12) as u64)
         }
-    }
-
-    fn stash_watchtime_url(&self, video_id: &str, url: &str) {
-        if video_id.is_empty() || url.is_empty() {
-            return;
-        }
-        if let Ok(mut d) = self.data.lock() {
-            d.watchtime_order.retain(|k| k != video_id);
-            d.watchtime_urls
-                .insert(video_id.to_string(), url.to_string());
-            d.watchtime_order.push_back(video_id.to_string());
-            while d.watchtime_order.len() > 24 {
-                if let Some(oldest) = d.watchtime_order.pop_front() {
-                    d.watchtime_urls.remove(&oldest);
-                }
-            }
-        }
-    }
-
-    fn remember_watchtime(&self, video_id: &str, stream: &ResolvedStream) {
-        self.stash_watchtime_url(video_id, &stream.watchtime_url);
     }
 
     fn maybe_log_first_audio(self: &Arc<Self>, position: Duration) {
@@ -4854,7 +4822,6 @@ impl PlaybackService {
                 stream.is_some()
             ));
             if let Some(s) = stream {
-                self.remember_watchtime(&track.video_id, &s);
                 return Some(s);
             }
             self.tube.report_playback_failure(&track.video_id);
@@ -4906,7 +4873,6 @@ impl PlaybackService {
                 stream.is_some()
             ));
             if let Some(s) = stream {
-                self.remember_watchtime(&vid, &s);
                 return Some(s);
             }
             self.tube.report_playback_failure(&vid);
@@ -6025,13 +5991,10 @@ impl PlaybackService {
             d.scrobble_start_epoch = ms_epoch_now();
             d.accumulated_seconds = 0.0;
             d.scrobbled_this_window = false;
-            d.yt_history_pushed_this_window = false;
-            d.yt_history_cpn.clear();
             d.now_playing_sent = false;
             d.last_tick = Some(Instant::now());
         }
         self.send_now_playing(track);
-        self.prewarm_history_id(track);
     }
 
     fn send_now_playing(&self, track: &PlayableTrack) {
@@ -6047,145 +6010,8 @@ impl PlaybackService {
         });
     }
 
-    fn maybe_push_yt_history(
-        self: &Arc<Self>,
-        track: &PlayableTrack,
-        watched_seconds: i64,
-        duration_seconds: i64,
-    ) {
-        if !self.prefs.sync_yt_history() {
-            return;
-        }
-        {
-            let mut d = self.data.lock().expect("playback lock poisoned");
-            if d.yt_history_pushed_this_window {
-                return;
-            }
-            d.yt_history_pushed_this_window = true;
-        }
-        let this = Arc::clone(self);
-        let track_owned = track.clone();
-        tokio::spawn(async move {
-            this.push_yt_history_async(track_owned, watched_seconds, duration_seconds)
-                .await;
-        });
-    }
-
-    async fn push_yt_history_async(
-        self: &Arc<Self>,
-        track: PlayableTrack,
-        watched_seconds: i64,
-        duration_seconds: i64,
-    ) {
-        let mut video_id = self.window_video_id(&track);
-        if video_id.is_empty() {
-            video_id = self.match_youtube_id_for_history(&track).await;
-        }
-        if video_id.is_empty() {
-            if let Ok(mut d) = self.data.lock() {
-                d.yt_history_pushed_this_window = false;
-            }
-            return;
-        }
-        let mut watch_url = self
-            .data
-            .lock()
-            .ok()
-            .and_then(|d| d.watchtime_urls.get(&video_id).cloned())
-            .unwrap_or_default();
-        if watch_url.is_empty() {
-            watch_url = tokio::time::timeout(
-                Duration::from_secs(30),
-                self.tube.fetch_authenticated_playback_url(&video_id),
-            )
-            .await
-            .unwrap_or_default();
-            if !watch_url.is_empty() {
-                self.stash_watchtime_url(&video_id, &watch_url);
-            }
-        }
-        let cpn = self.history_cpn();
-        let ok = self
-            .tube
-            .record_watch_history(
-                &video_id,
-                watched_seconds,
-                duration_seconds,
-                Some(&cpn),
-                &watch_url,
-            )
-            .await;
-        if !ok {
-            if let Ok(mut d) = self.data.lock() {
-                d.yt_history_pushed_this_window = false;
-            }
-        }
-    }
-
-    async fn match_youtube_id_for_history(self: &Arc<Self>, track: &PlayableTrack) -> String {
-        let empty = HashSet::new();
-        let mut matched = tokio::time::timeout(
-            Duration::from_secs(12),
-            self.tube
-                .find_best_match_or_null(&track.title, &track.artist, &empty),
-        )
-        .await
-        .ok()
-        .flatten();
-        if matched.is_none() {
-            matched = tokio::time::timeout(
-                Duration::from_secs(12),
-                self.tube
-                    .find_best_effort_match_or_null(&track.title, &track.artist, &empty),
-            )
-            .await
-            .ok()
-            .flatten();
-        }
-        if let Some(m) = matched {
-            if !m.video_id.is_empty() {
-                let id = m.video_id.clone();
-                self.adopt_video_id(track, &id, &m);
-                return id;
-            }
-        }
-        String::new()
-    }
-
-    fn prewarm_history_id(self: &Arc<Self>, track: &PlayableTrack) {
-        if !self.prefs.sync_yt_history() || !self.window_video_id(track).is_empty() {
-            return;
-        }
-        let this = Arc::clone(self);
-        let t = track.clone();
-        tokio::spawn(async move {
-            let _ = this.match_youtube_id_for_history(&t).await;
-        });
-    }
-
-    fn history_cpn(&self) -> String {
-        let mut d = self.data.lock().expect("playback lock poisoned");
-        if d.yt_history_cpn.is_empty() {
-            d.yt_history_cpn = InnerTubeMusicApi::new_watch_cpn();
-        }
-        d.yt_history_cpn.clone()
-    }
-
-    fn window_video_id(&self, track: &PlayableTrack) -> String {
-        if !track.video_id.is_empty() {
-            return track.video_id.clone();
-        }
-        let d = self.data.lock().expect("playback lock poisoned");
-        for q in &d.snapshot.queue {
-            if q.queue_key() == track.queue_key() && !q.video_id.is_empty() {
-                return q.video_id.clone();
-            }
-        }
-        String::new()
-    }
-
     pub fn tick_scrobble(self: &Arc<Self>, _position: Duration) {
-        let (yt_ping, scrobble_ping) = {
+        let scrobble_ping = {
             let mut d = self.data.lock().expect("playback lock poisoned");
             let now = Instant::now();
             if let Some(last) = d.last_tick {
@@ -6194,23 +6020,6 @@ impl PlaybackService {
                 }
             }
             d.last_tick = Some(now);
-
-            let yt_ping = if d.scrobble_start_epoch != 0
-                && !d.yt_history_pushed_this_window
-                && d.snapshot.is_playing
-                && d.accumulated_seconds >= 20.0
-            {
-                d.scrobble_track.clone().map(|t| {
-                    let dur_sec = if d.scrobble_duration_sec > 0 {
-                        d.scrobble_duration_sec
-                    } else {
-                        d.snapshot.duration().as_secs() as i64
-                    };
-                    (t, d.accumulated_seconds.round() as i64, dur_sec)
-                })
-            } else {
-                None
-            };
 
             let mut scrobble_ping = None;
             if d.scrobble_start_epoch != 0 && !d.scrobbled_this_window && d.snapshot.is_playing {
@@ -6227,21 +6036,18 @@ impl PlaybackService {
                             .clamp(30, 240);
                         if d.accumulated_seconds >= threshold as f64 {
                             d.scrobbled_this_window = true;
-                            scrobble_ping = Some((t, d.scrobble_start_epoch, threshold, duration_sec));
+                            scrobble_ping = Some((t, d.scrobble_start_epoch));
                         }
                     } else if d.accumulated_seconds >= 30.0 {
                         d.scrobbled_this_window = true;
-                        scrobble_ping = Some((t, d.scrobble_start_epoch, 30, 0));
+                        scrobble_ping = Some((t, d.scrobble_start_epoch));
                     }
                 }
             }
-            (yt_ping, scrobble_ping)
+            scrobble_ping
         };
 
-        if let Some((t, watched, dur)) = yt_ping {
-            self.maybe_push_yt_history(&t, watched, dur);
-        }
-        if let Some((t, epoch, watched, dur)) = scrobble_ping {
+        if let Some((t, epoch)) = scrobble_ping {
             let scrobbler = Arc::clone(&self.scrobbler);
             let artist = t.artist.clone();
             let title = t.title.clone();
@@ -6249,12 +6055,11 @@ impl PlaybackService {
             tokio::spawn(async move {
                 let _ = scrobbler.scrobble(&artist, &title, &album, epoch).await;
             });
-            self.maybe_push_yt_history(&t, watched, dur);
         }
     }
 
     pub fn flush_scrobble(self: &Arc<Self>, completed: bool) {
-        let (yt_ping, scrobble_ping) = {
+        let scrobble_ping = {
             let mut d = self.data.lock().expect("playback lock poisoned");
             let Some(track) = d.scrobble_track.clone().or_else(|| d.snapshot.current.clone())
             else {
@@ -6263,16 +6068,7 @@ impl PlaybackService {
             if d.scrobble_start_epoch == 0 {
                 return;
             }
-            if d.scrobbled_this_window {
-                let watched = d.accumulated_seconds.round() as i64;
-                let dur = d.scrobble_duration_sec;
-                d.scrobble_start_epoch = 0;
-                d.accumulated_seconds = 0.0;
-                d.scrobble_track = None;
-                d.scrobble_duration_sec = 0;
-                d.scrobbled_this_window = false;
-                (Some((track, watched, dur)), None)
-            } else {
+            let res = if !d.scrobbled_this_window {
                 let duration_sec = if d.scrobble_duration_sec > 0 {
                     d.scrobble_duration_sec
                 } else {
@@ -6286,29 +6082,23 @@ impl PlaybackService {
                 };
                 let played_enough = d.accumulated_seconds >= threshold as f64
                     || (completed && d.accumulated_seconds >= 30.0);
-                let res = if played_enough {
-                    Some((
-                        track,
-                        d.scrobble_start_epoch,
-                        d.accumulated_seconds.round() as i64,
-                        duration_sec,
-                    ))
+                if played_enough {
+                    Some((track, d.scrobble_start_epoch))
                 } else {
                     None
-                };
-                d.scrobble_start_epoch = 0;
-                d.accumulated_seconds = 0.0;
-                d.scrobble_track = None;
-                d.scrobble_duration_sec = 0;
-                d.scrobbled_this_window = false;
-                (None, res)
-            }
+                }
+            } else {
+                None
+            };
+            d.scrobble_start_epoch = 0;
+            d.accumulated_seconds = 0.0;
+            d.scrobble_track = None;
+            d.scrobble_duration_sec = 0;
+            d.scrobbled_this_window = false;
+            res
         };
 
-        if let Some((t, watched, dur)) = yt_ping {
-            self.maybe_push_yt_history(&t, watched, dur);
-        }
-        if let Some((track, epoch, watched, dur)) = scrobble_ping {
+        if let Some((track, epoch)) = scrobble_ping {
             let scrobbler = Arc::clone(&self.scrobbler);
             let artist = track.artist.clone();
             let title = track.title.clone();
@@ -6316,7 +6106,6 @@ impl PlaybackService {
             tokio::spawn(async move {
                 let _ = scrobbler.scrobble(&artist, &title, &album, epoch).await;
             });
-            self.maybe_push_yt_history(&track, watched, dur);
         }
     }
 

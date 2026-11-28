@@ -2192,196 +2192,6 @@ impl InnerTubeMusicApi {
         tracks
     }
 
-    pub fn new_watch_cpn() -> String {
-        const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-        let mut rng = rand::thread_rng();
-        (0..16)
-            .map(|_| CHARS[rng.gen_range(0..CHARS.len())] as char)
-            .collect()
-    }
-
-    fn watch_cl() -> u32 {
-        static CL: OnceLock<u32> = OnceLock::new();
-        *CL.get_or_init(|| 100_000_000 + rand::thread_rng().gen_range(0..900_000_000))
-    }
-
-    pub async fn record_watch_history(
-        &self,
-        video_id: &str,
-        watched_seconds: i64,
-        duration_seconds: i64,
-        cpn: Option<&str>,
-        watch_url: &str,
-    ) -> bool {
-        let conn = self.connection();
-        if !conn.connected || video_id.is_empty() || watched_seconds < 15 {
-            return false;
-        }
-        let Some(cookie) = self.cookie_header_value() else {
-            return false;
-        };
-        let len = if duration_seconds > 0 {
-            duration_seconds
-        } else {
-            watched_seconds
-        };
-        let cpn_value = cpn.map(str::to_string).unwrap_or_else(Self::new_watch_cpn);
-        let watch_page = format!("{MUSIC_ORIGIN}/watch?v={video_id}");
-        let (_, client_version, visitor_opt) = self.current_web_config();
-
-        let valid_base = if !watch_url.is_empty() {
-            Url::parse(watch_url).ok().filter(|u| {
-                u.host_str().is_some_and(|h| h.contains("youtube.com"))
-                    && u.path().starts_with("/api/stats/")
-            })
-        } else {
-            None
-        };
-
-        let target_url = if let Some(mut base) = valid_base {
-            let mut merged: BTreeMap<String, String> = base
-                .query_pairs()
-                .map(|(k, v)| (k.into_owned(), v.into_owned()))
-                .collect();
-            merged.insert("ver".to_string(), "2".to_string());
-            merged.insert("c".to_string(), "WEB_REMIX".to_string());
-            merged.insert("cpn".to_string(), cpn_value);
-            merged.entry("referrer".to_string()).or_insert(watch_page.clone());
-            base.query_pairs_mut().clear().extend_pairs(merged.iter());
-            base
-        } else {
-            let mut u = Url::parse("https://music.youtube.com/api/stats/watchtime").unwrap();
-            let lact = (watched_seconds * 1000 - 1245).max(0);
-            let cl = Self::watch_cl().to_string();
-            let watched_s = watched_seconds.to_string();
-            let rtn_s = (watched_seconds + 40).to_string();
-            let len_s = len.to_string();
-            let lact_s = lact.to_string();
-            u.query_pairs_mut()
-                .append_pair("ns", "yt")
-                .append_pair("el", "detailpage")
-                .append_pair("cpn", &cpn_value)
-                .append_pair("st", "0")
-                .append_pair("et", &watched_s)
-                .append_pair("cmt", &watched_s)
-                .append_pair("rt", &watched_s)
-                .append_pair("rti", &watched_s)
-                .append_pair("rtn", &rtn_s)
-                .append_pair("lact", &lact_s)
-                .append_pair("vis", "10")
-                .append_pair("state", "playing")
-                .append_pair("len", &len_s)
-                .append_pair("docid", video_id)
-                .append_pair("fmt", "0")
-                .append_pair("fs", "0")
-                .append_pair("euri", "")
-                .append_pair("cl", &cl)
-                .append_pair("volume", "100")
-                .append_pair("cbr", "Chrome")
-                .append_pair("cbrver", "152.0.0.0")
-                .append_pair("c", "WEB_REMIX")
-                .append_pair("cver", &client_version)
-                .append_pair("cplayer", "UNIPLAYER")
-                .append_pair("cos", "Windows")
-                .append_pair("cosver", "10.0")
-                .append_pair("cplatform", "DESKTOP")
-                .append_pair("hl", "en_US")
-                .append_pair("cr", "US")
-                .append_pair("afmt", "251")
-                .append_pair("idpj", "-3")
-                .append_pair("ldpj", "-12")
-                .append_pair("muted", "0")
-                .append_pair("referrer", &watch_page);
-            u
-        };
-
-        let now_ms = now_unix_ms().to_string();
-        let mut req = self
-            .client
-            .get(target_url.clone())
-            .header(USER_AGENT, WEB_USER_AGENT)
-            .header(ORIGIN, MUSIC_ORIGIN)
-            .header(REFERER, &watch_page)
-            .header(COOKIE, &cookie)
-            .header("X-YouTube-Client-Name", client_id_for_name("WEB_REMIX"))
-            .header("X-YouTube-Client-Version", &client_version)
-            .header("X-Goog-Event-Time", &now_ms)
-            .header("X-Goog-Request-Time", &now_ms)
-            .header(
-                "X-YouTube-Device",
-                "cbr=Chrome&cbrver=152.0.0.0&ceng=WebKit&cengver=537.36&cos=Windows&cosver=10.0&cplatform=DESKTOP",
-            )
-            .header("Sec-Fetch-Dest", "empty")
-            .header("Sec-Fetch-Mode", "cors")
-            .header("Sec-Fetch-Site", "same-origin");
-
-        if let Some(vis) = visitor_opt.as_deref().filter(|s| !s.is_empty()) {
-            req = req.header("X-Goog-Visitor-Id", vis);
-        }
-        if !conn.active_page_id.is_empty() {
-            req = req
-                .header("X-Goog-PageId", &conn.active_page_id)
-                .header("X-Goog-AuthUser", "0");
-        }
-
-        match tokio::time::timeout(Duration::from_secs(10), req.send()).await {
-            Ok(Ok(res)) => res.status().is_success(),
-            _ => false,
-        }
-    }
-
-    pub async fn fetch_authenticated_playback_url(&self, video_id: &str) -> String {
-        if !self.connection().connected || video_id.is_empty() {
-            return String::new();
-        }
-        let bare = self.fetch_playback_base(video_id, None).await;
-        if !bare.is_empty() {
-            return bare;
-        }
-        let player_po = tokio::time::timeout(
-            Duration::from_secs(12),
-            self.mint_po_token(video_id, false),
-        )
-        .await
-        .ok()
-        .flatten()
-        .map(|p| p.player_token);
-        self.fetch_playback_base(video_id, player_po.as_deref())
-            .await
-    }
-
-    async fn fetch_playback_base(&self, video_id: &str, player_po_token: Option<&str>) -> String {
-        self.ensure_config().await;
-        let (api_key, client_ver, visitor) = self.current_web_config();
-        let body = json!({
-            "context": self.build_context("WEB_REMIX", &client_ver, visitor.as_deref(), None, None, None, None, None, player_po_token),
-            "videoId": video_id,
-            "contentCheckOk": true,
-            "racyCheckOk": true,
-        });
-        let url = format!("{MUSIC_API}/player?key={api_key}&prettyPrint=false");
-        match self
-            .post_json(
-                &url,
-                &body,
-                "WEB_REMIX",
-                &client_ver,
-                WEB_USER_AGENT,
-                true,
-                None,
-                None,
-                None,
-                1,
-                None,
-                None,
-            )
-            .await
-        {
-            Ok(root) => Self::watchtime_url_of(&root),
-            Err(_) => String::new(),
-        }
-    }
-
     pub async fn fetch_account_playlists(&self) -> Vec<YouTubePlaylistSummary> {
         self.fetch_account_playlists_or_null()
             .await
@@ -6338,7 +6148,6 @@ impl InnerTubeMusicApi {
             }
         }
 
-        let watchtime_url = Self::watchtime_url_of(&root);
         let client_key = client.key();
         let mut candidates = Vec::new();
         let mut sabr_count = 0usize;
@@ -6431,7 +6240,6 @@ impl InnerTubeMusicApi {
                     ),
                     request_headers: headers.clone(),
                     expires_at,
-                    watchtime_url: watchtime_url.clone(),
                     ..Default::default()
                 },
                 adaptive,
@@ -6465,7 +6273,6 @@ impl InnerTubeMusicApi {
                     ),
                     request_headers: headers,
                     expires_at,
-                    watchtime_url,
                     ..Default::default()
                 },
                 adaptive: false,
@@ -6621,7 +6428,6 @@ impl InnerTubeMusicApi {
             {
                 continue;
             }
-            let watchtime_url = Self::watchtime_url_of(&root);
             let streaming = root.get("streamingData");
             for key in ["formats", "adaptiveFormats"] {
                 let Some(arr) = streaming.and_then(|s| s.get(key)).and_then(Value::as_array) else {
@@ -6684,7 +6490,6 @@ impl InnerTubeMusicApi {
                             cache_key: format!("{cache_prefix}:{video_id}:{itag}"),
                             request_headers: client.stream_request_headers(),
                             expires_at: exp,
-                            watchtime_url: watchtime_url.clone(),
                             ..Default::default()
                         },
                         adaptive: true,
@@ -7115,33 +6920,6 @@ impl InnerTubeMusicApi {
             None
         } else {
             Some(total)
-        }
-    }
-
-    fn watchtime_url_of(root: &Value) -> String {
-        let Some(raw) = root
-            .get("playbackTracking")
-            .and_then(|t| t.get("videostatsPlaybackUrl"))
-        else {
-            return String::new();
-        };
-        let url = match raw {
-            Value::Object(obj) => val_str(obj.get("baseUrl")),
-            Value::String(s) => s.clone(),
-            _ => String::new(),
-        };
-        if url.is_empty() {
-            return String::new();
-        }
-        let Ok(uri) = Url::parse(&url) else {
-            return String::new();
-        };
-        if uri.host_str().is_some_and(|h| h.contains("youtube.com"))
-            && uri.path().starts_with("/api/stats/")
-        {
-            url
-        } else {
-            String::new()
         }
     }
 

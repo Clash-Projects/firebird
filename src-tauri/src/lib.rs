@@ -493,7 +493,6 @@ pub fn run() {
             commands::extractor::yt_like_video,
             commands::extractor::yt_remove_video_like,
             commands::extractor::yt_fetch_history,
-            commands::extractor::yt_record_watch_history,
             commands::extractor::yt_fetch_account_playlists,
             commands::extractor::yt_create_remote_playlist,
             commands::extractor::yt_rename_remote_playlist,

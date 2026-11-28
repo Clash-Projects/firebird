@@ -973,20 +973,12 @@ impl Prefs {
     }
 
     // -- YouTube Music -------------------------------------------------------
-    pub fn sync_yt_history(&self) -> bool {
-        self.get_bool("lw_sync_yt_history").unwrap_or(true)
-    }
-
     pub fn sync_yt_library(&self) -> bool {
         self.get_bool("lw_sync_yt_library").unwrap_or(true)
     }
 
     pub fn set_sync_yt_library(&self, v: bool) {
         self.set_bool("lw_sync_yt_library", v);
-    }
-
-    pub fn set_sync_yt_history(&self, v: bool) {
-        self.set_bool("lw_sync_yt_history", v);
     }
 
     pub fn disable_po_token(&self) -> bool {
