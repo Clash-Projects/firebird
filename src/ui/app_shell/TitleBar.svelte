@@ -682,11 +682,6 @@
     background: var(--lw-rail-translucent);
   }
 
-  :global(:root[data-glass="true"]) .title-bar {
-    border-bottom-color: transparent;
-    background: transparent;
-  }
-
   .bar-btn {
     display: flex;
     width: 36px;

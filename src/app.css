@@ -211,20 +211,20 @@
 
 :root[data-glass="true"] {
   --lw-bg: transparent;
-  --lw-rail-translucent: transparent;
+  --lw-rail-translucent: rgba(10, 10, 14, 0.72);
   --lw-surface: rgba(255, 255, 255, 0.055);
   --lw-surface-overlay: rgba(255, 255, 255, 0.085);
   --lw-panel-translucent: rgba(18, 18, 22, 0.84);
   --lw-dock-translucent: rgba(12, 12, 16, 0.78);
-  --lw-outline: rgba(255, 255, 255, 0.08);
-  --lw-outline-soft: rgba(255, 255, 255, 0.05);
-  --lw-divider: rgba(255, 255, 255, 0.06);
+  --lw-outline: rgba(255, 255, 255, 0.10);
+  --lw-outline-soft: rgba(255, 255, 255, 0.06);
+  --lw-divider: rgba(255, 255, 255, 0.08);
 }
 
 :root[data-liquid-glass="true"]:not([data-haze-material="solid"]):not([data-performance="true"]) {
   --lw-panel-translucent: rgba(18, 18, 22, 0.78);
   --lw-dock-translucent: rgba(12, 12, 16, 0.74);
-  --lw-rail-translucent: transparent;
+  --lw-rail-translucent: rgba(10, 10, 14, 0.68);
 }
 
 :root[data-theme="light"][data-glass="true"] {
