@@ -14,8 +14,8 @@
   import { libraryStore } from '$src/state/library.svelte';
   import { formatDuration } from '$src/state/player.svelte';
   import type { Playlist, Track } from '$src/state/types';
+  import PlaylistDialogs from '$src/ui/collections/PlaylistDialogs.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
-  import Input from '$src/ui/components/Input.svelte';
   import { goAlbum, goArtist } from '$src/ui/navigation/waveNav';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import { contextMenu } from './contextMenuState.svelte';
@@ -31,12 +31,8 @@
     libraryStore.playlists.filter((p) => p.id !== 'pl-liked' && p.source === 'local')
   );
 
-  // Properties modal & New playlist modal state
   let propsDialog = $state<HTMLDialogElement | null>(null);
-  let newPlDialog = $state<HTMLDialogElement | null>(null);
-  let newPlName = $state('');
   let pendingTrackForPlaylist = $state<Track | null>(null);
-  let savingNewPlaylist = $state(false);
   let hoverTimer: ReturnType<typeof setTimeout> | null = null;
   let closeSubmenuTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -225,9 +221,12 @@
 
   function startNewPlaylistForTrack(t: Track) {
     pendingTrackForPlaylist = t;
-    newPlName = '';
     contextMenu.close();
-    newPlDialog?.showModal();
+  }
+
+  function closeNewPlaylist() {
+    pendingTrackForPlaylist = null;
+    void tick().then(() => previousFocus?.focus({ preventScroll: true }));
   }
 
   async function addToPlaylist(playlist: Playlist, track: Track): Promise<boolean> {
@@ -238,21 +237,6 @@
       severity: added ? 'success' : 'warning',
     });
     return added;
-  }
-
-  async function submitNewPlaylist(e: SubmitEvent) {
-    e.preventDefault();
-    const clean = newPlName.trim();
-    const track = pendingTrackForPlaylist;
-    if (!clean || !track || savingNewPlaylist) return;
-    savingNewPlaylist = true;
-    const playlist = await libraryStore.createPlaylist(clean);
-    const added = playlist ? await addToPlaylist(playlist, track) : false;
-    savingNewPlaylist = false;
-    if (!playlist) featuresStore.showToast({ title: 'Could not create playlist', severity: 'warning' });
-    if (!added || pendingTrackForPlaylist !== track) return;
-    pendingTrackForPlaylist = null;
-    newPlDialog?.close();
   }
 
   let albumTarget = $derived(track ? resolveAlbumId(track) : null);
@@ -615,27 +599,4 @@
   {/if}
 </dialog>
 
-<!-- New playlist quick-create dialog -->
-<dialog
-  bind:this={newPlDialog}
-  closedby="any"
-  use:dismissDialogOnBackdrop={() => newPlDialog?.close()}
-  aria-label="New playlist"
-  class="w-[min(400px,calc(100vw-32px))] p-6 text-[var(--lw-text-primary)]"
->
-  <form onsubmit={submitNewPlaylist}>
-    <h2 class="text-[18px] font-semibold tracking-[-0.2px]">New playlist</h2>
-    <p class="mt-1 text-[12.5px] text-[var(--lw-text-secondary)]">
-      Create a playlist and add {pendingTrackForPlaylist?.title ?? 'this track'}.
-    </p>
-    <div class="mt-3.5">
-      <Input bind:value={newPlName} autofocus placeholder="Playlist name" />
-    </div>
-    <div class="mt-5 flex justify-end gap-2">
-      <Buttons variant="secondary" size="sm" onclick={() => newPlDialog?.close()}>Cancel</Buttons>
-      <Buttons type="submit" variant="primary" size="sm" disabled={!newPlName.trim() || savingNewPlaylist}>
-        Create
-      </Buttons>
-    </div>
-  </form>
-</dialog>
+<PlaylistDialogs open={Boolean(pendingTrackForPlaylist)} track={pendingTrackForPlaylist} onClose={closeNewPlaylist} />

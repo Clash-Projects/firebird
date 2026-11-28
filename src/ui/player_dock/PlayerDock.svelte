@@ -304,10 +304,7 @@
         {#if playerStore.isBuffering}
           <span class="dock-spinner" aria-hidden="true"></span>
         {:else}
-          <span class="dock-play-icons" aria-hidden="true" data-playing={playerStore.isPlaying}>
-            <span><WaveIcon name="play" size={15} filled /></span>
-            <span><WaveIcon name="pause" size={15} filled /></span>
-          </span>
+          <WaveIcon name={playerStore.isPlaying ? 'pause' : 'play'} size={17} filled />
         {/if}
       </button>
 
@@ -958,12 +955,15 @@
     align-items: center;
     justify-content: center;
     border-radius: 10px;
-    color: color-mix(in srgb, var(--lw-text-primary) 78%, transparent);
+    color: color-mix(in srgb, var(--lw-text-primary) 87%, transparent);
     cursor: pointer;
     transition:
       color var(--lw-motion-fast) ease,
       transform var(--lw-motion-fast) var(--ease-wave),
       background-color var(--lw-motion-fast) ease;
+  }
+  .dock-glyph > :global(.lw-glyph) {
+    -webkit-text-stroke-width: 0.4px;
   }
   .dock-glyph.dock-large {
     color: var(--lw-text-primary);
@@ -1001,29 +1001,8 @@
   }
   .dock-play:disabled {
     background: color-mix(in srgb, var(--lw-accent) 35%, transparent);
-    color: color-mix(in srgb, var(--lw-on-accent) 50%, transparent);
+    color: var(--lw-on-accent);
     cursor: default;
-  }
-  .dock-play-icons {
-    display: grid;
-    width: 15px;
-    height: 15px;
-    place-items: center;
-  }
-  .dock-play-icons > span {
-    grid-area: 1 / 1;
-    display: inline-flex;
-    width: 15px;
-    height: 15px;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
-    transition: opacity 180ms var(--ease-wave), scale 180ms var(--ease-wave);
-  }
-  .dock-play-icons[data-playing="false"] > span:last-child,
-  .dock-play-icons[data-playing="true"] > span:first-child {
-    opacity: 0;
-    scale: 0.85;
   }
   .dock-spinner {
     width: 15px;

@@ -1,71 +1,171 @@
 <script lang="ts">
+  import { flip } from 'svelte/animate';
+  import { cubicOut } from 'svelte/easing';
+  import { prefersReducedMotion } from 'svelte/motion';
   import { featuresStore } from '$src/state/features.svelte';
+  import { settingsStore } from '$src/state/settings.svelte';
+  import type { ToastMessage } from '$src/state/types';
   import { waveTooltip } from '$src/ui/components/tooltip';
   import { waveSlide } from '$src/ui/theme/motion';
-  import WaveHaze from '$src/ui/theme/WaveHaze.svelte';
-  import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
+  import { WaveMotion } from '$src/ui/theme/tokens';
+  import WaveIcon, { type WaveIconName } from '$src/ui/theme/WaveIcon.svelte';
 
-  function toneColor(sev: string): string {
-    if (sev === 'success') return 'var(--lw-success)';
-    if (sev === 'warning') return 'var(--lw-warn)';
-    if (sev === 'error') return 'var(--lw-danger)';
-    return 'var(--lw-accent)';
-  }
+  const appearance: Record<ToastMessage['severity'], { tone: string; icon: WaveIconName }> = {
+    success: { tone: 'var(--lw-text-primary)', icon: 'check' },
+    warning: { tone: 'var(--lw-warn)', icon: 'alert' },
+    error: { tone: 'var(--lw-danger)', icon: 'error' },
+    info: { tone: 'var(--lw-text-secondary)', icon: 'info' },
+  };
 
-  function iconName(sev: string) {
-    if (sev === 'error' || sev === 'warning') return 'alert' as const;
-    if (sev === 'success') return 'check' as const;
-    return 'info' as const;
-  }
+  let stackDuration = $derived(
+    settingsStore.reduceMotion || prefersReducedMotion.current ? 0 : WaveMotion.normalMs,
+  );
 </script>
 
-<div
-  data-lw="infobar-host"
-  class="pointer-events-none fixed right-4 bottom-[calc(var(--lw-dock-h)+12px)] z-50 flex flex-col items-end gap-2"
->
+<div data-lw="infobar-host" class="notification-stack">
   {#each featuresStore.toasts as toast (toast.id)}
-    {@const tone = toneColor(toast.severity)}
-    <div transition:waveSlide={{ y: 8 }}>
-      <WaveHaze
-        level="l3"
-        class="pointer-events-auto relative flex min-w-[270px] max-w-[380px] items-center gap-3 overflow-hidden rounded-[8px] border border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] px-3.5 py-2.5 shadow-[var(--lw-shadow-flyout)]"
+    {@const look = appearance[toast.severity] ?? appearance.info}
+    <div class="notification-slot" animate:flip={{ duration: stackDuration, easing: cubicOut }}>
+      <div
+        class="notification"
+        style:--notification-tone={look.tone}
+        transition:waveSlide={{ y: 6 }}
       >
-        <span
-          class="absolute inset-y-0 left-0 w-[3px]"
-          style:background={tone}
-          aria-hidden="true"
-        ></span>
-        <span class="flex shrink-0" style:color={tone}>
-          <WaveIcon name={iconName(toast.severity)} size={15} />
-        </span>
-        <div class="min-w-0 flex-1" role="status">
-          <div class="truncate text-[12.5px] font-semibold text-[var(--lw-text-primary)]">{toast.title}</div>
-          {#if toast.subtitle}
-            <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{toast.subtitle}</div>
+        <div class="notification-icon" aria-hidden="true">
+          <WaveIcon name={look.icon} size={16} />
+        </div>
+
+        <div class="notification-content">
+          <div role="status" aria-atomic="true">
+            <div class="notification-title">{toast.title}</div>
+            {#if toast.subtitle}
+              <div class="notification-detail">{toast.subtitle}</div>
+            {/if}
+          </div>
+          {#if toast.actionLabel && toast.onAction}
+            <button
+              type="button"
+              class="notification-action lw-press"
+              onclick={() => {
+                toast.onAction?.();
+                featuresStore.dismissToast(toast.id);
+              }}
+            >
+              {toast.actionLabel}
+            </button>
           {/if}
         </div>
-        {#if toast.actionLabel && toast.onAction}
-          <button
-            type="button"
-            onclick={() => {
-              toast.onAction?.();
-              featuresStore.dismissToast(toast.id);
-            }}
-            class="cursor-pointer rounded-[6px] bg-[var(--lw-wash-hover)] px-2.5 py-1 text-[11.5px] font-medium text-[var(--lw-text-primary)] hover:bg-[var(--lw-wash-pressed)]"
-          >
-            {toast.actionLabel}
-          </button>
-        {/if}
+
         <button
           type="button"
+          class="notification-dismiss lw-press"
           use:waveTooltip={'Dismiss'}
           onclick={() => featuresStore.dismissToast(toast.id)}
           aria-label="Dismiss notification"
-          class="cursor-pointer rounded-[6px] p-1 text-[var(--lw-text-tertiary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
         >
           <WaveIcon name="close" size={12} />
         </button>
-      </WaveHaze>
+      </div>
     </div>
   {/each}
 </div>
+
+<style>
+  .notification-stack {
+    position: fixed;
+    z-index: 50;
+    inset-inline-end: 14px;
+    bottom: calc(var(--lw-dock-h) + 14px);
+    display: flex;
+    width: min(320px, calc(100% - 28px));
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: none;
+  }
+
+  .notification-slot {
+    width: 100%;
+  }
+
+  .notification {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) 26px;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 8px 9px 12px;
+    border: 1px solid var(--lw-outline);
+    border-radius: 8px;
+    background: var(--lw-surface-raised);
+    box-shadow: var(--lw-shadow-flyout);
+    pointer-events: auto;
+  }
+
+  .notification-icon {
+    display: flex;
+    color: color-mix(in srgb, var(--notification-tone) 72%, var(--lw-text-primary));
+  }
+
+  .notification-content {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .notification-title {
+    color: var(--lw-text-primary);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .notification-detail {
+    display: -webkit-box;
+    margin-top: 2px;
+    overflow: hidden;
+    color: var(--lw-text-secondary);
+    font-size: 12px;
+    line-height: 1.4;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+  }
+
+  .notification-action,
+  .notification-dismiss {
+    cursor: pointer;
+    transition: background-color var(--lw-motion-fast) var(--ease-wave),
+      color var(--lw-motion-fast) var(--ease-wave);
+  }
+
+  .notification-action {
+    max-width: 100%;
+    margin-top: 5px;
+    border-radius: 3px;
+    color: var(--lw-text-primary);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: start;
+    text-decoration: underline;
+    text-decoration-color: var(--lw-text-tertiary);
+    text-underline-offset: 2px;
+  }
+
+  .notification-dismiss {
+    display: grid;
+    width: 26px;
+    height: 26px;
+    place-items: center;
+    border-radius: 5px;
+    color: var(--lw-text-secondary);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .notification-action:hover {
+      text-decoration-color: currentColor;
+    }
+
+    .notification-dismiss:hover {
+      background: var(--lw-wash-hover);
+      color: var(--lw-text-primary);
+    }
+  }
+</style>

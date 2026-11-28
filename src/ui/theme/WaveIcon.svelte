@@ -151,7 +151,7 @@
     plugin: { font: 'segoe', code: 0xea86 }, // WindowsIcons.puzzle
 
     // Transport
-    play: { font: 'fluent', code: 0xe768, filledCode: 0xf5b0 }, // FluentIcons.play / play_solid
+    play: { font: 'fluent', code: 0xe768 }, // FluentIcons.play
     pause: { font: 'fluent', code: 0xe769 }, // FluentIcons.pause
     prev: { font: 'fluent', code: 0xe892 }, // FluentIcons.previous
     next: { font: 'fluent', code: 0xe893 }, // FluentIcons.next
@@ -254,6 +254,14 @@
     gripper: { font: 'fluent', code: 0xf772 }, // FluentIcons.gripper_dots_vertical
     gripperBar: { font: 'fluent', code: 0xe784 }, // FluentIcons.gripper_bar_vertical
   };
+
+  // The outline font has no matching filled pause or skip glyphs.
+  const SOLID_TRANSPORT: Partial<Record<WaveIconName, string>> = {
+    play: 'M7 5.8a1 1 0 0 1 1.5-.87l10.7 6.2a1 1 0 0 1 0 1.74l-10.7 6.2A1 1 0 0 1 7 18.2z',
+    pause: 'M7 5h2a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm8 0h2a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z',
+    prev: 'M4 6a1 1 0 0 1 2 0v12a1 1 0 0 1-2 0zm15 .55a1 1 0 0 0-1.5-.86l-9 5.45a1 1 0 0 0 0 1.72l9 5.45a1 1 0 0 0 1.5-.86z',
+    next: 'M20 6a1 1 0 0 0-2 0v12a1 1 0 0 0 2 0zM5 6.55a1 1 0 0 1 1.5-.86l9 5.45a1 1 0 0 1 0 1.72l-9 5.45A1 1 0 0 1 5 17.45z',
+  };
 </script>
 
 <script lang="ts">
@@ -270,6 +278,7 @@
   let customSvg = $derived(uiSlots.iconOverrides[name]);
   let spec = $derived(GLYPHS[name] ?? GLYPHS.music);
   let codePoint = $derived(filled && spec.filledCode ? spec.filledCode : spec.code);
+  let solidTransport = $derived(filled ? SOLID_TRANSPORT[name] : undefined);
 </script>
 
 {#if customSvg}
@@ -281,6 +290,10 @@
   >
     {@html customSvg}
   </span>
+{:else if solidTransport}
+  <svg class="shrink-0 {className}" width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d={solidTransport} />
+  </svg>
 {:else}
   <span
     class="lw-glyph {className}"
