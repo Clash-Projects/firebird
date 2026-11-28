@@ -137,17 +137,133 @@ export function waveSmoothScroll(
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
 
+  // Auto-hiding Fluent overlay scrollbar (matches WaveThinScrollbar: 6px, fades after 800ms idle)
+  let thumb: HTMLDivElement | null = null;
+  let fadeTimer: ReturnType<typeof setTimeout> | null = null;
+  let thumbDragging = false;
+  let thumbDragStartY = 0;
+  let thumbDragStartScroll = 0;
+  let resizeObs: ResizeObserver | null = null;
+  let mutationObs: MutationObserver | null = null;
+
+  const updateThumb = () => {
+    if (!thumb) return;
+    const ch = node.clientHeight;
+    const sh = node.scrollHeight;
+    if (axis !== 'y' || !node.classList.contains('lw-scroll') || sh <= ch + 2 || ch <= 0) {
+      thumb.style.display = 'none';
+      return;
+    }
+    const rect = node.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      thumb.style.display = 'none';
+      return;
+    }
+    thumb.style.display = 'block';
+    const pad = 4;
+    const trackH = Math.max(1, ch - pad * 2);
+    const thumbH = Math.max(40, Math.round((ch / sh) * trackH));
+    const maxScroll = Math.max(1, sh - ch);
+    const ratio = Math.min(1, Math.max(0, node.scrollTop / maxScroll));
+    const top = rect.top + pad + ratio * Math.max(0, trackH - thumbH);
+    thumb.style.height = `${thumbH}px`;
+    thumb.style.top = `${Math.round(top)}px`;
+    thumb.style.right = `${Math.round(window.innerWidth - rect.right + 4)}px`;
+  };
+
+  const revealThumb = () => {
+    if (!thumb) return;
+    updateThumb();
+    if (thumb.style.display === 'none') return;
+    thumb.setAttribute('data-visible', 'true');
+    if (fadeTimer) clearTimeout(fadeTimer);
+    if (!thumbDragging) {
+      fadeTimer = setTimeout(() => {
+        thumb?.setAttribute('data-visible', 'false');
+      }, 800);
+    }
+  };
+
+  const onNodeScroll = () => revealThumb();
+  const onNodeMove = (e: PointerEvent) => {
+    if (!thumb || axis !== 'y') return;
+    const rect = node.getBoundingClientRect();
+    if (rect.right - e.clientX <= 22 && e.clientX <= rect.right) {
+      revealThumb();
+    }
+  };
+
+  const onThumbDown = (e: PointerEvent) => {
+    if (e.button !== 0 || !thumb) return;
+    e.preventDefault();
+    e.stopPropagation();
+    stopGlide();
+    thumbDragging = true;
+    thumbDragStartY = e.clientY;
+    thumbDragStartScroll = node.scrollTop;
+    thumb.setAttribute('data-dragging', 'true');
+    if (fadeTimer) clearTimeout(fadeTimer);
+  };
+
+  const onThumbMove = (e: PointerEvent) => {
+    if (!thumbDragging || !thumb) return;
+    const ch = node.clientHeight;
+    const sh = node.scrollHeight;
+    const trackH = Math.max(1, ch - 8);
+    const thumbH = Math.max(40, Math.round((ch / sh) * trackH));
+    const travel = Math.max(1, trackH - thumbH);
+    const maxScroll = Math.max(1, sh - ch);
+    const dy = e.clientY - thumbDragStartY;
+    node.scrollTop = Math.max(0, Math.min(maxScroll, thumbDragStartScroll + (dy / travel) * maxScroll));
+    updateThumb();
+  };
+
+  const onThumbUp = () => {
+    if (!thumbDragging) return;
+    thumbDragging = false;
+    thumb?.removeAttribute('data-dragging');
+    revealThumb();
+  };
+
+  if (axis === 'y' && node.classList.contains('lw-scroll')) {
+    thumb = document.createElement('div');
+    thumb.className = 'lw-overlay-thumb';
+    thumb.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(thumb);
+
+    node.addEventListener('scroll', onNodeScroll, { passive: true });
+    node.addEventListener('pointermove', onNodeMove, { passive: true });
+    thumb.addEventListener('pointerdown', onThumbDown);
+    window.addEventListener('pointermove', onThumbMove);
+    window.addEventListener('pointerup', onThumbUp);
+    resizeObs = new ResizeObserver(updateThumb);
+    resizeObs.observe(node);
+    mutationObs = new MutationObserver(updateThumb);
+    mutationObs.observe(node, { attributes: true, attributeFilter: ['class'] });
+  }
+
   return {
     update(next: { axis?: 'y' | 'x'; drag?: boolean } = {}) {
       axis = next.axis ?? 'y';
       allowDrag = next.drag ?? axis === 'x';
+      updateThumb();
     },
     destroy() {
       stopGlide();
+      if (fadeTimer) clearTimeout(fadeTimer);
       node.removeEventListener('wheel', onWheel);
       node.removeEventListener('pointerdown', onPointerDown);
+      node.removeEventListener('scroll', onNodeScroll);
+      node.removeEventListener('pointermove', onNodeMove);
+      thumb?.removeEventListener('pointerdown', onThumbDown);
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointermove', onThumbMove);
+      window.removeEventListener('pointerup', onThumbUp);
+      resizeObs?.disconnect();
+      mutationObs?.disconnect();
+      thumb?.remove();
+      thumb = null;
     },
   };
 }
