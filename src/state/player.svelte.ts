@@ -158,7 +158,11 @@ class PlayerStore {
       }
     };
 
-    const initial = await ipcInvoke<BackendPlayerSnapshot>('player_snapshot');
+    let initial = await ipcInvoke<BackendPlayerSnapshot>('player_snapshot');
+    if (!initial?.current && (!initial?.queue || initial.queue.length === 0)) {
+      await ipcInvoke('player_restore_session');
+      initial = await ipcInvoke<BackendPlayerSnapshot>('player_snapshot');
+    }
     applySnap(initial);
     const unlisten = await ipcListen<BackendPlayerSnapshot>('player:snapshot', applySnap);
 
