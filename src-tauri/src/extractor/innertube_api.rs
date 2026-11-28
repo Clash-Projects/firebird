@@ -5406,6 +5406,47 @@ impl InnerTubeMusicApi {
             .to_string()
     }
 
+    fn has_known_artist(artist: &str) -> bool {
+        let norm = Self::normalize(artist);
+        !norm.is_empty()
+            && norm != "unknown artist"
+            && norm != "various artists"
+            && norm != "unknown"
+    }
+
+    fn candidate_shares_artist(c: &YouTubeMusicTrack, artist: &str) -> bool {
+        if !Self::has_known_artist(artist) {
+            return true;
+        }
+        let primary = Self::primary_artist_for_match(artist);
+        let check_artist = if primary.is_empty() { artist } else { &primary };
+        let norm_c_artist = Self::normalize(&c.artist);
+        let norm_c_title = Self::normalize(&c.title);
+        for candidate_a in [artist, check_artist] {
+            let norm_w = Self::normalize(candidate_a);
+            if norm_w.is_empty() {
+                continue;
+            }
+            if Self::similarity(&c.artist, candidate_a) >= 30
+                || norm_c_artist.contains(&norm_w)
+                || norm_w.contains(&norm_c_artist)
+                || norm_c_title.contains(&norm_w)
+            {
+                return true;
+            }
+        }
+        let stop = ["the", "and", "feat", "ft", "featuring", "with"];
+        let artist_tokens: HashSet<String> = Self::tokens(artist)
+            .into_iter()
+            .filter(|t| t.chars().count() >= 2 && !stop.contains(&t.as_str()))
+            .collect();
+        if artist_tokens.is_empty() {
+            return false;
+        }
+        let hay = Self::tokens(&format!("{} {}", c.artist, c.title));
+        artist_tokens.intersection(&hay).next().is_some()
+    }
+
     pub async fn find_best_effort_match_or_null(
         &self,
         title: &str,
@@ -5447,22 +5488,38 @@ impl InnerTubeMusicApi {
             }
         }
 
-        if let Ok(Ok(m)) = tokio::time::timeout(
-            Duration::from_secs(5),
-            self.find_best_match(title, "", excluded_video_ids),
-        )
-        .await
-        {
-            PlayDiag::log(&format!(
-                "match HIT title-only \"{title}\" — \"{}\" [{}] by \"{}\"",
-                m.title, m.video_id, m.artist
-            ));
-            return Some(m);
+        let known_artist = Self::has_known_artist(artist);
+        // Never fall back to blank-artist matching during retry after playback
+        // failure when the track has a known artist, and always reject covers
+        // from unrelated artists.
+        if !known_artist || excluded_video_ids.is_empty() {
+            if let Ok(Ok(m)) = tokio::time::timeout(
+                Duration::from_secs(5),
+                self.find_best_match(title, "", excluded_video_ids),
+            )
+            .await
+            {
+                if Self::candidate_shares_artist(&m, artist) {
+                    PlayDiag::log(&format!(
+                        "match HIT title-only \"{title}\" — \"{}\" [{}] by \"{}\"",
+                        m.title, m.video_id, m.artist
+                    ));
+                    return Some(m);
+                }
+                PlayDiag::log(&format!(
+                    "match REJECT title-only \"{title}\" — \"{}\" [{}] by \"{}\" (wanted \"{artist}\")",
+                    m.title, m.video_id, m.artist
+                ));
+            }
         }
 
         let core = Self::core_song_title(title, artist);
         if !core.is_empty() && Self::normalize(&core) != Self::normalize(title) {
-            let candidates = [if !primary.is_empty() { &primary } else { artist }, ""];
+            let candidates: Vec<&str> = if !known_artist || excluded_video_ids.is_empty() {
+                vec![if !primary.is_empty() { &primary } else { artist }, ""]
+            } else {
+                vec![if !primary.is_empty() { &primary } else { artist }]
+            };
             for a in candidates {
                 if let Ok(Ok(m)) = tokio::time::timeout(
                     Duration::from_secs(5),
@@ -5470,11 +5527,13 @@ impl InnerTubeMusicApi {
                 )
                 .await
                 {
-                    PlayDiag::log(&format!(
-                        "match HIT core \"{core}\" — \"{}\" [{}]",
-                        m.title, m.video_id
-                    ));
-                    return Some(m);
+                    if !a.is_empty() || Self::candidate_shares_artist(&m, artist) {
+                        PlayDiag::log(&format!(
+                            "match HIT core \"{core}\" — \"{}\" [{}]",
+                            m.title, m.video_id
+                        ));
+                        return Some(m);
+                    }
                 }
             }
 
@@ -8686,6 +8745,30 @@ mod tests {
             InnerTubeMusicApi::match_score(&orig, "Blinding Lights", "The Weeknd")
                 > InnerTubeMusicApi::match_score(&remix, "Blinding Lights", "The Weeknd")
         );
+
+        let bieber = YouTubeMusicTrack {
+            video_id: "DcDbKDAb7go".to_string(),
+            title: "What Do You Mean?".to_string(),
+            artist: "Justin Bieber".to_string(),
+            ..Default::default()
+        };
+        let cover = YouTubeMusicTrack {
+            video_id: "BlGOExzHJVI".to_string(),
+            title: "What Do You Mean".to_string(),
+            artist: "SibeRya".to_string(),
+            ..Default::default()
+        };
+        let title_tagged = YouTubeMusicTrack {
+            video_id: "vid3".to_string(),
+            title: "Justin Bieber - What Do You Mean? (Audio)".to_string(),
+            artist: "Pop Hits".to_string(),
+            ..Default::default()
+        };
+        assert!(InnerTubeMusicApi::candidate_shares_artist(&bieber, "Justin Bieber"));
+        assert!(!InnerTubeMusicApi::candidate_shares_artist(&cover, "Justin Bieber"));
+        assert!(InnerTubeMusicApi::candidate_shares_artist(&title_tagged, "Justin Bieber"));
+        assert!(InnerTubeMusicApi::candidate_shares_artist(&cover, ""));
+        assert!(InnerTubeMusicApi::candidate_shares_artist(&cover, "Unknown Artist"));
     }
 
     #[tokio::test]
