@@ -1,6 +1,8 @@
+import { playTrackNow } from '$src/app/trackActions';
 import { ipcInvoke } from '$src/lib/ipc';
 import { libraryStore, mapYtAlbum, mapYtArtist, mapYtTrack } from '$src/state/library.svelte';
-import type { Album, Artist, Track } from '$src/state/types';
+import type { Album, Artist, SearchResult, Track } from '$src/state/types';
+import { goAlbum, goArtist } from '$src/ui/navigation/waveNav';
 
 export interface SearchResults {
   tracks: Track[];
@@ -8,12 +10,7 @@ export interface SearchResults {
   artists: Artist[];
 }
 
-type SearchMatch =
-  | { kind: 'track'; item: Track }
-  | { kind: 'album'; item: Album }
-  | { kind: 'artist'; item: Artist };
-
-type RankedMatch = SearchMatch & { score: number };
+type RankedMatch = SearchResult & { score: number };
 
 const exactNameScore = 4;
 const exactArtistScore = exactNameScore + 1;
@@ -96,4 +93,30 @@ export function rememberSearchResults(results: SearchResults) {
   libraryStore.upsertTracks(results.tracks);
   libraryStore.upsertAlbums(results.albums);
   libraryStore.upsertArtists(results.artists);
+}
+
+export function searchResultDetails(result: SearchResult) {
+  if (result.kind === 'artist') {
+    return { label: result.item.name, sub: 'Artist', art: result.item.artworkUrl };
+  }
+  const { title, artist, artworkUrl } = result.item;
+  const type = result.kind === 'track' ? 'Song' : 'Album';
+  return { label: title, sub: artist ? `${type} · ${artist}` : type, art: artworkUrl };
+}
+
+export function openSearchResult(result: SearchResult, query = '', tracks?: Track[]) {
+  const { item } = result;
+  // Rebuild the entry here so a ranked result does not persist a query-specific score.
+  if (result.kind === 'track') {
+    void libraryStore.recordSearchResult({ kind: 'track', item: result.item }, query);
+    playTrackNow(result.item, tracks);
+  } else if (result.kind === 'album') {
+    void libraryStore.recordSearchResult({ kind: 'album', item: result.item }, query);
+    if (!libraryStore.albums.some((album) => album.id === item.id)) libraryStore.upsertAlbums([result.item]);
+    goAlbum(item.id);
+  } else {
+    void libraryStore.recordSearchResult({ kind: 'artist', item: result.item }, query);
+    if (!libraryStore.artists.some((artist) => artist.id === item.id)) libraryStore.upsertArtists([result.item]);
+    goArtist(item.id);
+  }
 }

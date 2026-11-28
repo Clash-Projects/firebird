@@ -86,6 +86,7 @@
 
   onMount(() => {
     pluginManager.init();
+    void libraryStore.loadSearchHistory();
     let disconnectPlayer: (() => void) | undefined;
     let unlistenYt: (() => void) | undefined;
     let unlistenSync: (() => void) | undefined;

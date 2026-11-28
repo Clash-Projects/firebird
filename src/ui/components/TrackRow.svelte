@@ -22,6 +22,7 @@
     removeLabel?: string;
     onRemove?: () => void;
     onRowClick?: (e: MouseEvent) => void;
+    onPlay?: () => void;
   }
 
   let {
@@ -36,6 +37,7 @@
     removeLabel,
     onRemove,
     onRowClick,
+    onPlay = () => playTrackNow(track, list),
   }: Props = $props();
 
   let isCurrent = $derived(playerStore.currentTrack?.id === track.id);
@@ -51,8 +53,8 @@
   data-active={isCurrent}
   data-selected={selected}
   data-focused={focused}
-  onclick={(e) => (onRowClick ? onRowClick(e) : playTrackNow(track, list))}
-  onkeydown={(e) => e.target === e.currentTarget && e.key === 'Enter' && playTrackNow(track, list)}
+  onclick={(e) => (onRowClick ? onRowClick(e) : onPlay())}
+  onkeydown={(e) => e.target === e.currentTarget && e.key === 'Enter' && onPlay()}
   oncontextmenu={(e) =>
     contextMenu.showForTrack(e, track, removeLabel && onRemove ? { removeLabel, onRemove } : undefined)}
   class="track-row group flex {artistRow ? 'h-[var(--artist-track-height,54px)]' : 'h-[54px]'} cursor-pointer items-center rounded-[10px] px-2 transition-colors duration-[140ms] ease-[var(--ease-native)] hover:bg-[var(--lw-wash-hover)] {selected

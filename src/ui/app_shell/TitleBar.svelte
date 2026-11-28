@@ -1,19 +1,17 @@
 <script lang="ts">
   import { dismissDialogOnBackdrop, dismissFlyout } from '$src/app/accessibility';
   import { router } from '$src/app/router.svelte';
-  import { playTrackNow } from '$src/app/trackActions';
   import { windowState } from '$src/app/window.svelte';
   import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
   import { libraryStore } from '$src/state/library.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
-  import type { Track } from '$src/state/types';
+  import type { SearchResult, Track } from '$src/state/types';
   import Artwork from '$src/ui/components/Artwork.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
   import Input from '$src/ui/components/Input.svelte';
   import { contextMenu } from '$src/ui/components/contextMenuState.svelte';
   import { waveTooltip } from '$src/ui/components/tooltip';
-  import { goAlbum, goArtist } from '$src/ui/navigation/waveNav';
-  import { exactArtist, fetchSearchResults, rememberSearchResults, searchMatches, type SearchResults } from '$src/ui/search/searchResults';
+  import { exactArtist, fetchSearchResults, openSearchResult, rememberSearchResults, searchMatches, searchResultDetails, type SearchResults } from '$src/ui/search/searchResults';
   import WaveHaze from '$src/ui/theme/WaveHaze.svelte';
   import BrandIcon from '$src/ui/theme/BrandIcon.svelte';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
@@ -97,17 +95,30 @@
     remoteSearch?.query === searchQuery.trim() ? remoteSearch.results : undefined,
   ));
 
+  function resultHit(result: SearchResult, query = ''): SearchHit {
+    return {
+      key: `${result.kind}:${result.item.id}`,
+      kind: result.kind,
+      ...searchResultDetails(result),
+      track: result.kind === 'track' ? result.item : undefined,
+      onSelect: () => {
+        closeSearch();
+        openSearchResult(result, query);
+      },
+    };
+  }
+
   let searchHits = $derived.by<SearchHit[]>(() => {
     const query = searchQuery.trim();
     if (!query) {
-      return libraryStore.searchHistory.slice(0, 4).map((item) => ({
-        key: `recent:${item}`,
+      return libraryStore.searchHistory.slice(0, 4).map((item) => item.kind !== 'query' ? resultHit(item) : ({
+        key: item.key,
         kind: 'recent',
-        label: item,
+        label: item.query,
         sub: 'Recent',
         onSelect: () => {
-          searchQuery = item;
-          openSearch(item);
+          searchQuery = item.query;
+          openSearch(item.query);
         },
       }));
     }
@@ -117,47 +128,7 @@
     for (const match of matches) {
       if (limits[match.kind] === 0) continue;
       limits[match.kind] -= 1;
-      const key = `${match.kind}:${match.item.id}`;
-      if (match.kind === 'track') {
-        const track = match.item;
-        hits.push({
-          key,
-          kind: 'track',
-          label: track.title,
-          sub: track.artist ? `Song · ${track.artist}` : 'Song',
-          art: track.artworkUrl,
-          track,
-          onSelect: () => {
-            closeSearch();
-            libraryStore.pushSearchHistory(query);
-            playTrackNow(track);
-          },
-        });
-      } else if (match.kind === 'artist') {
-        const artist = match.item;
-        hits.push({
-          key,
-          kind: 'artist',
-          label: artist.name,
-          sub: 'Artist',
-          art: artist.artworkUrl,
-          onSelect: () => openArtistResult(artist.id, query),
-        });
-      } else {
-        const album = match.item;
-        hits.push({
-          key,
-          kind: 'album',
-          label: album.title,
-          sub: album.artist ? `Album · ${album.artist}` : 'Album',
-          art: album.artworkUrl,
-          onSelect: () => {
-            closeSearch();
-            libraryStore.pushSearchHistory(query);
-            goAlbum(album.id);
-          },
-        });
-      }
+      hits.push(resultHit(match, query));
     }
     hits.push({
       key: 'all',
@@ -191,12 +162,6 @@
     contextMenu.showForTrack(event, track);
   }
 
-  function openArtistResult(id: string, query: string) {
-    closeSearch();
-    libraryStore.pushSearchHistory(query);
-    goArtist(id);
-  }
-
   async function submitSearch(event: SubmitEvent) {
     event.preventDefault();
     const selected = searchFocused && searchHits.find((hit) => hit.key === selectedKey);
@@ -214,8 +179,10 @@
     }
 
     const artist = exactArtist(matches);
-    if (artist) openArtistResult(artist.id, query);
-    else openSearch(query);
+    if (artist) {
+      closeSearch();
+      openSearchResult({ kind: 'artist', item: artist }, query);
+    } else openSearch(query);
   }
 
   function onSearchKeyDown(event: KeyboardEvent) {
@@ -237,7 +204,6 @@
   function openSearch(query: string) {
     const trimmed = query.trim();
     closeSearch();
-    if (trimmed) libraryStore.pushSearchHistory(trimmed);
     router.navigate(trimmed ? `/search/${encodeURIComponent(trimmed)}` : '/search');
   }
   function openExternal(url: string) {

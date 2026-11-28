@@ -7,8 +7,13 @@ import type {
   HomeEntityItem,
   HomeShelfItem,
   Playlist,
+  SearchHistoryEntry,
+  SearchResult,
   Track,
 } from './types';
+
+const SEARCH_HISTORY_KEY = 'lw_recent_search_results';
+const SEARCH_HISTORY_LIMIT = 12;
 
 interface BackendYtTrack {
   videoId: string;
@@ -147,7 +152,8 @@ class LibraryStore {
   genres = $state<GenreItem[]>([]);
   likedIds = $state<string[]>([]);
   historyIds = $state<string[]>([]);
-  searchHistory = $state<string[]>([]);
+  searchHistory = $state<SearchHistoryEntry[]>([]);
+  private searchHistoryLoad?: Promise<void>;
   localFolders = $state<string[]>([]);
   downloads = $state<DownloadItem[]>([]);
   homeShelves = $state<HomeShelfItem[]>([]);
@@ -191,14 +197,12 @@ class LibraryStore {
 
   async loadLocalStorage() {
     if (!isTauriRuntime()) return;
-    const [history, folders, savedPlaylists, downloads] = await Promise.all([
-      ipcInvoke<string[]>('library_search_history_load', { limit: 20 }),
+    const [folders, savedPlaylists, downloads] = await Promise.all([
       ipcInvoke<string[]>('library_local_folders'),
       ipcInvoke<BackendSavedPlaylist[]>('library_playlists_all'),
       ipcInvoke<BackendDownloadEntry[]>('library_downloads_all'),
     ]);
 
-    if (Array.isArray(history)) this.searchHistory = history;
     if (Array.isArray(folders)) this.localFolders = folders;
 
     if (Array.isArray(savedPlaylists)) {
@@ -483,20 +487,61 @@ class LibraryStore {
     void ipcInvoke('library_local_forget_folder', { path });
   }
 
-  pushSearchHistory(query: string) {
-    const q = query.trim();
-    if (!q) return;
-    this.searchHistory = [q, ...this.searchHistory.filter((item) => item.toLowerCase() !== q.toLowerCase())].slice(0, 12);
-    void ipcInvoke('library_search_history_push', { query: q });
+  loadSearchHistory() {
+    return this.searchHistoryLoad ??= (async () => {
+      try {
+        const saved = localStorage.getItem(SEARCH_HISTORY_KEY);
+        if (saved) {
+          const entries: SearchHistoryEntry[] = JSON.parse(saved);
+          if (Array.isArray(entries)) {
+            this.searchHistory = entries.filter((entry) => entry && typeof entry.key === 'string')
+              .slice(0, SEARCH_HISTORY_LIMIT);
+            return;
+          }
+        }
+      } catch {
+        // Fall back to the previous query history if the saved list cannot be read.
+      }
+      const queries = await ipcInvoke<string[]>('library_search_history_load', { limit: SEARCH_HISTORY_LIMIT });
+      const unique = new Map<string, SearchHistoryEntry>();
+      for (const query of queries ?? []) {
+        const key = `query:${query.toLowerCase()}`;
+        if (!unique.has(key)) unique.set(key, { kind: 'query', key, query });
+      }
+      this.searchHistory = [...unique.values()];
+    })();
   }
 
-  removeSearchHistory(query: string) {
-    this.searchHistory = this.searchHistory.filter((q) => q !== query);
-    void ipcInvoke('library_search_history_remove', { query });
+  private saveSearchHistory() {
+    try {
+      localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(this.searchHistory));
+    } catch {
+      // Keep current-session history if WebView storage is unavailable.
+    }
   }
 
-  clearSearchHistory() {
+  async recordSearchResult(result: SearchResult, query: string) {
+    await this.loadSearchHistory();
+    const key = `${result.kind}:${result.item.id}`;
+    const queryKey = `query:${query.trim().toLowerCase()}`;
+    this.searchHistory = [
+      { ...result, key },
+      ...this.searchHistory.filter((entry) => entry.key !== key && entry.key !== queryKey),
+    ].slice(0, SEARCH_HISTORY_LIMIT);
+    this.saveSearchHistory();
+  }
+
+  async removeSearchHistory(entry: SearchHistoryEntry) {
+    await this.loadSearchHistory();
+    this.searchHistory = this.searchHistory.filter((item) => item.key !== entry.key);
+    this.saveSearchHistory();
+    if (entry.kind === 'query') void ipcInvoke('library_search_history_remove', { query: entry.query });
+  }
+
+  async clearSearchHistory() {
+    await this.loadSearchHistory();
     this.searchHistory = [];
+    this.saveSearchHistory();
     void ipcInvoke('library_search_history_clear');
   }
 

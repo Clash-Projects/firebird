@@ -16,6 +16,7 @@
     maxHeight?: string;
     removeLabel?: string;
     onRemove?: (track: Track, index: number) => void;
+    onPlay?: (track: Track, list: Track[]) => void;
   }
 
   let {
@@ -25,6 +26,7 @@
     maxHeight,
     removeLabel,
     onRemove,
+    onPlay = playTrackNow,
   }: Props = $props();
 
   let tableEl = $state<HTMLDivElement | null>(null);
@@ -99,7 +101,7 @@
     selectedKeys = new Set();
     anchorIndex = index;
     focusedIndex = index;
-    playTrackNow(sortedEntries[index].track, sortedTracks);
+    onPlay(sortedEntries[index].track, sortedTracks);
   }
 
   function handleTableKeydown(e: KeyboardEvent) {
@@ -122,7 +124,7 @@
     } else if (e.key === 'Enter' && focusedIndex >= 0 && focusedIndex < sortedEntries.length) {
       if (document.activeElement === tableEl) {
         e.preventDefault();
-        playTrackNow(sortedEntries[focusedIndex].track, sortedTracks);
+        onPlay(sortedEntries[focusedIndex].track, sortedTracks);
       }
     } else if (e.key === 'Delete' && onRemove && focusedIndex >= 0 && focusedIndex < sortedEntries.length) {
       e.preventDefault();
@@ -161,7 +163,7 @@
       <div class="flex items-center gap-2">
         <button
           type="button"
-          onclick={() => playTrackNow(selectedTracks[0], selectedTracks)}
+          onclick={() => onPlay(selectedTracks[0], selectedTracks)}
           class="cursor-pointer rounded-[6px] px-2 py-0.5 font-medium text-[var(--lw-accent)] hover:bg-[var(--lw-wash-hover)]"
         >
           Play selected
@@ -250,6 +252,7 @@
               {removeLabel}
               onRemove={onRemove ? () => onRemove(entry.track, entry.originalIndex) : undefined}
               onRowClick={(e) => handleRowClick(row.index, e)}
+              onPlay={() => onPlay(entry.track, sortedTracks)}
             />
           </div>
         {/each}
@@ -270,6 +273,7 @@
             {removeLabel}
             onRemove={onRemove ? () => onRemove(entry.track, entry.originalIndex) : undefined}
             onRowClick={(e) => handleRowClick(i, e)}
+            onPlay={() => onPlay(entry.track, sortedTracks)}
           />
         </div>
       {/each}

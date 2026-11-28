@@ -8,9 +8,8 @@
   import Input from '$src/ui/components/Input.svelte';
   import Shelf from '$src/ui/components/Shelf.svelte';
   import States from '$src/ui/components/States.svelte';
-  import { goAlbum, goArtist } from '$src/ui/navigation/waveNav';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
-  import { exactArtist, fetchSearchResults, rememberSearchResults, searchMatches, type SearchResults } from './searchResults';
+  import { exactArtist, fetchSearchResults, openSearchResult, rememberSearchResults, searchMatches, searchResultDetails, type SearchResults } from './searchResults';
 
   const BROWSE_CATEGORIES = [
     { name: 'Hip-Hop/Rap', tint: '#C45C1A', query: 'hip hop' },
@@ -63,10 +62,9 @@
 
   function submitSearch(e: SubmitEvent) {
     e.preventDefault();
-    libraryStore.pushSearchHistory(query);
     if (filter === 'all' || filter === 'artists') {
       const artist = exactArtist(matches);
-      if (artist) goArtist(artist.id);
+      if (artist) openSearchResult({ kind: 'artist', item: artist }, q);
     }
   }
 </script>
@@ -91,23 +89,37 @@
   {#if !q}
     {#if libraryStore.searchHistory.length > 0}
       <Shelf title="Recently Searched" actionLabel="Clear" onAction={() => libraryStore.clearSearchHistory()}>
-        <div class="flex flex-wrap gap-2">
-          {#each libraryStore.searchHistory as item (item)}
-            <div class="inline-flex items-center gap-1.5 rounded-full border border-[var(--lw-outline)] bg-[var(--lw-surface)] px-3 py-1 text-[12.5px]">
-              <button type="button" onclick={() => (query = item)} class="cursor-pointer hover:text-[var(--lw-accent)]">
-                {item}
+        <ul aria-label="Recently searched" class="recent-search-grid">
+          {#each libraryStore.searchHistory as entry (entry.key)}
+            {@const detail = entry.kind === 'query' ? { label: entry.query, sub: 'Search', art: '' } : searchResultDetails(entry)}
+            <li class="recent-search-row">
+              <button
+                type="button"
+                class="recent-search-open"
+                title={detail.label}
+                onclick={() => entry.kind === 'query' ? (query = entry.query) : openSearchResult(entry)}
+              >
+                {#if entry.kind === 'query'}
+                  <span class="recent-search-query-icon"><WaveIcon name="history" size={17} /></span>
+                {:else}
+                  <Artwork src={detail.art} label={detail.label} kind={entry.kind} size={36} radius={6} circle={entry.kind === 'artist'} upgrade={false} />
+                {/if}
+                <span class="min-w-0">
+                  <span class="block truncate text-[13px] font-semibold text-[var(--lw-text-primary)]">{detail.label}</span>
+                  <span class="block truncate text-[11.5px] text-[var(--lw-text-secondary)]">{detail.sub}</span>
+                </span>
               </button>
               <button
                 type="button"
-                aria-label={`Remove ${item} from recent searches`}
-                onclick={() => libraryStore.removeSearchHistory(item)}
-                class="cursor-pointer text-[var(--lw-text-tertiary)] hover:text-[var(--lw-text-primary)]"
+                aria-label={`Remove ${detail.label} from recent searches`}
+                onclick={() => libraryStore.removeSearchHistory(entry)}
+                class="recent-search-remove"
               >
                 <WaveIcon name="close" size={12} />
               </button>
-            </div>
+            </li>
           {/each}
-        </div>
+        </ul>
       </Shelf>
     {/if}
 
@@ -139,13 +151,13 @@
     {#each sectionOrder as kind (kind)}
       {#if kind === 'track' && (filter === 'all' || filter === 'tracks')}
         <Shelf title="Songs">
-          <DesktopTable {tracks} showQuality={false} />
+          <DesktopTable {tracks} showQuality={false} onPlay={(track, list) => openSearchResult({ kind: 'track', item: track }, q, list)} />
         </Shelf>
       {:else if kind === 'album' && (filter === 'all' || filter === 'albums')}
         <Shelf title="Albums">
           <div class="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-6">
             {#each albums as album (album.id)}
-              <button type="button" onclick={() => goAlbum(album.id)} class="cursor-pointer rounded-[12px] p-1.5 text-left transition-colors hover:bg-[var(--lw-wash-hover)]">
+              <button type="button" onclick={() => openSearchResult({ kind: 'album', item: album }, q)} class="cursor-pointer rounded-[12px] p-1.5 text-left transition-colors hover:bg-[var(--lw-wash-hover)]">
                 <Artwork src={album.artworkUrl} label={album.title} artist={album.artist} kind="album" radius={10} class="aspect-square w-full" />
                 <div class="mt-2 truncate text-[13px] font-semibold">{album.title}</div>
                 <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{album.artist}</div>
@@ -157,7 +169,7 @@
         <Shelf title="Artists">
           <div class="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-6">
             {#each artists as artist (artist.id)}
-              <button type="button" onclick={() => goArtist(artist.id)} class="cursor-pointer rounded-[12px] p-2 text-center transition-colors hover:bg-[var(--lw-wash-hover)]">
+              <button type="button" onclick={() => openSearchResult({ kind: 'artist', item: artist }, q)} class="cursor-pointer rounded-[12px] p-2 text-center transition-colors hover:bg-[var(--lw-wash-hover)]">
                 <Artwork src={artist.artworkUrl} label={artist.name} kind="artist" circle class="mx-auto aspect-square w-full max-w-[140px]" />
                 <div class="mt-2 truncate text-[13px] font-semibold">{artist.name}</div>
                 <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">{artist.monthlyListeners}</div>
@@ -171,6 +183,52 @@
 </div>
 
 <style>
+  .recent-search-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+    gap: 8px;
+  }
+  .recent-search-row {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    padding-inline-end: 5px;
+    border: 1px solid var(--lw-outline);
+    border-radius: 9px;
+    background: var(--lw-surface);
+  }
+  .recent-search-row:hover, .recent-search-row:focus-within { background: var(--lw-surface-raised); }
+  .recent-search-open {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    align-items: center;
+    gap: 9px;
+    padding: 6px 7px;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: start;
+  }
+  .recent-search-query-icon {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    flex: none;
+    place-items: center;
+    color: var(--lw-text-secondary);
+  }
+  .recent-search-remove {
+    display: grid;
+    width: 28px;
+    height: 28px;
+    flex: none;
+    place-items: center;
+    border-radius: 5px;
+    color: var(--lw-text-secondary);
+    cursor: pointer;
+  }
+  .recent-search-remove:hover { background: var(--lw-wash-hover); color: var(--lw-text-primary); }
+
   .genre-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(141px, 1fr)); gap: 10px; }
   .genre-tile {
     position: relative;

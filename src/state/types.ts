@@ -52,6 +52,13 @@ export interface Artist {
   isFollowing?: boolean;
 }
 
+export type SearchResult =
+  | { kind: 'track'; item: Track }
+  | { kind: 'album'; item: Album }
+  | { kind: 'artist'; item: Artist };
+
+export type SearchHistoryEntry = { key: string } & (SearchResult | { kind: 'query'; query: string });
+
 export interface Playlist {
   id: string;
   name: string;
