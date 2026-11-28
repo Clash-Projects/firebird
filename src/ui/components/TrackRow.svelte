@@ -65,14 +65,14 @@
         <span class="lw-eq-bars group-hover:hidden" aria-hidden="true">
           <span></span><span></span><span></span>
         </span>
-        <span class="hidden text-[var(--lw-text-primary)] group-hover:inline">
+        <span class="hidden items-center justify-center text-[var(--lw-text-primary)] group-hover:inline-flex">
           <WaveIcon name="pause" size={14} filled />
         </span>
       {:else}
         <span class="group-hover:hidden {isCurrent ? 'font-semibold text-[var(--lw-accent)]' : 'text-[var(--lw-text-tertiary)]'}">
           {String(index + 1).padStart(2, '0')}
         </span>
-        <span class="hidden text-[var(--lw-text-primary)] group-hover:inline">
+        <span class="hidden items-center justify-center text-[var(--lw-text-primary)] group-hover:inline-flex">
           <WaveIcon name="play" size={14} filled />
         </span>
       {/if}

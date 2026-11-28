@@ -357,9 +357,13 @@
   }
 
   .mini-play.on-dark { background: white; color: black; }
-  .mini-play-icons { display: grid; place-items: center; }
+  .mini-play-icons { display: grid; place-items: center; line-height: 1; }
   .mini-play-icons > span {
     grid-area: 1 / 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
     transition: opacity var(--lw-motion-fast) var(--ease-wave);
   }
 

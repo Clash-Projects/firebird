@@ -360,7 +360,7 @@
       }}
     >
       <form onsubmit={submitSearch} class="relative flex items-center">
-        <WaveIcon name="search" size={15} class="pointer-events-none absolute left-2.5 text-[var(--lw-text-tertiary)]" />
+        <WaveIcon name="search" size={15} class="pointer-events-none absolute left-2 text-[var(--lw-text-tertiary)]" />
         <input
           type="text"
           data-lw="title-search"
@@ -372,16 +372,16 @@
           onkeydown={onSearchKeyDown}
           aria-label="Search songs, albums and artists"
           placeholder="Search"
-          class="title-search-input lw-text-field"
+          class="title-search-input"
         />
         {#if searchQuery}
           <button
             type="button"
             onclick={() => (searchQuery = '')}
             aria-label="Clear search"
-            class="absolute right-1.5 flex h-5 w-5 cursor-pointer items-center justify-center rounded text-[var(--lw-text-tertiary)] hover:text-[var(--lw-text-primary)]"
+            class="absolute right-1 flex h-5 w-5 cursor-pointer items-center justify-center rounded text-[var(--lw-text-tertiary)] hover:text-[var(--lw-text-primary)]"
           >
-            <WaveIcon name="close" size={11} />
+            <WaveIcon name="close" size={10} />
           </button>
         {:else if !searchFocused}
           <span
@@ -737,16 +737,58 @@
   .title-search-input {
     width: 100%;
     height: 30px;
-    padding: 0 28px 0 30px;
-    border: 1px solid var(--lw-outline-soft);
-    border-radius: 10px;
-    background: var(--lw-surface);
+    padding: 0 28px 1px 33px;
+    border: 1px solid rgba(255, 255, 255, 0.071);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.059);
+    box-shadow: inset 0 -1.25px 0 0 rgba(255, 255, 255, 0.545);
     color: var(--lw-text-primary);
     font-size: 13px;
+    outline: none;
+    transition:
+      background-color var(--lw-motion-fast) var(--ease-wave),
+      border-color var(--lw-motion-fast) var(--ease-wave),
+      box-shadow var(--lw-motion-fast) var(--ease-wave);
+  }
+
+  .title-search-input:hover:not(:focus) {
+    background: rgba(255, 255, 255, 0.082);
+  }
+
+  .title-search-input:focus {
+    background: rgba(30, 30, 30, 0.702);
+    box-shadow: inset 0 -2px 0 0 var(--lw-accent);
   }
 
   .title-search-input::placeholder {
-    color: var(--lw-text-tertiary);
+    color: rgba(255, 255, 255, 0.78);
+  }
+
+  .title-search-input:focus::placeholder {
+    color: rgba(255, 255, 255, 0.545);
+  }
+
+  :global(:root[data-theme="light"]) .title-search-input {
+    border-color: rgba(0, 0, 0, 0.059);
+    background: rgba(255, 255, 255, 0.702);
+    box-shadow: inset 0 -1.25px 0 0 rgba(0, 0, 0, 0.447);
+  }
+
+  :global(:root[data-theme="light"]) .title-search-input:hover:not(:focus) {
+    background: rgba(249, 249, 249, 0.502);
+  }
+
+  :global(:root[data-theme="light"]) .title-search-input:focus {
+    background: #ffffff;
+    box-shadow: inset 0 -2px 0 0 var(--lw-accent);
+  }
+
+  :global(:root[data-theme="light"]) .title-search-input::placeholder {
+    color: rgba(0, 0, 0, 0.62);
+  }
+
+  :global(:root[data-theme="light"]) .title-search-input:focus::placeholder {
+    color: rgba(0, 0, 0, 0.447);
   }
 
   .win-btn {

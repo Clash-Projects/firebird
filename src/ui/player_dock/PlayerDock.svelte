@@ -978,20 +978,26 @@
 
   .dock-play {
     display: inline-flex;
-    width: 34px;
-    height: 34px;
+    width: 36px;
+    height: 36px;
     flex: none;
     align-items: center;
     justify-content: center;
     margin-inline: 2px;
-    border: none;
+    border: 1px solid color-mix(in srgb, var(--lw-text-primary) 14%, transparent);
     border-radius: 50%;
     background: var(--lw-accent);
     color: var(--lw-on-accent);
+    box-shadow: var(--lw-shadow-transport);
     cursor: pointer;
     transition:
       transform var(--lw-motion-fast) var(--ease-wave),
       background-color var(--lw-motion-fast) ease;
+  }
+  .dock-play:focus-visible {
+    outline: none;
+    border-width: 2px;
+    border-color: var(--lw-accent);
   }
   .dock-play:disabled {
     background: color-mix(in srgb, var(--lw-accent) 35%, transparent);
@@ -1000,10 +1006,18 @@
   }
   .dock-play-icons {
     display: grid;
+    width: 15px;
+    height: 15px;
     place-items: center;
   }
   .dock-play-icons > span {
     grid-area: 1 / 1;
+    display: inline-flex;
+    width: 15px;
+    height: 15px;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
     transition: opacity 180ms var(--ease-wave), scale 180ms var(--ease-wave);
   }
   .dock-play-icons[data-playing="false"] > span:last-child,
