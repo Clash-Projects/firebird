@@ -44,6 +44,7 @@
   import { waveTooltip } from '$src/ui/components/tooltip';
   import LibraryFolders from '$src/ui/library/LibraryFolders.svelte';
   import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
+  import BrandIcon from '$src/ui/theme/BrandIcon.svelte';
   import {
     CUSTOM_THEME_PRESETS,
     isLightBase,
@@ -74,16 +75,16 @@
   // Exact 12 canonical sections matching waveSettingsSections in settings_page.dart
   const SECTIONS: ReadonlyArray<{ id: string; label: string; icon: WaveIconName }> = [
     { id: 'general', label: 'General', icon: 'settings' },
-    { id: 'integrations', label: 'Integrations', icon: 'share' },
+    { id: 'integrations', label: 'Integrations', icon: 'link' },
     { id: 'playback', label: 'Playback', icon: 'play' },
     { id: 'audio', label: 'Audio', icon: 'speaker' },
     { id: 'downloads', label: 'Downloads', icon: 'download' },
     { id: 'library', label: 'Library', icon: 'library' },
-    { id: 'lyrics', label: 'Lyrics', icon: 'lyrics' },
-    { id: 'appearance', label: 'Appearance', icon: 'palette' },
+    { id: 'lyrics', label: 'Lyrics', icon: 'artist' },
+    { id: 'appearance', label: 'Appearance', icon: 'brush' },
     { id: 'lastfm', label: 'Scrobbler', icon: 'heart' },
-    { id: 'sources', label: 'Sources', icon: 'globe' },
-    { id: 'experimental', label: 'Experimental', icon: 'sparkles' },
+    { id: 'sources', label: 'Sources', icon: 'cloud' },
+    { id: 'experimental', label: 'Experimental', icon: 'bug' },
     { id: 'about', label: 'About', icon: 'info' },
   ];
 
@@ -1228,9 +1229,9 @@
                   style:background-color={!isPresetBase ? settingsStore.customThemeBase : 'var(--lw-surface-overlay)'}
                 >
                   {#if !isPresetBase}
-                    <WaveIcon name="check" size={13} class={onAccentFor(settingsStore.customThemeBase) === '#000000' ? 'text-black' : 'text-white'} />
+                    <WaveIcon name="check" size={14} class={onAccentFor(settingsStore.customThemeBase) === '#000000' ? 'text-black' : 'text-white'} />
                   {:else}
-                    <WaveIcon name="palette" size={13} class="text-[var(--lw-text-secondary)]" />
+                    <WaveIcon name="palette" size={14} class="text-[var(--lw-text-secondary)]" />
                   {/if}
                 </button>
               </div>
@@ -1371,9 +1372,9 @@
                 style:background-color={!isPresetAccent ? settingsStore.accentColor : 'var(--lw-surface-overlay)'}
               >
                 {#if !isPresetAccent}
-                  <WaveIcon name="check" size={13} class={onAccentFor(settingsStore.accentColor) === '#000000' ? 'text-black' : 'text-white'} />
+                  <WaveIcon name="check" size={14} class={onAccentFor(settingsStore.accentColor) === '#000000' ? 'text-black' : 'text-white'} />
                 {:else}
-                  <WaveIcon name="palette" size={13} class="text-[var(--lw-text-secondary)]" />
+                  <WaveIcon name="palette" size={14} class="text-[var(--lw-text-secondary)]" />
                 {/if}
               </button>
             </div>
@@ -1726,7 +1727,7 @@
                 }
               })()}
               <div class="flex items-center gap-2.5 transition-opacity {effectiveOn ? 'opacity-100' : 'opacity-55'}">
-                <WaveIcon name="globe" size={17} class="shrink-0 text-[var(--lw-text-secondary)]" />
+                <WaveIcon name="cloud" size={18} class="shrink-0 text-[var(--lw-text-secondary)]" />
                 <div class="min-w-0 flex-1">
                   <div class="truncate text-[13.5px] font-semibold">{host}</div>
                   <div class="truncate text-[12px] text-[var(--lw-text-secondary)]">
@@ -1863,7 +1864,7 @@
             size="sm"
             onclick={() => openExternal('https://github.com/Clash-Projects/LastWave-Desktop/issues')}
           >
-            <WaveIcon name="alert" size={14} />
+            <WaveIcon name="error" size={14} />
             Report an issue
           </Buttons>
           <Buttons
@@ -1871,7 +1872,7 @@
             size="sm"
             onclick={() => openExternal('https://github.com/Clash-Projects/LastWave-Desktop')}
           >
-            <WaveIcon name="heart" size={14} />
+            <WaveIcon name="star" size={14} />
             Star / support the project
           </Buttons>
           <Buttons
@@ -1879,9 +1880,7 @@
             size="sm"
             onclick={() => openExternal('https://t.me/clashprojects')}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z" />
-            </svg>
+            <BrandIcon name="telegram" size={14} />
             Telegram community
           </Buttons>
           <Buttons
@@ -1889,9 +1888,7 @@
             size="sm"
             onclick={() => openExternal('https://discord.com/invite/TMCEPSUNk2')}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4a.09.09 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a16.09 16.09 0 0 0-4.8 0c-.14-.34-.35-.76-.54-1.09-.01-.02-.04-.03-.07-.03-1.5.26-2.93.71-4.27 1.33-.01 0-.02.01-.03.02-2.72 4.07-3.47 8.03-3.1 11.95 0 .02.01.04.03.05 1.8 1.32 3.53 2.12 5.24 2.65.03.01.06 0 .07-.02.4-.55.76-1.13 1.07-1.74.02-.04 0-.08-.04-.09-.57-.22-1.11-.48-1.64-.78-.04-.02-.04-.08-.01-.11.11-.08.22-.17.33-.25.02-.02.05-.02.07-.01 3.44 1.57 7.15 1.57 10.55 0 .02-.01.05-.01.07.01.11.09.22.17.33.26.04.03.04.09-.01.11-.52.31-1.07.56-1.64.78-.04.01-.05.06-.04.09.32.61.68 1.19 1.07 1.74.03.01.06.02.09.01 1.72-.53 3.45-1.33 5.25-2.65.02-.01.03-.03.03-.05.44-4.53-.73-8.46-3.1-11.95-.01-.01-.02-.02-.04-.02zM8.52 14.91c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.84 2.12-1.89 2.12zm6.97 0c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.83 2.12-1.89 2.12z" />
-            </svg>
+            <BrandIcon name="discord" size={14} />
             Discord server
           </Buttons>
         </div>

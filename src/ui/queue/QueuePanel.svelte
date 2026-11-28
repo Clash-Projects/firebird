@@ -62,7 +62,7 @@
       aria-label="Close queue"
       class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-[6px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
     >
-      <WaveIcon name="close" size={15} />
+      <WaveIcon name="close" size={12} />
     </button>
   </div>
 
@@ -149,11 +149,7 @@
               class="flex h-6 w-4 shrink-0 cursor-grab items-center justify-center text-[var(--lw-text-tertiary)] opacity-35 transition-opacity group-hover:opacity-85 active:cursor-grabbing"
               aria-hidden="true"
             >
-              <svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor">
-                <circle cx="2" cy="2" r="1" /><circle cx="6" cy="2" r="1" />
-                <circle cx="2" cy="6" r="1" /><circle cx="6" cy="6" r="1" />
-                <circle cx="2" cy="10" r="1" /><circle cx="6" cy="10" r="1" />
-              </svg>
+              <WaveIcon name="gripperBar" size={12} />
             </span>
           {/if}
 
@@ -181,7 +177,7 @@
               aria-label="Remove from queue"
               class="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-[var(--lw-text-tertiary)] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-[var(--lw-wash-pressed)] hover:text-[var(--lw-danger)]"
             >
-              <WaveIcon name="close" size={13} />
+              <WaveIcon name="close" size={12} />
             </button>
           {/if}
         </div>

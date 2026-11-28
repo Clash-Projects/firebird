@@ -171,7 +171,7 @@
       class="np-quick-btn"
       data-active={ambientEnabled}
     >
-      <WaveIcon name="sparkles" size={15} />
+      <WaveIcon name="visualizer" size={15} />
     </button>
   {/if}
 
@@ -184,7 +184,7 @@
     class="np-quick-btn mr-0.5"
     data-active={immersiveState.isImmersive}
   >
-    <WaveIcon name={immersiveState.isImmersive ? 'minimize' : 'maximize'} size={15} />
+    <WaveIcon name={immersiveState.isImmersive ? 'miniContract' : 'expand'} size={15} />
   </button>
 
   <div class="relative" use:dismissFlyout={{ open, close: closeMenu }}>
@@ -225,7 +225,7 @@
               onclick={() => featuresStore.adjustLyricsOffset(track.id, -500)}
               class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-[7px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
               use:waveTooltip={'-0.5s'}
-            >−</button>
+            ><WaveIcon name="remove" size={11} /></button>
             <span class="min-w-[42px] text-center text-[12px] font-semibold {offsetMs !== 0 ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-primary)]'}">
               {formatOffset(offsetMs)}
             </span>
@@ -234,7 +234,7 @@
               onclick={() => featuresStore.adjustLyricsOffset(track.id, 500)}
               class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-[7px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
               use:waveTooltip={'+0.5s'}
-            >+</button>
+            ><WaveIcon name="plus" size={11} /></button>
             {#if offsetMs !== 0}
               <button
                 type="button"
@@ -242,7 +242,7 @@
                 class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-[7px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
                 use:waveTooltip={'Reset to 0.0s'}
               >
-                <WaveIcon name="close" size={11} />
+                <WaveIcon name="clear" size={11} />
               </button>
             {/if}
           </div>
@@ -320,7 +320,7 @@
           onclick={() => openSubmenuNow('romanisation')}
           class="lw-menu-row"
         >
-          <WaveIcon name="bookmark" size={15} class={featuresStore.showRomanized ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'} />
+          <WaveIcon name="readingMode" size={15} class={featuresStore.showRomanized ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'} />
           <span class="min-w-0 flex-1 truncate font-medium">Romanisation</span>
           <span class="text-[12px] {featuresStore.showRomanized ? 'font-semibold text-[var(--lw-accent)]' : 'text-[var(--lw-text-tertiary)]'}">{featuresStore.showRomanized ? 'On' : 'Off'}</span>
           <WaveIcon name="chevronRight" size={12} class="text-[var(--lw-text-tertiary)]" />
@@ -380,7 +380,7 @@
           onclick={() => openSubmenuNow('translation')}
           class="lw-menu-row"
         >
-          <WaveIcon name="globe" size={15} class={featuresStore.lyricsTranslationLang !== 'off' ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'} />
+          <WaveIcon name="localeLanguage" size={15} class={featuresStore.lyricsTranslationLang !== 'off' ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'} />
           <span class="min-w-0 flex-1 truncate font-medium">Translation</span>
           <span class="text-[12px] {featuresStore.lyricsTranslationLang !== 'off' ? 'font-semibold text-[var(--lw-accent)]' : 'text-[var(--lw-text-tertiary)]'}">{translationLabel}</span>
           <WaveIcon name="chevronRight" size={12} class="text-[var(--lw-text-tertiary)]" />
@@ -429,7 +429,7 @@
           onclick={() => openSubmenuNow('textSize')}
           class="lw-menu-row"
         >
-          <span class="w-[15px] shrink-0 text-center text-[11px] font-bold {Math.abs(featuresStore.lyricsFontScale - 1.0) > 0.05 ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'}">AA</span>
+          <WaveIcon name="fontSize" size={15} class={Math.abs(featuresStore.lyricsFontScale - 1.0) > 0.05 ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'} />
           <span class="min-w-0 flex-1 truncate font-medium">Text size</span>
           <span class="text-[12px] {Math.abs(featuresStore.lyricsFontScale - 1.0) > 0.05 ? 'font-semibold text-[var(--lw-accent)]' : 'text-[var(--lw-text-tertiary)]'}">{textScaleLabel}</span>
           <WaveIcon name="chevronRight" size={12} class="text-[var(--lw-text-tertiary)]" />
@@ -478,7 +478,7 @@
           onclick={() => openSubmenuNow('animation')}
           class="lw-menu-row"
         >
-          <WaveIcon name="palette" size={15} class="text-[var(--lw-text-secondary)]" />
+          <WaveIcon name="brush" size={15} class="text-[var(--lw-text-secondary)]" />
           <span class="min-w-0 flex-1 truncate font-medium">Animation style</span>
           <span class="text-[12px] text-[var(--lw-text-tertiary)]">{animationLabel}</span>
           <WaveIcon name="chevronRight" size={12} class="text-[var(--lw-text-tertiary)]" />
@@ -537,7 +537,7 @@
           onclick={() => onToggleFocus?.()}
           class="lw-menu-row"
         >
-          <WaveIcon name={focusMode ? 'minimize' : 'maximize'} size={15} class={focusMode ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'} />
+          <WaveIcon name={focusMode ? 'miniContract' : 'expand'} size={15} class={focusMode ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'} />
           <span class="min-w-0 flex-1 truncate font-medium">Focus on lyrics</span>
           <span class="text-[12px] {focusMode ? 'font-semibold text-[var(--lw-accent)]' : 'text-[var(--lw-text-tertiary)]'}">{focusMode ? 'On' : 'Off'}</span>
         </button>
@@ -550,7 +550,7 @@
           onclick={() => onToggleAmbient?.()}
           class="lw-menu-row"
         >
-          <WaveIcon name="sparkles" size={15} class={ambientEnabled ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'} />
+          <WaveIcon name="visualizer" size={15} class={ambientEnabled ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'} />
           <span class="min-w-0 flex-1 truncate font-medium">Ambient</span>
           <span class="text-[12px] {ambientEnabled ? 'font-semibold text-[var(--lw-accent)]' : 'text-[var(--lw-text-tertiary)]'}">{ambientEnabled ? 'On' : 'Off'}</span>
         </button>
@@ -562,7 +562,7 @@
         onclick={() => immersiveState.toggleImmersive()}
         class="lw-menu-row"
       >
-        <WaveIcon name={immersiveState.isImmersive ? 'minimize' : 'maximize'} size={15} class={immersiveState.isImmersive ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'} />
+        <WaveIcon name={immersiveState.isImmersive ? 'miniContract' : 'expand'} size={15} class={immersiveState.isImmersive ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'} />
         <span class="min-w-0 flex-1 truncate font-medium">Fullscreen</span>
         <span class="lw-menu-hint">F11</span>
       </button>

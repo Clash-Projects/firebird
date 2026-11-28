@@ -244,7 +244,7 @@
       {#if displayAvatar}
         <Artwork src={displayAvatar} alt={settingsStore.ytAccountName || 'YouTube Music'} label={settingsStore.ytAccountName || 'YouTube'} size={40} circle />
       {:else}
-        <WaveIcon name="globe" size={18} />
+        <WaveIcon name="video" size={18} />
       {/if}
       <div class="min-w-0 flex-1">
         <div class="truncate text-[13.5px] font-semibold">
@@ -308,7 +308,7 @@
     </div>
   {:else}
     <div class="flex items-center gap-2.5">
-      <WaveIcon name="globe" size={18} />
+      <WaveIcon name="video" size={18} />
       <span class="min-w-0 flex-1 text-[13.5px] font-semibold">Not connected</span>
       <Buttons
         variant="secondary"
@@ -362,7 +362,7 @@
       onclick={() => void handleWebSignIn(true)}
       class="flex w-full cursor-pointer items-center gap-3 rounded-[10px] border border-[var(--lw-outline)] bg-[var(--lw-surface)] px-3.5 py-2.5 text-left hover:bg-[var(--lw-surface-overlay)]"
     >
-      <WaveIcon name="artist" size={17} />
+      <WaveIcon name="contact" size={17} />
       <div class="min-w-0 flex-1">
         <div class="text-[13.5px] font-semibold">Google account</div>
         <div class="text-[12px] text-[var(--lw-text-secondary)]">
@@ -381,7 +381,7 @@
       }}
       class="flex w-full cursor-pointer items-center gap-3 rounded-[10px] border border-[var(--lw-outline)] bg-[var(--lw-surface)] px-3.5 py-2.5 text-left hover:bg-[var(--lw-surface-overlay)]"
     >
-      <WaveIcon name="share" size={17} />
+      <WaveIcon name="link" size={17} />
       <div class="min-w-0 flex-1">
         <div class="text-[13.5px] font-semibold">Cookies</div>
         <div class="text-[12px] text-[var(--lw-text-secondary)]">
@@ -433,7 +433,7 @@
         onclick={() => void handleSwitchIdentity(p.email, p.activePageId ?? '')}
         class="flex w-full cursor-pointer items-center gap-3 rounded-[10px] px-3 py-2 text-left hover:bg-[var(--lw-wash-hover)]"
       >
-        <WaveIcon name="artist" size={16} />
+        <WaveIcon name="contact" size={20} />
         <span class="min-w-0 flex-1 truncate text-[13px] font-medium">{p.email}</span>
       </button>
     {/each}

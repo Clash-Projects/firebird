@@ -121,7 +121,7 @@
 >
   {#if !track}
     <div class="now-empty">
-      <span class="now-empty-icon"><WaveIcon name="album" size={32} /></span>
+      <span class="now-empty-icon"><WaveIcon name="music" size={32} /></span>
       <h1>Nothing playing</h1>
       <p>Pick something from Home, Discover or Search and it will take centre stage here.</p>
       <button type="button" onclick={() => router.navigate('/home')}>

@@ -92,11 +92,7 @@
   let volRatio = $derived(playerStore.muted ? 0 : Math.min(1, Math.max(0, playerStore.volume)));
   let volPct = $derived(Math.round(volRatio * 100));
   let volumeIcon = $derived<WaveIconName>(
-    playerStore.muted || playerStore.volume === 0
-      ? 'volumeMute'
-      : playerStore.volume < 0.5
-        ? 'volumeLow'
-        : 'volumeHigh'
+    playerStore.muted || playerStore.volume === 0 ? 'volumeMute' : 'volume'
   );
 
   let qualityBadge = $derived.by(() => {
@@ -427,7 +423,7 @@
           style:--lw-popover-origin="bottom right"
         >
           <div class="lw-menu-row pointer-events-none">
-            <WaveIcon name="activity" size={15} />
+            <WaveIcon name="gauge" size={15} />
             <span class="min-w-0 flex-1 truncate">{qualityBadge} · {track.codec}</span>
           </div>
           <div class="lw-menu-sep"></div>
@@ -444,7 +440,7 @@
             </span>
           </div>
           <div class="lw-menu-row pointer-events-none">
-            <WaveIcon name="layers" size={15} />
+            <WaveIcon name={track.qualityTier === 'atmos' ? 'mixes' : 'gauge'} size={15} />
             <span class="min-w-0 flex-1 truncate lw-tabular">
               {track.qualityTier === 'atmos' ? 'Spatial Audio · Dolby Atmos' : `Bit depth · ${track.bitDepth}-bit`}
             </span>
@@ -588,7 +584,7 @@
       aria-label="Now Playing"
       aria-pressed={router.path === '/now-playing'}
     >
-      <WaveIcon name="maximize" size={15} />
+      <WaveIcon name="expand" size={15} />
     </button>
 
     <button
@@ -598,7 +594,7 @@
       use:waveTooltip={'Mini player'}
       aria-label="Mini player"
     >
-      <WaveIcon name="minimize" size={15} />
+      <WaveIcon name="miniPlayer" size={15} />
     </button>
 
     <!-- Overflow menu (_DockOverflow: Output, Speed, Sleep timer, Download — matches player_dock.dart) -->
@@ -698,7 +694,7 @@
                 {/each}
                 <div class="lw-menu-sep"></div>
                 <div class="lw-menu-row pointer-events-none">
-                  <WaveIcon name="activity" size={15} />
+                  <WaveIcon name="streamPath" size={15} />
                   <span class="min-w-0 flex-1 truncate">
                     {settingsStore.platform === 'windows'
                       ? settingsStore.exclusiveMode
@@ -730,7 +726,7 @@
           onclick={() => playerStore.cycleSpeed()}
           class="lw-menu-row"
         >
-          <WaveIcon name="activity" size={15} />
+          <WaveIcon name="gauge" size={15} />
           <span class="min-w-0 flex-1 truncate lw-tabular">Speed {speedLabel}</span>
         </button>
 

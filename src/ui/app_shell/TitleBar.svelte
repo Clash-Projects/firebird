@@ -15,6 +15,7 @@
   import { goAlbum, goArtist } from '$src/ui/navigation/waveNav';
   import { exactArtist, fetchSearchResults, rememberSearchResults, searchMatches, type SearchResults } from '$src/ui/search/searchResults';
   import WaveHaze from '$src/ui/theme/WaveHaze.svelte';
+  import BrandIcon from '$src/ui/theme/BrandIcon.svelte';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
 
@@ -323,9 +324,7 @@
         aria-expanded={windowState.railExpanded}
         class="bar-btn"
       >
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <path d="M2.5 4H13.5M2.5 8H13.5M2.5 12H13.5" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
-        </svg>
+        <WaveIcon name="panelLeft" size={15} />
       </button>
       <button
         type="button"
@@ -335,7 +334,7 @@
         aria-label="Back"
         class="bar-btn"
       >
-        <WaveIcon name="chevronLeft" size={13} />
+        <WaveIcon name="chevronLeft" size={15} />
       </button>
       <button
         type="button"
@@ -345,7 +344,7 @@
         aria-label="Forward"
         class="bar-btn"
       >
-        <WaveIcon name="chevronRight" size={13} />
+        <WaveIcon name="chevronRight" size={15} />
       </button>
     </div>
 
@@ -361,7 +360,7 @@
       }}
     >
       <form onsubmit={submitSearch} class="relative flex items-center">
-        <WaveIcon name="search" size={14} class="pointer-events-none absolute left-2.5 text-[var(--lw-text-tertiary)]" />
+        <WaveIcon name="search" size={15} class="pointer-events-none absolute left-2.5 text-[var(--lw-text-tertiary)]" />
         <input
           type="text"
           data-lw="title-search"
@@ -414,7 +413,7 @@
             >
               <span class="flex h-7 w-7 shrink-0 items-center justify-center">
                 {#if hit.kind === 'recent'}
-                  <WaveIcon name="clock" size={15} class="text-[var(--lw-text-secondary)]" />
+                  <WaveIcon name="history" size={15} class="text-[var(--lw-text-secondary)]" />
                 {:else if hit.kind === 'seeAll'}
                   <WaveIcon name="search" size={15} class="text-[var(--lw-text-secondary)]" />
                 {:else}
@@ -451,7 +450,7 @@
       aria-label="Commands (Ctrl+K)"
       class="bar-btn command-trigger ml-1 hidden sm:flex"
     >
-      <WaveIcon name="terminal" size={15} />
+      <WaveIcon name="command" size={15} />
     </button>
 
     <div
@@ -469,9 +468,7 @@
         aria-label="Telegram community"
         class="bar-btn"
       >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z" />
-        </svg>
+        <BrandIcon name="telegram" size={15} />
       </button>
       <button
         type="button"
@@ -480,9 +477,7 @@
         aria-label="Discord server"
         class="bar-btn"
       >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4a.09.09 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a16.09 16.09 0 0 0-4.8 0c-.14-.34-.35-.76-.54-1.09-.01-.02-.04-.03-.07-.03-1.5.26-2.93.71-4.27 1.33-.01 0-.02.01-.03.02-2.72 4.07-3.47 8.03-3.1 11.95 0 .02.01.04.03.05 1.8 1.32 3.53 2.12 5.24 2.65.03.01.06 0 .07-.02.4-.55.76-1.13 1.07-1.74.02-.04 0-.08-.04-.09-.57-.22-1.11-.48-1.64-.78-.04-.02-.04-.08-.01-.11.11-.08.22-.17.33-.25.02-.02.05-.02.07-.01 3.44 1.57 7.15 1.57 10.55 0 .02-.01.05-.01.07.01.11.09.22.17.33.26.04.03.04.09-.01.11-.52.31-1.07.56-1.64.78-.04.01-.05.06-.04.09.32.61.68 1.19 1.07 1.74.03.01.06.02.09.01 1.72-.53 3.45-1.33 5.25-2.65.02-.01.03-.03.03-.05.44-4.53-.73-8.46-3.1-11.95-.01-.01-.02-.02-.04-.02zM8.52 14.91c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.84 2.12-1.89 2.12zm6.97 0c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.83 2.12-1.89 2.12z" />
-        </svg>
+        <BrandIcon name="discord" size={15} />
       </button>
 
       <input
@@ -508,7 +503,7 @@
             {:else if initialLetter}
               {initialLetter}
             {:else}
-              <WaveIcon name="artist" size={13} class="text-[var(--lw-text-secondary)]" />
+              <WaveIcon name="contact" size={13} class="text-[var(--lw-text-secondary)]" />
             {/if}
           </span>
         </button>
@@ -523,7 +518,7 @@
             onclick={openNameEditor}
             class="lw-menu-row"
           >
-            <WaveIcon name="wand" size={15} class="text-[var(--lw-text-secondary)]" />
+            <WaveIcon name="edit" size={15} class="text-[var(--lw-text-secondary)]" />
             <span class="min-w-0 flex-1 truncate">{settingsStore.displayName.trim() ? `Name: ${settingsStore.displayName.trim()}` : 'Set your name…'}</span>
           </button>
           <button
@@ -531,7 +526,7 @@
             onclick={() => avatarFileInput?.click()}
             class="lw-menu-row"
           >
-            <WaveIcon name="palette" size={15} class="text-[var(--lw-text-secondary)]" />
+            <WaveIcon name="photo" size={15} class="text-[var(--lw-text-secondary)]" />
             <span class="min-w-0 flex-1 truncate">{settingsStore.profilePictureUrl ? 'Change local picture…' : 'Choose local picture…'}</span>
           </button>
           {#if settingsStore.profilePictureUrl}
@@ -553,7 +548,7 @@
             }}
             class="lw-menu-row"
           >
-            <WaveIcon name="globe" size={15} class="text-[var(--lw-text-secondary)]" />
+            <WaveIcon name="video" size={15} class="text-[var(--lw-text-secondary)]" />
             <span class="min-w-0 flex-1 truncate">
               {settingsStore.ytConnected
                 ? settingsStore.ytAccountName
@@ -604,7 +599,7 @@
             }}
             class="lw-menu-row"
           >
-            <WaveIcon name="clock" size={15} />
+            <WaveIcon name="history" size={15} />
             <span class="min-w-0 flex-1 truncate">History</span>
           </button>
           <button
@@ -642,9 +637,7 @@
             aria-label="Minimize"
             class="win-btn"
           >
-            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-              <path d="M1.5 6H10.5" stroke="currentColor" stroke-width="1.15" />
-            </svg>
+            <WaveIcon name="chromeMinimize" size={12} />
           </button>
           <button
             type="button"
@@ -653,16 +646,7 @@
             aria-label={windowState.isMaximized ? 'Restore' : 'Maximize'}
             class="win-btn"
           >
-            {#if windowState.isMaximized}
-              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                <rect x="1.5" y="3.5" width="7" height="7" rx="0.8" stroke="currentColor" stroke-width="1.1" />
-                <path d="M3.5 3.5V2C3.5 1.7 3.7 1.5 4 1.5H10C10.3 1.5 10.5 1.7 10.5 2V8C10.5 8.3 10.3 8.5 10 8.5H8.5" stroke="currentColor" stroke-width="1.1" />
-              </svg>
-            {:else}
-              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                <rect x="1.5" y="1.5" width="9" height="9" rx="1" stroke="currentColor" stroke-width="1.1" />
-              </svg>
-            {/if}
+            <WaveIcon name={windowState.isMaximized ? 'chromeRestore' : 'chromeMaximize'} size={12} />
           </button>
           <button
             type="button"
@@ -671,9 +655,7 @@
             aria-label="Close"
             class="win-btn danger"
           >
-            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-              <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" />
-            </svg>
+            <WaveIcon name="close" size={12} />
           </button>
         </div>
       {/if}

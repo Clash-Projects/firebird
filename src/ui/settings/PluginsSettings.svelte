@@ -92,8 +92,8 @@
 
   function typeIcon(t: PluginType): WaveIconName {
     if (t === 'palette') return 'palette';
-    if (t === 'theme') return 'sparkles';
-    if (t === 'snippet') return 'wand';
+    if (t === 'theme') return 'brush';
+    if (t === 'snippet') return 'edit';
     return 'plugin';
   }
 

@@ -79,7 +79,7 @@
         class="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-[8px] border border-[var(--lw-outline)] bg-[var(--lw-surface)] px-3 text-[12px] font-semibold text-[var(--lw-text-secondary)] transition-colors hover:bg-[var(--lw-surface-raised)] hover:text-[var(--lw-text-primary)]"
         onclick={() => router.navigate('/home/layout')}
       >
-        <WaveIcon name="wand" size={13} />
+        <WaveIcon name="edit" size={13} />
         Edit home
       </button>
     </header>

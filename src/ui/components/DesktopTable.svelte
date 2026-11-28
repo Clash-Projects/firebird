@@ -197,7 +197,7 @@
     >
       <span>Title</span>
       {#if sortCol === 'title'}
-        <WaveIcon name={sortDir === 'asc' ? 'chevronUp' : 'chevronDown'} size={10} />
+        <WaveIcon name={sortDir === 'asc' ? 'sortUp' : 'sortDown'} size={10} />
       {/if}
     </button>
     {#if showAlbum}
@@ -208,7 +208,7 @@
       >
         <span>Album</span>
         {#if sortCol === 'album'}
-          <WaveIcon name={sortDir === 'asc' ? 'chevronUp' : 'chevronDown'} size={10} />
+          <WaveIcon name={sortDir === 'asc' ? 'sortUp' : 'sortDown'} size={10} />
         {/if}
       </button>
     {/if}
@@ -221,7 +221,7 @@
       class="ml-2 flex w-[118px] shrink-0 cursor-pointer items-center justify-end gap-1 text-right transition-colors hover:text-[var(--lw-text-primary)] {sortCol === 'duration' ? 'text-[var(--lw-accent)]' : ''}"
     >
       {#if sortCol === 'duration'}
-        <WaveIcon name={sortDir === 'asc' ? 'chevronUp' : 'chevronDown'} size={10} />
+        <WaveIcon name={sortDir === 'asc' ? 'sortUp' : 'sortDown'} size={10} />
       {/if}
       <span>Time</span>
     </button>

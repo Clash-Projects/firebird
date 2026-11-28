@@ -7,6 +7,38 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: "SegoeIcons";
+  src: url("./assets/fonts/SegoeIcons.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "FluentIcons";
+  src: url("./assets/fonts/FluentIcons.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
+.lw-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1;
+  font-style: normal;
+  font-weight: normal;
+  font-variant: normal;
+  text-transform: none;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+}
+
 @theme {
   --color-lw-bg: var(--lw-bg);
   --color-lw-bg-deep: var(--lw-bg-deep);

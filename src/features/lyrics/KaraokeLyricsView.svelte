@@ -676,8 +676,8 @@
               type="button"
               onclick={() => featuresStore.adjustLyricsOffset(track.id, -500)}
               use:waveTooltip={'Lyrics earlier (-0.5s)'}
-              class="flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded-[7px] text-[13px] text-[var(--lw-text-primary)]/90 hover:bg-[var(--lw-wash-hover)]"
-            >−</button>
+              class="flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded-[7px] text-[var(--lw-text-primary)]/90 hover:bg-[var(--lw-wash-hover)]"
+            ><WaveIcon name="remove" size={11} /></button>
             <span
               use:waveTooltip={'Timing offset for this track'}
               class="px-1 text-[11px] font-semibold {offsetMs !== 0 ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-primary)]'}"
@@ -688,8 +688,8 @@
               type="button"
               onclick={() => featuresStore.adjustLyricsOffset(track.id, 500)}
               use:waveTooltip={'Lyrics later (+0.5s)'}
-              class="flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded-[7px] text-[13px] text-[var(--lw-text-primary)]/90 hover:bg-[var(--lw-wash-hover)]"
-            >+</button>
+              class="flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded-[7px] text-[var(--lw-text-primary)]/90 hover:bg-[var(--lw-wash-hover)]"
+            ><WaveIcon name="plus" size={11} /></button>
             {#if offsetMs !== 0}
               <button
                 type="button"
@@ -697,7 +697,7 @@
                 use:waveTooltip={'Reset offset to 0.0s'}
                 class="flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded-[7px] text-[var(--lw-text-primary)]/90 hover:bg-[var(--lw-wash-hover)]"
               >
-                <WaveIcon name="close" size={11} />
+                <WaveIcon name="reset" size={11} />
               </button>
             {/if}
           </div>
@@ -741,7 +741,7 @@
                 onclick={() => featuresStore.setLyricsRomanized(!featuresStore.showRomanized)}
                 class="lw-menu-row"
               >
-                <WaveIcon name="bookmark" size={13} />
+                <WaveIcon name="readingMode" size={13} />
                 <span class="min-w-0 flex-1 truncate">Romanisation</span>
                 <span class="lw-menu-hint">{featuresStore.showRomanized ? 'On' : 'Off'}</span>
               </button>
@@ -759,7 +759,7 @@
                   onclick={() => (moreSubmenu = moreSubmenu === 'textSize' ? null : 'textSize')}
                   class="lw-menu-row"
                 >
-                  <span class="w-[13px] text-center text-[10px] font-bold">AA</span>
+                  <WaveIcon name="fontSize" size={13} />
                   <span class="min-w-0 flex-1 truncate">Text size</span>
                   <WaveIcon name="chevronRight" size={12} class="text-[var(--lw-text-tertiary)]" />
                 </button>
@@ -806,7 +806,7 @@
                   onclick={() => (moreSubmenu = moreSubmenu === 'translation' ? null : 'translation')}
                   class="lw-menu-row"
                 >
-                  <WaveIcon name="globe" size={13} />
+                  <WaveIcon name="localeLanguage" size={13} />
                   <span class="min-w-0 flex-1 truncate">Translation</span>
                   <WaveIcon name="chevronRight" size={12} class="text-[var(--lw-text-tertiary)]" />
                 </button>
@@ -901,7 +901,7 @@
                   onclick={() => (moreSubmenu = moreSubmenu === 'animation' ? null : 'animation')}
                   class="lw-menu-row"
                 >
-                  <WaveIcon name="palette" size={13} />
+                  <WaveIcon name="brush" size={13} />
                   <span class="min-w-0 flex-1 truncate">Animation style</span>
                   <WaveIcon name="chevronRight" size={12} class="text-[var(--lw-text-tertiary)]" />
                 </button>
@@ -988,7 +988,7 @@
             use:waveTooltip={following ? 'Pause automatic scrolling' : 'Return to the line being sung'}
             class="flex h-[26px] w-[26px] cursor-pointer items-center justify-center rounded-[10px] transition hover:bg-[var(--lw-wash-hover)] {following ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-primary)]/90'}"
           >
-            <WaveIcon name="pin" size={13} />
+            <WaveIcon name={following ? 'pin' : 'unpin'} size={13} />
           </button>
         {/if}
 
@@ -1011,7 +1011,7 @@
     <div
       class="mx-2 mb-2 flex shrink-0 items-center gap-2 rounded-[10px] border border-[var(--lw-accent)]/50 bg-[var(--lw-accent-subtle)] px-3 py-1.5"
     >
-      <WaveIcon name="check" size={13} class="shrink-0 text-[var(--lw-accent)]" />
+      <WaveIcon name="checkList" size={13} class="shrink-0 text-[var(--lw-accent)]" />
       <span class="min-w-0 flex-1 truncate text-[12px] text-[var(--lw-text-secondary)]">
         {selectedIndices.length === 0
           ? 'Tap lines to include them on the card'
@@ -1063,13 +1063,13 @@
       </div>
     {:else if doc?.isInstrumental}
       <div class="flex h-full min-h-[200px] flex-col items-center justify-center gap-1.5 px-6 text-center">
-        <WaveIcon name="album" size={24} class="mb-1 text-[var(--lw-text-tertiary)]" />
+        <WaveIcon name="music" size={24} class="mb-1 text-[var(--lw-text-tertiary)]" />
         <div class="text-[15px] font-semibold text-[var(--lw-text-primary)]">Instrumental</div>
         <div class="text-[12.5px] text-[var(--lw-text-secondary)]">No lyrics for this track.</div>
       </div>
     {:else if !doc || doc.lines.length === 0}
       <div class="flex h-full min-h-[200px] flex-col items-center justify-center gap-1.5 px-6 text-center">
-        <WaveIcon name="lyrics" size={24} class="mb-1 text-[var(--lw-text-tertiary)]" />
+        <WaveIcon name="artist" size={24} class="mb-1 text-[var(--lw-text-tertiary)]" />
         <div class="text-[15px] font-semibold text-[var(--lw-text-primary)]">No lyrics found</div>
         <div class="text-[12.5px] text-[var(--lw-text-secondary)]">
           Pick another source, or check back later.
@@ -1274,7 +1274,7 @@
           onclick={resumeFollowing}
           class="lw-flyout-surface absolute right-4 bottom-4 z-30 flex cursor-pointer items-center gap-1.5 rounded-[18px] px-3.5 py-2 text-[12px] font-semibold text-[var(--lw-text-primary)] shadow-[var(--lw-shadow-flyout)] transition hover:bg-[var(--lw-surface-overlay)]"
         >
-          <WaveIcon name="chevronDown" size={12} class="text-[var(--lw-accent)]" />
+          <WaveIcon name="down" size={12} class="text-[var(--lw-accent)]" />
           <span>Return to current</span>
         </button>
       {/if}

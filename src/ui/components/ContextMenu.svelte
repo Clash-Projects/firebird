@@ -331,7 +331,7 @@
       onclick={() => run(() => enqueueTrack(track))}
       class="lw-menu-row"
     >
-      <WaveIcon name="queue" size={15} />
+      <WaveIcon name="list" size={15} />
       <span class="min-w-0 flex-1 truncate">Add to queue</span>
     </button>
 
@@ -383,7 +383,7 @@
         }}
         class="lw-menu-row"
       >
-        <WaveIcon name="addToQueue" size={15} />
+        <WaveIcon name="playlists" size={15} />
         <span class="min-w-0 flex-1 truncate">Add to playlist</span>
         <WaveIcon name="chevronRight" size={12} class="text-[var(--lw-text-tertiary)]" />
       </button>
@@ -408,7 +408,7 @@
                 onclick={() => run(() => void addToPlaylist(pl, track))}
                 class="lw-menu-row"
               >
-                <WaveIcon name="queue" size={15} />
+                <WaveIcon name="playlists" size={15} />
                 <span class="min-w-0 flex-1 truncate">{pl.name}</span>
               </button>
             {/each}
@@ -472,7 +472,7 @@
       onclick={() => run(() => void copyLink(track))}
       class="lw-menu-row"
     >
-      <WaveIcon name="share" size={15} />
+      <WaveIcon name="link" size={15} />
       <span class="min-w-0 flex-1 truncate">Copy link</span>
     </button>
 
@@ -526,10 +526,7 @@
       onclick={() => run(() => void excludeTrack(track))}
       class="lw-menu-row"
     >
-      <svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true" class="shrink-0">
-        <circle cx="10" cy="10" r="7.2" stroke="currentColor" stroke-width="1.5" />
-        <path d="M5 15L15 5" stroke="currentColor" stroke-width="1.5" />
-      </svg>
+      <WaveIcon name="blocked" size={15} />
       <span class="min-w-0 flex-1 truncate">Don't recommend</span>
     </button>
 

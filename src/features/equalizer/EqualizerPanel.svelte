@@ -106,7 +106,7 @@
   <div class="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-[var(--lw-divider)] px-4">
     <WaveIcon
       name="eq"
-      size={16}
+      size={18}
       class={isProcessing ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'}
     />
     <div class="min-w-0 flex-1">
@@ -146,7 +146,7 @@
         aria-label="Close equalizer"
         class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-[8px] text-[var(--lw-text-secondary)] hover:bg-[var(--lw-wash-hover)] hover:text-[var(--lw-text-primary)]"
       >
-        <WaveIcon name="close" size={14} />
+        <WaveIcon name="close" size={12} />
       </button>
     {/if}
   </div>
@@ -174,7 +174,7 @@
         ? 'border-[var(--lw-outline)] bg-[var(--lw-surface-raised)] font-semibold text-[var(--lw-text-primary)] shadow-[0_1px_4px_rgba(0,0,0,0.12)]'
         : 'border-transparent text-[var(--lw-text-secondary)] hover:text-[var(--lw-text-primary)]'}"
     >
-      <WaveIcon name="sparkles" size={13} class={featuresStore.studioClarity ? 'text-[#F5A623]' : ''} />
+      <WaveIcon name="star" size={13} filled class={featuresStore.studioClarity ? 'text-[#F5A623]' : ''} />
       <span>Studio Clarity</span>
       {#if featuresStore.studioClarity}
         <span class="h-1.5 w-1.5 rounded-full bg-[#F5A623]"></span>
@@ -323,7 +323,7 @@
       >
         <div class="flex items-center gap-3">
           <div class="clarity-icon-box flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px]">
-            <WaveIcon name="sparkles" size={17} />
+            <WaveIcon name="star" size={17} filled />
           </div>
           <div class="min-w-0 flex-1">
             <div class="text-[13.5px] font-bold">Studio Master Clarity</div>

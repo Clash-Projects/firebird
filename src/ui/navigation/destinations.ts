@@ -15,7 +15,7 @@ export const NAV_DESTINATIONS: NavDestination[] = [
   { id: 'search', route: '/search', labelKey: 'navSearch', fallbackLabel: 'Search', icon: 'search', group: 'listen' },
 
   { id: 'podcasts', route: '/podcasts', labelKey: 'navPodcasts', fallbackLabel: 'Podcasts', icon: 'podcast', group: 'collection' },
-  { id: 'playlists', route: '/playlists', labelKey: 'navPlaylists', fallbackLabel: 'Playlists', icon: 'queue', group: 'collection' },
+  { id: 'playlists', route: '/playlists', labelKey: 'navPlaylists', fallbackLabel: 'Playlists', icon: 'playlists', group: 'collection' },
 
   { id: 'library', route: '/library', labelKey: 'navLibrary', fallbackLabel: 'Library', icon: 'library', group: 'offline' },
 

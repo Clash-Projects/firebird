@@ -36,15 +36,15 @@
 
       <div class="mt-6 grid grid-cols-3 gap-2 text-[11px] text-[var(--lw-text-secondary)]">
         <div class="rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface-overlay)] px-2.5 py-2.5">
-          <WaveIcon name="activity" size={15} class="mx-auto text-[var(--lw-accent)]" />
+          <WaveIcon name="eq" size={15} class="mx-auto text-[var(--lw-accent)]" />
           <div class="mt-1 font-medium">Bit-Perfect</div>
         </div>
         <div class="rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface-overlay)] px-2.5 py-2.5">
-          <WaveIcon name="lyrics" size={15} class="mx-auto text-[var(--lw-accent)]" />
+          <WaveIcon name="artist" size={15} class="mx-auto text-[var(--lw-accent)]" />
           <div class="mt-1 font-medium">Word Sync</div>
         </div>
         <div class="rounded-[10px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface-overlay)] px-2.5 py-2.5">
-          <WaveIcon name="eq" size={15} class="mx-auto text-[var(--lw-accent)]" />
+          <WaveIcon name="gauge" size={15} class="mx-auto text-[var(--lw-accent)]" />
           <div class="mt-1 font-medium">Studio DSP</div>
         </div>
       </div>
