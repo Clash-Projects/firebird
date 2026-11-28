@@ -119,7 +119,7 @@
 >
   {#if !track}
     <div class="flex h-full items-center gap-2 px-2.5" data-tauri-drag-region>
-      <WaveIcon name="music" size={16} class="shrink-0 text-[var(--lw-text-secondary)]" />
+      <WaveIcon name="music" size={15} class="shrink-0 text-[var(--lw-text-secondary)]" />
       <button
         type="button"
         onclick={expand}
@@ -129,10 +129,10 @@
       </button>
       <div class="flex items-center">
         <button type="button" onclick={() => appWindow?.minimize()} use:waveTooltip={'Minimize'} aria-label="Minimize" class="mini-glyph">
-          <WaveIcon name="chromeMinimize" size={11} />
+          <span class="h-[1px] w-2 bg-current"></span>
         </button>
         <button type="button" onclick={expand} use:waveTooltip={'Expand to window'} aria-label="Expand" class="mini-glyph">
-          <WaveIcon name="expand" size={12} />
+          <WaveIcon name="maximize" size={12} />
         </button>
         <button type="button" onclick={closeMini} use:waveTooltip={'Close mini player'} aria-label="Close" class="mini-glyph danger">
           <WaveIcon name="close" size={12} />
@@ -151,10 +151,10 @@
 
       <div class="mini-window-controls card-controls absolute top-1.5 right-1.5 flex items-center gap-0.5" class:visible={hover}>
         <button type="button" onclick={() => appWindow?.minimize()} use:waveTooltip={'Minimize'} aria-label="Minimize" class="mini-glyph on-dark">
-          <WaveIcon name="chromeMinimize" size={11} />
+          <span class="h-[1px] w-2 bg-current"></span>
         </button>
         <button type="button" onclick={expand} use:waveTooltip={'Expand to window'} aria-label="Expand" class="mini-glyph on-dark">
-          <WaveIcon name="expand" size={12} />
+          <WaveIcon name="maximize" size={12} />
         </button>
         <button type="button" onclick={closeMini} use:waveTooltip={'Close mini player'} aria-label="Close" class="mini-glyph on-dark danger">
           <WaveIcon name="close" size={12} />
@@ -208,10 +208,10 @@
             </button>
             <div class="mini-window-controls flex shrink-0 items-center" class:visible={hover}>
               <button type="button" onclick={() => appWindow?.minimize()} use:waveTooltip={'Minimize'} aria-label="Minimize" class="mini-glyph on-dark">
-                <WaveIcon name="chromeMinimize" size={11} />
+                <span class="h-[1px] w-2 bg-current"></span>
               </button>
               <button type="button" onclick={expand} use:waveTooltip={'Expand to window'} aria-label="Expand" class="mini-glyph on-dark">
-                <WaveIcon name="expand" size={12} />
+                <WaveIcon name="maximize" size={12} />
               </button>
               <button type="button" onclick={closeMini} use:waveTooltip={'Close mini player'} aria-label="Close" class="mini-glyph on-dark danger">
                 <WaveIcon name="close" size={12} />
@@ -266,7 +266,7 @@
       </div>
       <div class="mini-window-controls compact-controls flex shrink-0 items-center" class:visible={hover}>
         <button type="button" onclick={expand} use:waveTooltip={'Expand to window'} aria-label="Expand to window" class="mini-glyph">
-          <WaveIcon name="expand" size={12} />
+          <WaveIcon name="maximize" size={12} />
         </button>
         <button type="button" onclick={closeMini} use:waveTooltip={'Close mini player'} aria-label="Close" class="mini-glyph danger">
           <WaveIcon name="close" size={12} />
@@ -280,7 +280,7 @@
     <!-- classic (380x78) -->
     <div class="flex flex-1 items-center gap-2 px-2" data-tauri-drag-region>
       <span class="pointer-events-none flex h-6 w-3 shrink-0 items-center justify-center text-[var(--lw-text-tertiary)] opacity-55">
-        <WaveIcon name="gripper" size={13} />
+        ⋮
       </span>
       <button type="button" onclick={expand} class="shrink-0 cursor-pointer">
         <Artwork src={track.artworkUrl} label={track.title} artist={track.artist} kind="track" alt={track.title} size={46} radius={8} />
@@ -301,10 +301,10 @@
       <div class="mx-0.5 h-4 w-px bg-[var(--lw-divider)]"></div>
       <div class="flex shrink-0 items-center">
         <button type="button" onclick={() => appWindow?.minimize()} use:waveTooltip={'Minimize'} aria-label="Minimize" class="mini-glyph">
-          <WaveIcon name="chromeMinimize" size={11} />
+          <span class="h-[1px] w-2 bg-current"></span>
         </button>
         <button type="button" onclick={expand} use:waveTooltip={'Expand to window'} aria-label="Expand" class="mini-glyph">
-          <WaveIcon name="expand" size={12} />
+          <WaveIcon name="maximize" size={12} />
         </button>
         <button type="button" onclick={closeMini} use:waveTooltip={'Close mini player'} aria-label="Close" class="mini-glyph danger">
           <WaveIcon name="close" size={12} />
