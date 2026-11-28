@@ -1,6 +1,6 @@
 <script lang="ts">
   import { router } from '$src/app/router.svelte';
-  import { playTrackNow } from '$src/app/trackActions';
+  import { playTrackNow, playTrackRadio } from '$src/app/trackActions';
   import { libraryStore } from '$src/state/library.svelte';
   import { formatDuration, playerStore } from '$src/state/player.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
@@ -152,7 +152,7 @@
               {@const playing = playerStore.currentTrack?.id === track.id}
               <button
                 type="button"
-                onclick={() => playTrackNow(track, shelf.tracks)}
+                onclick={() => playTrackRadio(track)}
                 oncontextmenu={(e) => contextMenu.showForTrack(e, track)}
                 class="group flex h-[56px] w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-1.5 py-1 text-left transition-colors {playing
                   ? 'bg-[var(--lw-accent-subtle)]'
@@ -189,7 +189,7 @@
         {#each shelf.trackCards as track (`card-${shelf.title}-${track.id}`)}
           <button
             type="button"
-            onclick={() => playTrackNow(track, shelf.trackCards)}
+            onclick={() => playTrackRadio(track)}
             oncontextmenu={(e) => contextMenu.showForTrack(e, track)}
             class="group min-w-0 cursor-pointer text-left"
           >
@@ -280,7 +280,7 @@
             {@const playing = playerStore.currentTrack?.id === track.id}
             <button
               type="button"
-              onclick={() => playTrackNow(track, quickPicks)}
+              onclick={() => playTrackRadio(track)}
               oncontextmenu={(e) => contextMenu.showForTrack(e, track)}
               class="group flex h-[56px] w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-1.5 py-1 text-left transition-colors {playing
                 ? 'bg-[var(--lw-accent-subtle)]'
@@ -371,7 +371,7 @@
           {#each charts as track, i (track.id)}
             <button
               type="button"
-              onclick={() => playTrackNow(track, charts)}
+              onclick={() => playTrackRadio(track)}
               oncontextmenu={(e) => contextMenu.showForTrack(e, track)}
               class="group flex h-[54px] w-full cursor-pointer items-center gap-3.5 rounded-[10px] px-2 text-left transition-colors hover:bg-[var(--lw-wash-hover)]"
             >

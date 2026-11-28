@@ -4511,6 +4511,7 @@ impl PlaybackService {
                     local_sw.elapsed().as_millis(),
                     total_sw.elapsed().as_millis()
                 ));
+                self.maybe_refill_radio();
                 self.release_resolving(generation);
                 return;
             }
@@ -5870,6 +5871,7 @@ impl PlaybackService {
                     album: t.album,
                     artwork_url: t.artwork_url,
                     video_id: t.video_id,
+                    duration_ms: t.duration_seconds.max(0) * 1000,
                     ..Default::default()
                 })
                 .collect();

@@ -208,6 +208,16 @@ class PlayerStore {
     }
   }
 
+  private resetPlaybackState(track: Track) {
+    this.positionSec = 0;
+    this.backendDurationSec = track.durationSec || 0;
+    this.snapAnchorMs = 0;
+    this.snapAnchorTime = 0;
+    this.isPlaying = true;
+    this.emit('trackChange', this.currentTrack);
+    this.emit('playState', { isPlaying: true });
+  }
+
   playTrack(track: Track, list?: Track[]) {
     if (list && list.length > 0) {
       this.queue = [...list];
@@ -229,13 +239,19 @@ class PlayerStore {
       }
       void ipcInvoke('player_play', { track: toPlayableTrack(track) });
     }
-    this.positionSec = 0;
-    this.backendDurationSec = track.durationSec || 0;
-    this.snapAnchorMs = 0;
-    this.snapAnchorTime = 0;
-    this.isPlaying = true;
-    this.emit('trackChange', this.currentTrack);
-    this.emit('playState', { isPlaying: true });
+    this.resetPlaybackState(track);
+  }
+
+  playRadio(track: Track, sourceLabel = 'Radio') {
+    this.queue = [track];
+    this.currentIndex = 0;
+    this.emit('queueUpdate', this.queue);
+    void ipcInvoke('player_play', {
+      track: toPlayableTrack(track),
+      sourceLabel,
+      startRadio: true
+    });
+    this.resetPlaybackState(track);
   }
 
   togglePlay() {

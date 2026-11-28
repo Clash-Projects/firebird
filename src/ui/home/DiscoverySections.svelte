@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { playTrackNow } from '$src/app/trackActions';
+  import { playTrackRadio } from '$src/app/trackActions';
   import { libraryStore } from '$src/state/library.svelte';
   import Artwork from '$src/ui/components/Artwork.svelte';
   import Shelf from '$src/ui/components/Shelf.svelte';
@@ -44,7 +44,7 @@
       {#each libraryStore.tracks.slice(0, 4) as track (track.id)}
         <button
           type="button"
-          onclick={() => playTrackNow(track, libraryStore.tracks)}
+          onclick={() => playTrackRadio(track)}
           class="flex cursor-pointer items-center gap-3 rounded-[14px] border border-[var(--lw-outline-soft)] bg-[var(--lw-surface)] p-2.5 text-left transition-colors hover:bg-[var(--lw-wash-hover)]"
         >
           <Artwork src={track.artworkUrl} size={52} radius={10} />

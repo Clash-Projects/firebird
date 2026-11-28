@@ -7,6 +7,10 @@ export function playTrackNow(track: Track, list?: Track[]) {
   playerStore.playTrack(track, list);
 }
 
+export function playTrackRadio(track: Track, sourceLabel = 'Radio') {
+  playerStore.playRadio(track, sourceLabel);
+}
+
 export function playTrackNext(track: Track) {
   playerStore.playNext(track);
   featuresStore.showToast({ title: 'Playing next', subtitle: track.title, severity: 'info' });

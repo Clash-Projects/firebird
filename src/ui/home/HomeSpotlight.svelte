@@ -1,6 +1,6 @@
 <script lang="ts">
   import { router } from '$src/app/router.svelte';
-  import { playTrackNow } from '$src/app/trackActions';
+  import { playTrackNow, playTrackRadio } from '$src/app/trackActions';
   import { featuresStore } from '$src/state/features.svelte';
   import type { Track } from '$src/state/types';
   import Artwork from '$src/ui/components/Artwork.svelte';
@@ -30,9 +30,11 @@
 
   function playHero(radio = false) {
     if (!track) return;
-    playTrackNow(track, radio ? [...queue].reverse() : queue);
     if (radio) {
+      playTrackRadio(track);
       featuresStore.showToast({ title: 'Started radio', subtitle: track.title, severity: 'info' });
+    } else {
+      playTrackNow(track, queue);
     }
   }
 </script>
@@ -106,7 +108,7 @@
             {#each companions as item (item.id)}
               <button
                 type="button"
-                onclick={() => playTrackNow(item, queue)}
+                onclick={() => playTrackRadio(item)}
                 class="group flex w-full cursor-pointer items-center gap-3 rounded-[10px] px-2 py-1.5 text-left transition-colors hover:bg-[var(--lw-wash-hover)]"
               >
                 <div class="relative h-[42px] w-[42px] shrink-0 overflow-hidden rounded-[8px]">
