@@ -887,11 +887,53 @@ pub fn decrypt_kugou_krc(base64_content: &str) -> Option<String> {
     Some(out)
 }
 
-/// Parse decrypted KRC text into word-timed lines.
+/// Parse decrypted KRC text into word-timed lines (including embedded `[language:...]` romaji/pinyin).
 pub fn parse_kugou_krc(krc_text: &str) -> Vec<LyricLine> {
+    static KRC_LANG_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i)^\[language:\s*([A-Za-z0-9+/=]+)\s*]").expect("krc lang"));
+
+    let mut phonetic_rows: Vec<String> = Vec::new();
+    for raw_line in krc_text.split('\n') {
+        let trimmed = raw_line.trim();
+        if let Some(lcaps) = KRC_LANG_RE.captures(trimmed) {
+            if let Ok(decoded) = BASE64_STANDARD.decode(lcaps[1].trim()) {
+                if let Ok(lang_json) = serde_json::from_slice::<Value>(&decoded) {
+                    if let Some(contents) = lang_json.get("content").and_then(Value::as_array) {
+                        if let Some(phonetic_entry) = contents
+                            .iter()
+                            .find(|c| c.get("type").and_then(Value::as_i64) == Some(0))
+                        {
+                            if let Some(lyric_content) =
+                                phonetic_entry.get("lyricContent").and_then(Value::as_array)
+                            {
+                                phonetic_rows = lyric_content
+                                    .iter()
+                                    .map(|row| {
+                                        row.as_array()
+                                            .map(|arr| {
+                                                arr.iter()
+                                                    .filter_map(Value::as_str)
+                                                    .map(str::trim)
+                                                    .filter(|s| !s.is_empty())
+                                                    .collect::<Vec<_>>()
+                                                    .join(" ")
+                                            })
+                                            .unwrap_or_default()
+                                    })
+                                    .collect();
+                            }
+                        }
+                    }
+                }
+            }
+            break;
+        }
+    }
+
     let mut lines = Vec::new();
     let mut global_offset_ms = 0i64;
     let mut is_first_raw_line = true;
+    let mut raw_lyric_idx = 0usize;
 
     for raw_line in krc_text.split('\n') {
         let trimmed = raw_line.trim();
@@ -908,6 +950,9 @@ pub fn parse_kugou_krc(krc_text: &str) -> Vec<LyricLine> {
         let Some(caps) = KRC_LINE_RE.captures(trimmed) else {
             continue;
         };
+        let cur_lyric_idx = raw_lyric_idx;
+        raw_lyric_idx += 1;
+
         let Some(raw_start) = caps.get(1).and_then(|m| m.as_str().parse::<i64>().ok()) else {
             continue;
         };
@@ -955,12 +1000,16 @@ pub fn parse_kugou_krc(krc_text: &str) -> Vec<LyricLine> {
             if is_credit {
                 continue;
             }
+            let transliteration = phonetic_rows
+                .get(cur_lyric_idx)
+                .cloned()
+                .unwrap_or_default();
             lines.push(LyricLine {
                 time_ms: line_start_ms,
                 duration_ms: line_duration_ms,
                 text: full_line_text,
                 syllables,
-                transliteration: String::new(),
+                transliteration,
                 agent: None,
             });
         }
@@ -1785,6 +1834,32 @@ pub async fn fetch_lyrics_plus(
                 .and_then(Value::as_str)
                 .map(str::trim)
                 .unwrap_or("");
+            let transliteration = item
+                .get("romanizedText")
+                .or_else(|| item.get("transliteration"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .or_else(|| {
+                    let syls = item.get("syllabus").and_then(Value::as_array)?;
+                    let joined: String = syls
+                        .iter()
+                        .filter_map(|s| s.get("romanizedText").and_then(Value::as_str))
+                        .collect();
+                    let t = joined.trim().to_string();
+                    if t.is_empty() { None } else { Some(t) }
+                })
+                .unwrap_or_default();
+            let agent = if item.get("oppositeTurn").and_then(Value::as_bool) == Some(true) {
+                Some("v2".to_string())
+            } else {
+                item.get("element")
+                    .and_then(|e| e.get("songPart").or_else(|| e.get("singer")))
+                    .and_then(Value::as_str)
+                    .filter(|s| s.eq_ignore_ascii_case("v2"))
+                    .map(|_| "v2".to_string())
+            };
             if !raw_item_text.is_empty()
                 && is_lyric_credit_line(raw_item_text, lines.len(), raw_lines.len(), title, artist)
             {
@@ -1806,8 +1881,8 @@ pub async fn fetch_lyrics_plus(
                     duration_ms: duration.max(0),
                     text: joined_words,
                     syllables: words,
-                    transliteration: String::new(),
-                    agent: None,
+                    transliteration,
+                    agent,
                 });
             } else if !raw_item_text.is_empty() {
                 lines.push(LyricLine {
@@ -1815,8 +1890,8 @@ pub async fn fetch_lyrics_plus(
                     duration_ms: duration.max(0),
                     text: raw_item_text.to_string(),
                     syllables: Vec::new(),
-                    transliteration: String::new(),
-                    agent: None,
+                    transliteration,
+                    agent,
                 });
             }
         }
@@ -1925,7 +2000,7 @@ pub async fn fetch_unison_lyrics(
                 text: l.text,
                 syllables: Vec::new(),
                 transliteration: l.transliteration,
-                agent: None,
+                agent: l.agent,
             })
             .collect()
     };

@@ -478,7 +478,7 @@ pub fn ensure_millisecond_timestamps(result: &LyricsResult) -> LyricsResult {
                     })
                     .collect(),
                 transliteration: line.transliteration.clone(),
-                agent: None,
+                agent: line.agent.clone(),
             })
             .collect(),
         is_synced: result.is_synced,
@@ -887,7 +887,7 @@ pub fn normalize_karaoke_timings(
             text: line.text.clone(),
             syllables,
             transliteration: line.transliteration.clone(),
-            agent: None,
+            agent: line.agent.clone(),
         });
     }
 
@@ -1600,12 +1600,17 @@ pub fn lyrics_plausible_duration(lines: &[LyricLine], duration_seconds: Option<i
     true
 }
 
-/// Parse TTML (`<p begin end>` lines, `<span begin end>` words).
+/// Parse TTML (`<p begin end>` lines, `<span begin end>` words, plus
+/// `<itunes:transliteration>` and `<span ttm:role="x-roman">` romanisations).
 pub fn parse_ttml(ttml: &str) -> Vec<LyricLine> {
     static P_TAG: OnceLock<Regex> = OnceLock::new();
     static BEGIN_ATTR: OnceLock<Regex> = OnceLock::new();
     static END_ATTR: OnceLock<Regex> = OnceLock::new();
     static AGENT_ATTR: OnceLock<Regex> = OnceLock::new();
+    static KEY_ATTR: OnceLock<Regex> = OnceLock::new();
+    static TRANSLIT_BLOCK: OnceLock<Regex> = OnceLock::new();
+    static TRANSLIT_TEXT: OnceLock<Regex> = OnceLock::new();
+    static XML_TAGS: OnceLock<Regex> = OnceLock::new();
 
     let p_tag = P_TAG.get_or_init(|| {
         Regex::new(r"(?is)<(?:[a-zA-Z0-9_-]+:)?p\b([^>]*?)>(.*?)</(?:[a-zA-Z0-9_-]+:)?p>")
@@ -1619,14 +1624,48 @@ pub fn parse_ttml(ttml: &str) -> Vec<LyricLine> {
     });
     let agent_attr =
         AGENT_ATTR.get_or_init(|| Regex::new(r#"(?i)agent=["']([^"']+)["']"#).expect("agent_attr"));
+    let key_attr =
+        KEY_ATTR.get_or_init(|| Regex::new(r#"(?i)\bkey=["']([^"']+)["']"#).expect("key_attr"));
+    let translit_block = TRANSLIT_BLOCK.get_or_init(|| {
+        Regex::new(r"(?is)<(?:[a-zA-Z0-9_-]+:)?transliteration\b[^>]*>(.*?)</(?:[a-zA-Z0-9_-]+:)?transliteration>")
+            .expect("translit_block")
+    });
+    let translit_text = TRANSLIT_TEXT.get_or_init(|| {
+        Regex::new(r#"(?is)<(?:[a-zA-Z0-9_-]+:)?text\b[^>]*?\bfor=["']([^"']+)["'][^>]*>(.*?)</(?:[a-zA-Z0-9_-]+:)?text>"#)
+            .expect("translit_text")
+    });
+    let xml_tags = XML_TAGS.get_or_init(|| Regex::new(r"<[^>]+>").expect("xml_tags"));
 
     let mut raw = ttml.to_string();
     if raw.contains(r"\n") && !raw.contains('\n') {
         raw = raw.replace(r"\r\n", "\n").replace(r"\n", "\n");
     }
 
+    // Extract Apple `<itunes:transliteration><text for="L1">...</text></itunes:transliteration>`
+    let mut translit_by_key = std::collections::HashMap::<String, String>::new();
+    for block in translit_block.captures_iter(&raw) {
+        for item in translit_text.captures_iter(&block[1]) {
+            let k = item[1].trim().to_string();
+            let plain = unescape_xml(&xml_tags.replace_all(&item[2], ""))
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            if !k.is_empty() && !plain.is_empty() {
+                translit_by_key.entry(k).or_insert(plain);
+            }
+        }
+    }
+
+    // Strip `<head>...</head>` so `<text>` inside metadata is never matched as `<p>`
+    static HEAD_TAG: OnceLock<Regex> = OnceLock::new();
+    let head_tag = HEAD_TAG.get_or_init(|| {
+        Regex::new(r"(?is)<(?:[a-zA-Z0-9_-]+:)?head\b[^>]*>.*?</(?:[a-zA-Z0-9_-]+:)?head>")
+            .expect("head_tag")
+    });
+    let body_raw = head_tag.replace_all(&raw, "");
+
     let mut lines = Vec::new();
-    for p in p_tag.captures_iter(&raw) {
+    for p in p_tag.captures_iter(&body_raw) {
         let attrs = &p[1];
         let start = begin_attr
             .captures(attrs)
@@ -1635,13 +1674,23 @@ pub fn parse_ttml(ttml: &str) -> Vec<LyricLine> {
             .captures(attrs)
             .map_or(0, |c| parse_ttml_time(&c[1]));
         let agent = agent_attr.captures(attrs).map(|c| c[1].to_string());
-        let Some((text, syllables)) = parse_ttml_paragraph(&p[2], begin_attr, end_attr) else {
+        let line_key = key_attr.captures(attrs).map(|c| c[1].trim().to_string());
+        let Some((text, syllables, inline_roman)) =
+            parse_ttml_paragraph(&p[2], begin_attr, end_attr)
+        else {
             continue;
         };
 
         if text.is_empty() {
             continue;
         }
+        let transliteration = if !inline_roman.is_empty() {
+            inline_roman
+        } else if let Some(ref k) = line_key {
+            translit_by_key.get(k).cloned().unwrap_or_default()
+        } else {
+            String::new()
+        };
         let duration = ttml_duration(start, end);
         lines.push(LyricLine {
             time_ms: start,
@@ -1652,7 +1701,7 @@ pub fn parse_ttml(ttml: &str) -> Vec<LyricLine> {
             },
             text,
             syllables,
-            transliteration: String::new(),
+            transliteration,
             agent,
         });
     }
@@ -1665,17 +1714,20 @@ pub fn parse_ttml(ttml: &str) -> Vec<LyricLine> {
 struct TtmlSpan {
     timing: Option<usize>,
     is_background: bool,
+    is_roman: bool,
+    is_translation: bool,
 }
 
 fn parse_ttml_paragraph(
     inner: &str,
     begin_attr: &Regex,
     end_attr: &Regex,
-) -> Option<(String, Vec<LyricSyllable>)> {
+) -> Option<(String, Vec<LyricSyllable>, String)> {
     let mut reader = Reader::from_str(inner);
     let mut stack = Vec::<TtmlSpan>::new();
     let mut timings = Vec::new();
     let mut runs = Vec::<(TtmlSpan, String)>::new();
+    let mut roman_parts = Vec::<String>::new();
 
     loop {
         let current = stack.last().copied().unwrap_or_default();
@@ -1683,15 +1735,26 @@ fn parse_ttml_paragraph(
             Event::Start(element) => {
                 let mut span = current;
                 if element.local_name().as_ref().eq_ignore_ascii_case(b"span") {
-                    span.is_background |= element.attributes().flatten().any(|attr| {
-                        attr.key.local_name().as_ref() == b"role" && attr.value.as_ref() == b"x-bg"
-                    });
-                    let attrs = String::from_utf8_lossy(element.attributes_raw());
-                    if let (Some(begin), Some(end)) =
-                        (begin_attr.captures(&attrs), end_attr.captures(&attrs))
-                    {
-                        span.timing = Some(timings.len());
-                        timings.push((parse_ttml_time(&begin[1]), parse_ttml_time(&end[1])));
+                    for attr in element.attributes().flatten() {
+                        if attr.key.local_name().as_ref() == b"role" {
+                            let v = attr.value.as_ref();
+                            if v == b"x-bg" {
+                                span.is_background = true;
+                            } else if v == b"x-roman" {
+                                span.is_roman = true;
+                            } else if v == b"x-translation" {
+                                span.is_translation = true;
+                            }
+                        }
+                    }
+                    if !span.is_roman && !span.is_translation {
+                        let attrs = String::from_utf8_lossy(element.attributes_raw());
+                        if let (Some(begin), Some(end)) =
+                            (begin_attr.captures(&attrs), end_attr.captures(&attrs))
+                        {
+                            span.timing = Some(timings.len());
+                            timings.push((parse_ttml_time(&begin[1]), parse_ttml_time(&end[1])));
+                        }
                     }
                 }
                 stack.push(span);
@@ -1710,6 +1773,13 @@ fn parse_ttml_paragraph(
             Event::Eof => break,
             _ => continue,
         };
+        if current.is_translation {
+            continue;
+        }
+        if current.is_roman {
+            roman_parts.push(text);
+            continue;
+        }
         if let Some((_, previous_text)) = runs.last_mut().filter(|(span, _)| *span == current) {
             previous_text.push_str(&text);
         } else {
@@ -1767,7 +1837,14 @@ fn parse_ttml_paragraph(
     } else {
         pending
     };
-    Some((whitespace.replace_all(text.trim(), " ").into_owned(), syllables))
+    let roman_joined = whitespace
+        .replace_all(roman_parts.join("").trim(), " ")
+        .into_owned();
+    Some((
+        whitespace.replace_all(text.trim(), " ").into_owned(),
+        syllables,
+        roman_joined,
+    ))
 }
 
 fn ttml_duration(start: i64, end: i64) -> i64 {
@@ -2012,5 +2089,31 @@ mod tests {
         let lines = parse_ttml(ttml);
         assert_eq!(lines[0].text, "Lead & echo (again)");
         assert_eq!(lines[0].syllables[1].text.trim(), "(again)");
+    }
+
+    #[test]
+    fn ttml_extracts_itunes_transliteration_and_inline_roman_and_preserves_agent() {
+        let ttml = r#"<tt><head><metadata><itunes:transliteration><text for="L1">konnichiwa sekai</text></itunes:transliteration></metadata></head><body><div><p begin="1000ms" end="3000ms" itunes:key="L1" ttm:agent="v2"><span begin="1000ms" end="2000ms">こんにちは</span><span begin="2000ms" end="3000ms">世界</span></p><p begin="3500ms" end="5000ms"><span begin="3500ms" end="5000ms">ありがとう</span><span ttm:role="x-roman">arigatou</span></p></div></body></tt>"#;
+        let parsed = parse_ttml(ttml);
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].text, "こんにちは 世界");
+        assert_eq!(parsed[0].transliteration, "konnichiwa sekai");
+        assert_eq!(parsed[0].agent.as_deref(), Some("v2"));
+        assert_eq!(parsed[1].text, "ありがとう");
+        assert_eq!(parsed[1].transliteration, "arigatou");
+
+        let normalized = normalize_karaoke_timings(
+            &LyricsResult {
+                lines: parsed,
+                is_synced: true,
+                is_word_synced: true,
+                ..Default::default()
+            },
+            "Song",
+            "Artist",
+        );
+        assert_eq!(normalized.lines[0].agent.as_deref(), Some("v2"));
+        assert_eq!(normalized.lines[0].transliteration, "konnichiwa sekai");
+        assert_eq!(normalized.lines[1].transliteration, "arigatou");
     }
 }

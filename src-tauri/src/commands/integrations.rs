@@ -30,7 +30,6 @@ use crate::integrations::importers::playlist_link::{detect_playlist_link, Playli
 use crate::integrations::jam::jam_client::{JamController, JamSnapshot, JamTrack};
 use crate::integrations::lastfm::auth_repository::{AuthState, WebAuthHandshake};
 use crate::integrations::lastfm::profile_providers::fetch_user_profile_stats;
-use crate::integrations::lyrics::lyrics_translation::LyricsTranslator;
 use crate::integrations::podcasts::podcast_repository::{
     PodcastApiError, PodcastRepository, PodcastTubeClient,
 };
@@ -206,9 +205,18 @@ fn podcast_repo(state: &AppState) -> PodcastRepository {
 
 // Lyrics commands
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LyricsPartialEvent {
+    pub track_id: String,
+    pub request_id: String,
+    pub result: LyricsResult,
+}
+
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn lyrics_fetch(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     title: String,
     artist: String,
@@ -219,11 +227,17 @@ pub async fn lyrics_fetch(
     video_id: Option<String>,
     preferred_provider_id: String,
     exclude_provider_ids: Vec<String>,
+    track_id: Option<String>,
+    request_id: Option<String>,
 ) -> Result<LyricsResult, String> {
+    use tauri::Emitter;
     let excludes: HashSet<String> = exclude_provider_ids.into_iter().collect();
+    let tid = track_id.unwrap_or_default();
+    let rid = request_id.unwrap_or_default();
+    let emit_app = app.clone();
     Ok(state
         .lyrics_repo
-        .get_lyrics(
+        .get_lyrics_with_partials(
             &title,
             &artist,
             &album,
@@ -233,6 +247,18 @@ pub async fn lyrics_fetch(
             video_id.as_deref(),
             &preferred_provider_id,
             &excludes,
+            move |partial| {
+                if !tid.is_empty() && !partial.is_empty() {
+                    let _ = emit_app.emit(
+                        "lyrics-partial",
+                        LyricsPartialEvent {
+                            track_id: tid.clone(),
+                            request_id: rid.clone(),
+                            result: partial,
+                        },
+                    );
+                }
+            },
         )
         .await)
 }
@@ -267,8 +293,31 @@ pub async fn lyrics_translate(
     target: String,
     lines: Vec<String>,
 ) -> Result<Vec<Option<String>>, String> {
-    let translator = LyricsTranslator::with_client(state.http.clone());
-    Ok(translator.translate(&track_key, &target, &lines).await)
+    Ok(state.lyrics_translator.translate(&track_key, &target, &lines).await)
+}
+
+#[tauri::command]
+pub async fn lyrics_romanize(
+    state: State<'_, AppState>,
+    track_key: String,
+    lines: Vec<String>,
+) -> Result<Vec<Option<String>>, String> {
+    Ok(state.lyrics_translator.romanize(&track_key, &lines).await)
+}
+
+#[tauri::command]
+pub fn lyrics_get_offset(state: State<'_, AppState>, track_key: String) -> i64 {
+    state.prefs.get_lyrics_offset(&track_key)
+}
+
+#[tauri::command]
+pub fn lyrics_set_offset(state: State<'_, AppState>, track_key: String, offset_ms: i64) {
+    state.prefs.set_lyrics_offset(&track_key, offset_ms);
+}
+
+#[tauri::command]
+pub fn lyrics_reset_offset(state: State<'_, AppState>, track_key: String) {
+    state.prefs.reset_lyrics_offset(&track_key);
 }
 
 // Last.fm & Extra Scrobblers commands

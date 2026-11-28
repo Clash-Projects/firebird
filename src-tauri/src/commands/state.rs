@@ -29,6 +29,7 @@ use crate::integrations::lastfm::lastfm_api::LastFmApiService;
 use crate::integrations::lastfm::rate_guard::LastFmRateGuard;
 use crate::integrations::lastfm::scrobble_repository::ScrobbleRepository;
 use crate::integrations::lyrics::lyrics_repository::LyricsRepository;
+use crate::integrations::lyrics::lyrics_translation::LyricsTranslator;
 use crate::integrations::presence::discord_presence_service::DiscordPresenceService;
 use crate::integrations::scrobblers::extra_scrobblers::{
     ExtraScrobbler, ExtraScrobblers, LibreFmScrobbler, ListenBrainzScrobbler,
@@ -65,6 +66,7 @@ pub struct AppState {
     pub official_artwork: Arc<OfficialArtworkService>,
     pub animated_artwork: Arc<AnimatedArtworkService>,
     pub lyrics_repo: Arc<LyricsRepository>,
+    pub lyrics_translator: Arc<LyricsTranslator>,
     pub search_repo: Arc<SearchRepository>,
     pub feed_repo: Arc<FeedRepository>,
     pub spotify_auth: Arc<SpotifyAuth>,
@@ -182,6 +184,7 @@ impl AppState {
             Some(Arc::clone(&tube)),
             Some(Arc::clone(&db)),
         ));
+        let lyrics_translator = Arc::new(LyricsTranslator::with_client(http.clone()));
         let search_repo = Arc::new(SearchRepository::new(
             Arc::clone(&tube),
             Arc::clone(&db),
@@ -266,6 +269,7 @@ impl AppState {
             official_artwork,
             animated_artwork,
             lyrics_repo,
+            lyrics_translator,
             search_repo,
             feed_repo,
             spotify_auth,

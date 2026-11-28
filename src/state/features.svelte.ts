@@ -1,7 +1,10 @@
-import { ipcInvoke, isTauriRuntime } from '$src/lib/ipc';
+import { ipcInvoke, ipcListen, isTauriRuntime } from '$src/lib/ipc';
+import { needsRomanization } from '$src/features/lyrics/lyricAdapter';
+import { playerStore } from './player.svelte';
 import { settingsStore } from './settings.svelte';
 import type {
   AudioDevice,
+  LyricLine,
   LyricsDocument,
   PodcastShelfItem,
   PodcastShow,
@@ -9,23 +12,23 @@ import type {
   Track,
 } from './types';
 
-export const LYRICS_PROVIDERS: ReadonlyArray<{ id: string; label: string }> = [
-  { id: 'auto', label: 'Auto' },
-  { id: 'lastwave', label: 'LastWave' },
-  { id: 'lrc_red', label: 'lrc.red' },
-  { id: 'apple_music', label: 'Apple Music' },
-  { id: 'better_lyrics', label: 'BetterLyrics' },
-  { id: 'better_lyrics_portato', label: 'BetterLyrics (Portato)' },
-  { id: 'kugou', label: 'KuGou' },
-  { id: 'bini_lyrics', label: 'BiniLyrics' },
-  { id: 'musixmatch', label: 'Musixmatch' },
-  { id: 'lrclib', label: 'LRCLIB' },
-  { id: 'lyrics_plus', label: 'LyricsPlus' },
-  { id: 'unison', label: 'Unison' },
-  { id: 'youtube_captions', label: 'YouTube Captions' },
-  { id: 'youtube_music', label: 'YouTube Music' },
-  { id: 'megalobiz', label: 'Megalobiz' },
-  { id: 'genius', label: 'Genius' },
+export const LYRICS_PROVIDERS: ReadonlyArray<{ id: string; label: string; subtitle: string }> = [
+  { id: 'auto', label: 'Auto', subtitle: 'Fastest word-sync wins, LRCLIB fallback' },
+  { id: 'lastwave', label: 'LastWave', subtitle: 'Syllable & line-synced Apple lyrics first' },
+  { id: 'lrc_red', label: 'lrc.red', subtitle: 'ISRC-indexed syllable TTML & LRC first' },
+  { id: 'apple_music', label: 'Apple Music', subtitle: 'Syllable-synced Apple Music lyrics first' },
+  { id: 'better_lyrics', label: 'BetterLyrics', subtitle: 'Word-synced lyrics first' },
+  { id: 'better_lyrics_portato', label: 'QQ Karaoke', subtitle: 'QQ Music karaoke word timings first' },
+  { id: 'kugou', label: 'Kugou', subtitle: 'KRC word-synced lyrics first' },
+  { id: 'bini_lyrics', label: 'Syllable-Sync', subtitle: 'Recording-matched syllable lyrics first' },
+  { id: 'musixmatch', label: 'Catalog', subtitle: 'Largest catalogue line-sync first' },
+  { id: 'lrclib', label: 'LRCLIB', subtitle: 'Line-synced community lyrics first' },
+  { id: 'lyrics_plus', label: 'LyricsPlus', subtitle: 'Syllable-synced on community mirrors first' },
+  { id: 'unison', label: 'Unison', subtitle: 'Community-submitted synced lyrics first' },
+  { id: 'youtube_captions', label: 'YouTube Captions', subtitle: 'Timed captions from the playing video first' },
+  { id: 'youtube_music', label: 'YouTube Music', subtitle: "Plain lyrics from the video's Lyrics tab first" },
+  { id: 'megalobiz', label: 'Megalobiz', subtitle: 'Community line-synced LRC first' },
+  { id: 'genius', label: 'Genius', subtitle: 'Plain-text web catalogue, tried last' },
 ];
 
 export const LYRICS_ANIMATION_OPTIONS: ReadonlyArray<{ id: string; label: string }> = [
@@ -59,6 +62,36 @@ export const LYRICS_TRANSLATION_OPTIONS: ReadonlyArray<{ id: string; label: stri
   { id: 'ja', label: 'Japanese' },
   { id: 'ko', label: 'Korean' },
 ];
+
+export const LYRICS_AUTO_HIDE_OPTIONS: ReadonlyArray<{ seconds: number; label: string }> = [
+  { seconds: 0, label: 'Always on' },
+  { seconds: 2, label: '2 seconds' },
+  { seconds: 4, label: '4 seconds' },
+  { seconds: 6, label: '6 seconds' },
+  { seconds: 8, label: '8 seconds' },
+  { seconds: 10, label: '10 seconds' },
+];
+
+export function lyricsSourceToProviderId(source: string): string | null {
+  const s = source.trim().toLowerCase();
+  if (!s) return null;
+  if (s.startsWith('lastwave')) return 'lastwave';
+  if (s.startsWith('lrc.red')) return 'lrc_red';
+  if (s.startsWith('apple music') || s.includes('apple')) return 'apple_music';
+  if (s.startsWith('qq karaoke') || s.startsWith('portato')) return 'better_lyrics_portato';
+  if (s.startsWith('betterlyrics')) return 'better_lyrics';
+  if (s.startsWith('kugou')) return 'kugou';
+  if (s.startsWith('syllable-sync') || s.startsWith('bini')) return 'bini_lyrics';
+  if (s.startsWith('catalog') || s.startsWith('musixmatch')) return 'musixmatch';
+  if (s.includes('lrclib')) return 'lrclib';
+  if (s.startsWith('lyricsplus')) return 'lyrics_plus';
+  if (s.startsWith('unison')) return 'unison';
+  if (s.startsWith('youtube captions')) return 'youtube_captions';
+  if (s.startsWith('youtube music')) return 'youtube_music';
+  if (s.startsWith('megalobiz')) return 'megalobiz';
+  if (s.startsWith('genius')) return 'genius';
+  return null;
+}
 
 export const EQ_FREQUENCIES = [
   31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000,
@@ -148,13 +181,25 @@ interface BackendLyricsResult {
     durationMs?: number;
     text?: string;
     transliteration?: string;
-    syllables?: Array<{ timeMs?: number; durationMs?: number; text?: string }>;
+    agent?: string;
+    syllables?: Array<{
+      timeMs?: number;
+      durationMs?: number;
+      text?: string;
+      isBackground?: boolean;
+    }>;
   }>;
   plainLyrics?: string;
   isSynced?: boolean;
   isWordSynced?: boolean;
   isInstrumental?: boolean;
   source?: string;
+}
+
+interface BackendLyricsPartialEvent {
+  trackId: string;
+  requestId: string;
+  result: BackendLyricsResult;
 }
 
 interface BackendPodcastShelf {
@@ -191,15 +236,20 @@ class FeaturesStore {
   selectedDeviceId = $state('');
 
   lyricsByTrack = $state<Record<string, LyricsDocument>>({});
+  lyricsErrorByTrack = $state<Record<string, string>>({});
   lyricsProviderId = $state('auto');
+  lyricsProviderOverrides = $state<Record<string, string | null>>({});
+  lyricsExcludedProviders = $state<Record<string, string[]>>({});
+  lyricsFetchedDurationSec = $state<Record<string, number>>({});
   wordByWord = $state(true);
   lyricsLoading = $state(false);
   lyricsOffsetMs = $state<Record<string, number>>({});
   showTranslation = $state(false);
   lyricsTranslationLang = $state('off');
-  showRomanized = $state(false);
+  showRomanized = $state(true);
   lyricsFontScale = $state(1.0);
   lyricsAnimation = $state('apple_fluid');
+  lyricsAutoHideSeconds = $state(0);
 
   podcasts = $state<PodcastShow[]>([]);
   podcastShelves = $state<PodcastShelfItem[]>([]);
@@ -215,6 +265,11 @@ class FeaturesStore {
   toasts = $state<ToastMessage[]>([]);
 
   private lyricsInFlight = new Set<string>();
+  private lyricsRequestIds: Record<string, string> = {};
+  private loadedOffsets = new Set<string>();
+  private translationMemory = new Map<string, Array<string | null>>();
+  private romanizeMemory = new Map<string, Array<string | null>>();
+  private unlistenPartial: (() => void) | null = null;
 
   selectedDevice = $derived<AudioDevice | undefined>(
     this.devices.find((d) => d.id === this.selectedDeviceId) ?? this.devices[0]
@@ -222,6 +277,16 @@ class FeaturesStore {
 
   async connectBackend() {
     if (!isTauriRuntime()) return;
+    if (!this.unlistenPartial) {
+      void ipcListen<BackendLyricsPartialEvent>('lyrics-partial', (ev) => {
+        if (!ev?.trackId || !ev.result) return;
+        if (ev.requestId && this.lyricsRequestIds[ev.trackId] !== ev.requestId) return;
+        const effectiveProv = this.getEffectiveProviderId(ev.trackId);
+        this.applyBackendLyricsResult(ev.trackId, ev.result, effectiveProv);
+      }).then((fn) => {
+        this.unlistenPartial = fn ?? null;
+      });
+    }
     await Promise.allSettled([
       this.refreshAudioOutput(),
       this.refreshEqState(),
@@ -269,6 +334,9 @@ class FeaturesStore {
     }
     if (typeof all.lyricsAnimation === 'string' && all.lyricsAnimation) {
       this.lyricsAnimation = all.lyricsAnimation;
+    }
+    if (typeof all.lyricsAutoHideSeconds === 'number' && all.lyricsAutoHideSeconds >= 0) {
+      this.lyricsAutoHideSeconds = all.lyricsAutoHideSeconds;
     }
     if (typeof all.headphoneProfile === 'string' && all.headphoneProfile) {
       this.headphoneProfile = all.headphoneProfile;
@@ -385,6 +453,15 @@ class FeaturesStore {
     }
   }
 
+  async loadLyricsOffset(trackId: string) {
+    if (!isTauriRuntime() || !trackId || this.loadedOffsets.has(trackId)) return;
+    this.loadedOffsets.add(trackId);
+    const saved = await ipcInvoke<number>('lyrics_get_offset', { trackKey: trackId });
+    if (typeof saved === 'number' && Number.isFinite(saved)) {
+      this.lyricsOffsetMs = { ...this.lyricsOffsetMs, [trackId]: saved };
+    }
+  }
+
   getLyricsOffset(trackId: string): number {
     return this.lyricsOffsetMs[trackId] ?? 0;
   }
@@ -392,87 +469,313 @@ class FeaturesStore {
   adjustLyricsOffset(trackId: string, deltaMs: number) {
     const next = (this.lyricsOffsetMs[trackId] ?? 0) + deltaMs;
     this.lyricsOffsetMs = { ...this.lyricsOffsetMs, [trackId]: next };
+    if (isTauriRuntime()) {
+      void ipcInvoke('lyrics_set_offset', { trackKey: trackId, offsetMs: next });
+    }
   }
 
   resetLyricsOffset(trackId: string) {
     this.lyricsOffsetMs = { ...this.lyricsOffsetMs, [trackId]: 0 };
+    if (isTauriRuntime()) {
+      void ipcInvoke('lyrics_reset_offset', { trackKey: trackId });
+    }
+  }
+
+  getEffectiveProviderId(trackId?: string | null): string {
+    if (trackId && this.lyricsProviderOverrides[trackId]) {
+      return this.lyricsProviderOverrides[trackId]!;
+    }
+    return this.lyricsProviderId || 'auto';
+  }
+
+  /**
+   * Per-track provider selection matching OG Flutter `_SourceMenu` & `NowPlayingOverflowMenu`:
+   * - `pickedId === null`: "Try another source" — keeps override, adds current winner to excludes.
+   * - `pickedId === 'auto'`: resets per-track override & excludes to Auto.
+   * - `pickedId === '<provider>'`: pins per-track override AND excludes previous winner from fallback.
+   */
+  selectTrackLyricsProvider(track: Track, pickedId: string | null) {
+    const currentSource = this.lyricsByTrack[track.id]?.provider ?? '';
+    const currentId = lyricsSourceToProviderId(currentSource);
+    const prevExcludes = this.lyricsExcludedProviders[track.id] ?? [];
+
+    if (pickedId === null) {
+      const nextExcludes =
+        currentId && !prevExcludes.includes(currentId)
+          ? [...prevExcludes, currentId]
+          : [...prevExcludes];
+      this.lyricsExcludedProviders = {
+        ...this.lyricsExcludedProviders,
+        [track.id]: nextExcludes,
+      };
+    } else if (pickedId === 'auto') {
+      this.lyricsProviderOverrides = {
+        ...this.lyricsProviderOverrides,
+        [track.id]: 'auto',
+      };
+      this.lyricsExcludedProviders = {
+        ...this.lyricsExcludedProviders,
+        [track.id]: [],
+      };
+    } else {
+      const nextExcludes =
+        currentId && currentId !== pickedId && !prevExcludes.includes(currentId)
+          ? [...prevExcludes, currentId]
+          : [...prevExcludes];
+      this.lyricsProviderOverrides = {
+        ...this.lyricsProviderOverrides,
+        [track.id]: pickedId,
+      };
+      this.lyricsExcludedProviders = {
+        ...this.lyricsExcludedProviders,
+        [track.id]: nextExcludes,
+      };
+    }
+
+    void this.fetchLyricsForTrack(track, { forceRefresh: true });
+  }
+
+  setDefaultLyricsProvider(providerId: string) {
+    this.lyricsProviderId = providerId;
+    settingsStore.saveStringPref('lw_lyrics_provider', providerId);
+    const cur = playerStore.currentTrack;
+    if (cur) {
+      // Clear per-track override so changing default in Settings updates Now Playing immediately
+      const nextOverrides = { ...this.lyricsProviderOverrides };
+      delete nextOverrides[cur.id];
+      this.lyricsProviderOverrides = nextOverrides;
+      this.lyricsExcludedProviders = { ...this.lyricsExcludedProviders, [cur.id]: [] };
+      void this.fetchLyricsForTrack(cur, { forceRefresh: true, providerId });
+    }
+  }
+
+  private applyBackendLyricsResult(
+    trackId: string,
+    res: BackendLyricsResult,
+    fallbackProvider: string
+  ) {
+    if (res.isInstrumental) {
+      this.lyricsByTrack = {
+        ...this.lyricsByTrack,
+        [trackId]: {
+          trackId,
+          provider: res.source || fallbackProvider,
+          synced: false,
+          wordSynced: false,
+          isInstrumental: true,
+          lines: [],
+        },
+      };
+      return;
+    }
+
+    const rawLines = Array.isArray(res.lines) ? res.lines : [];
+    let mappedLines: LyricLine[] = rawLines.map((l) => {
+      const startMs = Math.max(0, Number(l.timeMs) || 0);
+      const dur = Math.max(0, Number(l.durationMs) || 0);
+      return {
+        startMs,
+        endMs: startMs + dur,
+        text: l.text || '',
+        romanized: l.transliteration || undefined,
+        agent: l.agent || undefined,
+        words:
+          l.syllables && l.syllables.length > 0
+            ? l.syllables.map((s) => {
+                const ws = Math.max(0, Number(s.timeMs) || startMs);
+                const wd = Math.max(0, Number(s.durationMs) || 0);
+                return {
+                  text: s.text || '',
+                  startMs: ws,
+                  endMs: ws + Math.max(80, wd),
+                  isBackground: Boolean(s.isBackground),
+                };
+              })
+            : undefined,
+      };
+    });
+
+    if (mappedLines.length === 0 && res.plainLyrics?.trim()) {
+      mappedLines = res.plainLyrics
+        .split(/\r?\n/)
+        .map((t) => t.trim())
+        .filter(Boolean)
+        .map((text) => ({
+          startMs: 0,
+          endMs: 0,
+          text,
+          romanized: undefined,
+          words: undefined,
+        }));
+    }
+
+    // Preserve previously resolved translations/romanisations if line texts match
+    const prevDoc = this.lyricsByTrack[trackId];
+    if (prevDoc && prevDoc.lines.length === mappedLines.length) {
+      mappedLines = mappedLines.map((line, i) => {
+        const prev = prevDoc.lines[i];
+        if (prev && prev.text === line.text) {
+          return {
+            ...line,
+            translation: line.translation ?? prev.translation,
+            romanized: line.romanized ?? prev.romanized,
+          };
+        }
+        return line;
+      });
+    }
+
+    this.lyricsByTrack = {
+      ...this.lyricsByTrack,
+      [trackId]: {
+        trackId,
+        provider: res.source || fallbackProvider,
+        synced: Boolean(res.isSynced && rawLines.length > 0),
+        wordSynced: Boolean(res.isWordSynced),
+        isInstrumental: false,
+        lines: mappedLines,
+      },
+    };
+
+    if (mappedLines.length > 0) {
+      void this.enrichLyricsForTrack(trackId);
+    }
+  }
+
+  async enrichLyricsForTrack(trackId: string) {
+    if (!isTauriRuntime()) return;
+    const doc = this.lyricsByTrack[trackId];
+    if (!doc || doc.lines.length === 0) return;
+
+    const lineTexts = doc.lines.map((l) => l.text);
+    const fp = lineTexts.join('\n');
+
+    // 1. Live Translation
+    const targetLang = this.showTranslation ? this.lyricsTranslationLang : 'off';
+    if (targetLang && targetLang !== 'off') {
+      const cacheKey = `${trackId}|${targetLang}|${fp}`;
+      let translated = this.translationMemory.get(cacheKey);
+      if (!translated) {
+        const res = await ipcInvoke<Array<string | null>>('lyrics_translate', {
+          trackKey: trackId,
+          target: targetLang,
+          lines: lineTexts,
+        }).catch(() => null);
+        if (Array.isArray(res) && res.length === lineTexts.length) {
+          translated = res;
+          this.translationMemory.set(cacheKey, res);
+        }
+      }
+      const latest = this.lyricsByTrack[trackId];
+      if (translated && latest && latest.lines.length === translated.length) {
+        const nextLines = latest.lines.map((l, idx) => ({
+          ...l,
+          translation: translated![idx] ?? undefined,
+        }));
+        this.lyricsByTrack = {
+          ...this.lyricsByTrack,
+          [trackId]: { ...latest, lines: nextLines },
+        };
+      }
+    }
+
+    // 2. Phonetic Romanisation fallback for non-Latin scripts lacking provider transliteration
+    if (this.showRomanized) {
+      const currentDoc = this.lyricsByTrack[trackId];
+      if (!currentDoc) return;
+      const missingRoman = currentDoc.lines.some(
+        (l) => !l.romanized && needsRomanization(l.text)
+      );
+      if (missingRoman) {
+        const romKey = `rom|${trackId}|${fp}`;
+        let romanized = this.romanizeMemory.get(romKey);
+        if (!romanized) {
+          const res = await ipcInvoke<Array<string | null>>('lyrics_romanize', {
+            trackKey: trackId,
+            lines: lineTexts,
+          }).catch(() => null);
+          if (Array.isArray(res) && res.length === lineTexts.length) {
+            romanized = res;
+            this.romanizeMemory.set(romKey, res);
+          }
+        }
+        const latest = this.lyricsByTrack[trackId];
+        if (romanized && latest && latest.lines.length === romanized.length) {
+          const nextLines = latest.lines.map((l, idx) => ({
+            ...l,
+            romanized: l.romanized || romanized![idx] || undefined,
+          }));
+          this.lyricsByTrack = {
+            ...this.lyricsByTrack,
+            [trackId]: { ...latest, lines: nextLines },
+          };
+        }
+      }
+    }
   }
 
   async fetchLyricsForTrack(
     track: Track,
-    opts?: { forceRefresh?: boolean; providerId?: string }
+    opts?: { forceRefresh?: boolean; providerId?: string; durationOverrideSec?: number }
   ) {
     const force = Boolean(opts?.forceRefresh);
-    const providerId = opts?.providerId ?? this.lyricsProviderId ?? 'auto';
+    const providerId = opts?.providerId ?? this.getEffectiveProviderId(track.id);
+    const excludes = this.lyricsExcludedProviders[track.id] ?? [];
     if (!isTauriRuntime() || !track.id) return;
     if (!force && (this.lyricsByTrack[track.id] || this.lyricsInFlight.has(track.id))) {
       return;
     }
+
+    void this.loadLyricsOffset(track.id);
+
+    const liveDur =
+      opts?.durationOverrideSec ??
+      (playerStore.currentTrack?.id === track.id && playerStore.durationSec > 0
+        ? playerStore.durationSec
+        : track.durationSec);
+    const durSec = liveDur > 0 ? Math.round(liveDur) : 0;
+
+    const reqId = `${track.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    this.lyricsRequestIds[track.id] = reqId;
     this.lyricsInFlight.add(track.id);
     this.lyricsLoading = true;
+    const nextErrs = { ...this.lyricsErrorByTrack };
+    delete nextErrs[track.id];
+    this.lyricsErrorByTrack = nextErrs;
+
     try {
       const res = await ipcInvoke<BackendLyricsResult>('lyrics_fetch', {
         title: track.title,
         artist: track.artist,
         album: track.album,
-        durationSeconds: track.durationSec > 0 ? Math.round(track.durationSec) : null,
+        durationSeconds: durSec > 0 ? durSec : null,
         forceRefresh: force,
         wordByWord: this.wordByWord,
         videoId: track.videoId || null,
         preferredProviderId: providerId,
-        excludeProviderIds: [],
+        excludeProviderIds: excludes,
+        trackId: track.id,
+        requestId: reqId,
       });
-      if (!res) return;
-
-      const rawLines = Array.isArray(res.lines) ? res.lines : [];
-      let mappedLines = rawLines.map((l) => {
-        const startMs = Math.max(0, Number(l.timeMs) || 0);
-        const dur = Math.max(0, Number(l.durationMs) || 0);
-        return {
-          startMs,
-          endMs: startMs + dur,
-          text: l.text || '',
-          romanized: l.transliteration || undefined,
-          words:
-            l.syllables && l.syllables.length > 0
-              ? l.syllables.map((s) => {
-                  const ws = Math.max(0, Number(s.timeMs) || startMs);
-                  const wd = Math.max(0, Number(s.durationMs) || 0);
-                  return { text: s.text || '', startMs: ws, endMs: ws + Math.max(80, wd) };
-                })
-              : undefined,
-        };
-      });
-
-      if (mappedLines.length === 0 && res.plainLyrics?.trim()) {
-        mappedLines = res.plainLyrics
-          .split(/\r?\n/)
-          .map((t) => t.trim())
-          .filter(Boolean)
-          .map((text, idx) => ({
-            startMs: idx * 1000,
-            endMs: (idx + 1) * 1000,
-            text,
-            romanized: undefined,
-            words: undefined,
-          }));
-      }
-
-      if (mappedLines.length === 0) return;
-
-      this.lyricsByTrack = {
-        ...this.lyricsByTrack,
-        [track.id]: {
-          trackId: track.id,
-          provider: res.source || providerId,
-          synced: Boolean(res.isSynced && rawLines.length > 0),
-          wordSynced: Boolean(res.isWordSynced),
-          lines: mappedLines,
-        },
+      if (this.lyricsRequestIds[track.id] !== reqId) return;
+      this.lyricsFetchedDurationSec = {
+        ...this.lyricsFetchedDurationSec,
+        [track.id]: durSec,
       };
+      if (!res) return;
+      this.applyBackendLyricsResult(track.id, res, providerId);
+    } catch (err) {
+      if (this.lyricsRequestIds[track.id] === reqId) {
+        this.lyricsErrorByTrack = {
+          ...this.lyricsErrorByTrack,
+          [track.id]: err instanceof Error ? err.message : 'Lyrics unavailable',
+        };
+      }
     } finally {
-      this.lyricsInFlight.delete(track.id);
-      this.lyricsLoading = false;
+      if (this.lyricsRequestIds[track.id] === reqId) {
+        this.lyricsInFlight.delete(track.id);
+        this.lyricsLoading = this.lyricsInFlight.size > 0;
+      }
     }
   }
 
@@ -537,15 +840,40 @@ class FeaturesStore {
     return this.lyricsByTrack[trackId] ?? null;
   }
 
+  setWordByWord(enabled: boolean) {
+    this.wordByWord = enabled;
+    settingsStore.saveBoolPref('lw_word_by_word', enabled);
+    const cur = playerStore.currentTrack;
+    if (cur) {
+      void this.fetchLyricsForTrack(cur, { forceRefresh: true });
+    }
+  }
+
   setLyricsRomanized(enabled: boolean) {
     this.showRomanized = enabled;
     settingsStore.saveBoolPref('lw_lyrics_transliteration', enabled);
+    const cur = playerStore.currentTrack;
+    if (enabled && cur) {
+      void this.enrichLyricsForTrack(cur.id);
+    }
+  }
+
+  toggleLyricsTranslationQuick() {
+    if (this.showTranslation && this.lyricsTranslationLang !== 'off') {
+      this.setLyricsTranslationLang('off');
+    } else {
+      this.setLyricsTranslationLang(this.lyricsTranslationLang !== 'off' ? this.lyricsTranslationLang : 'en');
+    }
   }
 
   setLyricsTranslationLang(lang: string) {
     this.lyricsTranslationLang = lang;
     this.showTranslation = lang !== 'off';
     settingsStore.saveStringPref('lw_lyrics_translation', lang);
+    const cur = playerStore.currentTrack;
+    if (cur && lang !== 'off') {
+      void this.enrichLyricsForTrack(cur.id);
+    }
   }
 
   setLyricsTextScale(scale: number) {
@@ -556,6 +884,11 @@ class FeaturesStore {
   setLyricsAnimation(animation: string) {
     this.lyricsAnimation = animation;
     settingsStore.saveStringPref('lw_lyrics_animation', animation);
+  }
+
+  setLyricsAutoHideSeconds(seconds: number) {
+    this.lyricsAutoHideSeconds = seconds;
+    settingsStore.saveIntPref('lw_lyrics_autohide_seconds', seconds);
   }
 
   sendJamMessage(text: string) {

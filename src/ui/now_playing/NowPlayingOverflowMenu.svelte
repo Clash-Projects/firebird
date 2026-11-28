@@ -6,10 +6,12 @@
     LYRICS_PROVIDERS,
     LYRICS_TEXT_SCALES,
     LYRICS_TRANSLATION_OPTIONS,
+    lyricsSourceToProviderId,
   } from '$src/state/features.svelte';
   import { playerStore } from '$src/state/player.svelte';
   import { settingsStore } from '$src/state/settings.svelte';
   import { waveTooltip } from '$src/ui/components/tooltip';
+  import LyricsShareCard from '$src/ui/lyrics/LyricsShareCard.svelte';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import { immersiveState } from './immersive.svelte';
   import { NOW_PLAYING_STYLES } from './nowPlayingStyle';
@@ -47,10 +49,15 @@
   let resolvedSource = $derived(
     track ? featuresStore.lyricsByTrack[track.id]?.provider || '' : ''
   );
+  let effectiveProviderId = $derived(
+    (resolvedSource ? lyricsSourceToProviderId(resolvedSource) : null) ??
+      featuresStore.getEffectiveProviderId(track?.id)
+  );
   let providerLabel = $derived(
     resolvedSource ||
-      (LYRICS_PROVIDERS.find((p) => p.id === featuresStore.lyricsProviderId)?.label ?? 'Auto')
+      (LYRICS_PROVIDERS.find((p) => p.id === effectiveProviderId)?.label ?? 'Auto')
   );
+  let shareLines = $state<string[] | null>(null);
   let translationLabel = $derived(
     LYRICS_TRANSLATION_OPTIONS.find((t) => t.id === featuresStore.lyricsTranslationLang)?.label ?? 'Off'
   );
@@ -133,21 +140,19 @@
   }
 
   function changeProvider(providerId: string | null) {
-    if (providerId === null) {
-      const idx = LYRICS_PROVIDERS.findIndex((p) => p.id === featuresStore.lyricsProviderId);
-      const next = LYRICS_PROVIDERS[(idx + 1) % LYRICS_PROVIDERS.length];
-      featuresStore.lyricsProviderId = next.id;
-      if (track) {
-        void featuresStore.fetchLyricsForTrack(track, { forceRefresh: true, providerId: next.id });
-      }
-      closeMenu();
-      return;
-    }
-    featuresStore.lyricsProviderId = providerId;
-    settingsStore.saveStringPref('lw_lyrics_provider', providerId);
     if (track) {
-      void featuresStore.fetchLyricsForTrack(track, { forceRefresh: true, providerId });
+      featuresStore.selectTrackLyricsProvider(track, providerId);
+    } else if (providerId !== null) {
+      featuresStore.setDefaultLyricsProvider(providerId);
     }
+    closeMenu();
+  }
+
+  function openShareSongCard() {
+    if (!track) return;
+    const doc = featuresStore.getLyrics(track.id);
+    if (!doc || doc.lines.length === 0) return;
+    shareLines = doc.lines.slice(0, 8).map((l) => l.text).filter(Boolean);
     closeMenu();
   }
 </script>
@@ -259,9 +264,9 @@
           onclick={() => openSubmenuNow('source')}
           class="lw-menu-row"
         >
-          <WaveIcon name="lyrics" size={15} class={featuresStore.lyricsProviderId !== 'auto' ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'} />
+          <WaveIcon name="lyrics" size={15} class={effectiveProviderId !== 'auto' ? 'text-[var(--lw-accent)]' : 'text-[var(--lw-text-secondary)]'} />
           <span class="min-w-0 flex-1 truncate font-medium">Lyrics source</span>
-          <span class="text-[12px] {featuresStore.lyricsProviderId !== 'auto' ? 'font-semibold text-[var(--lw-accent)]' : 'text-[var(--lw-text-tertiary)]'}">{providerLabel}</span>
+          <span class="max-w-[116px] truncate text-[12px] {effectiveProviderId !== 'auto' ? 'font-semibold text-[var(--lw-accent)]' : 'text-[var(--lw-text-tertiary)]'}">{providerLabel}</span>
           <WaveIcon name="chevronRight" size={12} class="text-[var(--lw-text-tertiary)]" />
         </button>
 
@@ -275,7 +280,7 @@
           >
             <div class="now-playing-flyout max-h-[360px] overflow-y-auto">
               {#each LYRICS_PROVIDERS as p (p.id)}
-                {@const active = featuresStore.lyricsProviderId === p.id}
+                {@const active = effectiveProviderId === p.id}
                 <button
                   type="button"
                   onclick={() => changeProvider(p.id)}
@@ -557,6 +562,18 @@
         <span class="lw-menu-hint">F11</span>
       </button>
 
+      {#if track && featuresStore.getLyrics(track.id)?.lines.length}
+        <button
+          type="button"
+          onpointerenter={scheduleCloseSubmenu}
+          onclick={openShareSongCard}
+          class="lw-menu-row"
+        >
+          <WaveIcon name="share" size={15} class="text-[var(--lw-text-secondary)]" />
+          <span class="min-w-0 flex-1 truncate font-medium">Share song card</span>
+        </button>
+      {/if}
+
       <div class="lw-menu-sep"></div>
 
       <!-- 4. Inline NOW PLAYING STYLE segmented control -->
@@ -586,6 +603,12 @@
     </div>
   </div>
 </div>
+
+<LyricsShareCard
+  open={shareLines !== null}
+  lines={shareLines ?? []}
+  onClose={() => (shareLines = null)}
+/>
 
 <style>
   /* Matches _QuickActionButton & _CircularIconButton in now_playing_overflow_menu.dart */

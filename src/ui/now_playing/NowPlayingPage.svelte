@@ -9,7 +9,6 @@
   import AmbientStage from '$src/ui/components/AmbientStage.svelte';
   import AnimatedArtworkVideo from '$src/ui/components/AnimatedArtworkVideo.svelte';
   import { waveTooltip } from '$src/ui/components/tooltip';
-  import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import { immersiveState } from './immersive.svelte';
   import NowPlayingFullBleedView from './NowPlayingFullBleedView.svelte';
@@ -19,7 +18,11 @@
   let track = $derived(playerStore.currentTrack);
   let nextTrack = $derived(playerStore.queue[playerStore.currentIndex + 1] ?? null);
   let doc = $derived(track ? featuresStore.getLyrics(track.id) : null);
-  let lyricsMissing = $derived(!featuresStore.lyricsLoading && (!doc || doc.lines.length === 0));
+  let lyricsMissing = $derived(
+    !featuresStore.lyricsLoading &&
+      Boolean(doc) &&
+      (Boolean(doc?.isInstrumental) || doc!.lines.length === 0)
+  );
 
   let lyricsVisible = $state(true);
   let focusMode = $state(false);
@@ -204,8 +207,8 @@
         {/if}
 
         {#if effectiveLyricsVisible}
-          <div use:waveSmoothScroll class="now-lyrics lw-scroll lw-route-enter">
-            <KaraokeLyricsView fontSize={32} />
+          <div class="now-lyrics lw-route-enter">
+            <KaraokeLyricsView fontSize={36} showHeaderControls={false} />
           </div>
         {/if}
       </div>

@@ -69,6 +69,7 @@ export interface LyricWord {
   text: string;
   startMs: number;
   endMs: number;
+  isBackground?: boolean;
 }
 
 export interface LyricLine {
@@ -78,6 +79,7 @@ export interface LyricLine {
   translation?: string;
   romanized?: string;
   words?: LyricWord[];
+  agent?: string;
 }
 
 export interface LyricsDocument {
@@ -85,6 +87,7 @@ export interface LyricsDocument {
   provider: string;
   synced: boolean;
   wordSynced: boolean;
+  isInstrumental?: boolean;
   lines: LyricLine[];
 }
 

@@ -1080,10 +1080,7 @@
             <Switch
               label="Word-by-word lyrics"
               checked={featuresStore.wordByWord}
-              onchange={(v) => {
-                featuresStore.wordByWord = v;
-                settingsStore.saveBoolPref('lw_word_by_word', v);
-              }}
+              onchange={(v) => featuresStore.setWordByWord(v)}
             />
           </div>
 
@@ -1107,21 +1104,11 @@
               label="Primary provider"
               value={featuresStore.lyricsProviderId}
               options={LYRICS_PROVIDERS.map((p) => ({ value: p.id, label: p.label }))}
-              onchange={(v) => {
-                featuresStore.lyricsProviderId = v;
-                settingsStore.saveStringPref('lw_lyrics_provider', v);
-                if (playerStore.currentTrack) {
-                  void featuresStore.fetchLyricsForTrack(playerStore.currentTrack, {
-                    forceRefresh: true,
-                    providerId: v,
-                  });
-                }
-              }}
+              onchange={(v) => featuresStore.setDefaultLyricsProvider(v)}
             />
             <p class="mt-1.5 text-[12px] text-[var(--lw-text-secondary)]">
-              {featuresStore.lyricsProviderId === 'auto'
-                ? 'Races all 16 synced providers and prefers syllable-timed karaoke.'
-                : `Queries ${LYRICS_PROVIDERS.find((p) => p.id === featuresStore.lyricsProviderId)?.label ?? 'selected source'} first, with fallback when unavailable.`}
+              {LYRICS_PROVIDERS.find((p) => p.id === featuresStore.lyricsProviderId)?.subtitle ??
+                'Fastest word-sync wins, LRCLIB fallback'}
             </p>
           </div>
         </div>

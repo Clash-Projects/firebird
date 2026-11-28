@@ -615,6 +615,38 @@ impl LyricsRepository {
         preferred_provider_id: &str,
         exclude_provider_ids: &HashSet<String>,
     ) -> LyricsResult {
+        self.get_lyrics_with_partials(
+            title,
+            artist,
+            album,
+            duration_seconds,
+            force_refresh,
+            word_by_word,
+            video_id,
+            preferred_provider_id,
+            exclude_provider_ids,
+            |_| {},
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn get_lyrics_with_partials<F>(
+        &self,
+        title: &str,
+        artist: &str,
+        album: &str,
+        duration_seconds: Option<i64>,
+        force_refresh: bool,
+        word_by_word: bool,
+        video_id: Option<&str>,
+        preferred_provider_id: &str,
+        exclude_provider_ids: &HashSet<String>,
+        mut on_partial: F,
+    ) -> LyricsResult
+    where
+        F: FnMut(LyricsResult) + Send,
+    {
         let preferred = LyricsProviderId::from_id(Some(preferred_provider_id));
         let mut sorted_excludes: Vec<&str> =
             exclude_provider_ids.iter().map(String::as_str).collect();
@@ -632,7 +664,11 @@ impl LyricsRepository {
             if let Some(raw_cached) = self.lookup(&key).await {
                 let cached = strip_lyric_credit_lines(&raw_cached, title, artist);
                 if !word_by_word || cached.is_word_synced || cached.is_instrumental {
-                    return lyrics_for_display_mode(&cached, word_by_word);
+                    let disp = lyrics_for_display_mode(&cached, word_by_word);
+                    on_partial(disp.clone());
+                    return disp;
+                } else {
+                    on_partial(lyrics_for_display_mode(&cached, word_by_word));
                 }
             }
         }
@@ -683,6 +719,7 @@ impl LyricsRepository {
                     return lyrics_for_display_mode(&first, word_by_word);
                 }
                 if plausible(&first) {
+                    on_partial(lyrics_for_display_mode(&first, word_by_word));
                     preferred_fallback = Some(first.clone());
                     line_fallback = Some(first);
                 }
@@ -713,6 +750,7 @@ impl LyricsRepository {
                     self.store(&key, &s, title).await;
                     return lyrics_for_display_mode(&s, word_by_word);
                 }
+                on_partial(lyrics_for_display_mode(&s, word_by_word));
                 preferred_fallback = Some(s.clone());
                 line_fallback = Some(s);
             }
@@ -776,6 +814,7 @@ impl LyricsRepository {
                             .map(|cur| Self::is_better_candidate(&result, cur, title))
                             .unwrap_or(true);
                         if should_replace {
+                            on_partial(lyrics_for_display_mode(&result, word_by_word));
                             line_fallback = Some(result);
                         }
                     } else {
@@ -787,6 +826,7 @@ impl LyricsRepository {
                             .map(|cur| Self::is_better_candidate(&result, cur, title))
                             .unwrap_or(true);
                         if should_replace {
+                            on_partial(lyrics_for_display_mode(&result, word_by_word));
                             line_fallback = Some(result.clone());
                         }
                         if result.is_synced {
@@ -1635,6 +1675,8 @@ impl LyricsRepository {
             duration: i64,
             text: String,
             syllables: Vec<LyricSyllable>,
+            transliteration: String,
+            agent: Option<String>,
         }
 
         let mut parsed = Vec::new();
@@ -1659,6 +1701,18 @@ impl LyricsRepository {
                 (end - start).max(0)
             };
             let is_bg = obj.get("background").and_then(Value::as_bool) == Some(true);
+            let agent = if obj.get("oppositeTurn").and_then(Value::as_bool) == Some(true) {
+                Some("v2".to_string())
+            } else {
+                None
+            };
+            let line_roman = obj
+                .get("romanized")
+                .or_else(|| obj.get("transliteration"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .unwrap_or("")
+                .to_string();
             let Some(words) = obj.get("text").and_then(Value::as_array) else {
                 continue;
             };
@@ -1673,6 +1727,7 @@ impl LyricsRepository {
 
             let mut syllables = Vec::new();
             let mut buf = String::new();
+            let mut roman_buf = String::new();
             for (i, w) in word_objs.iter().enumerate() {
                 let wt = w.get("text").and_then(Value::as_str).unwrap_or("");
                 if wt.is_empty() {
@@ -1691,6 +1746,12 @@ impl LyricsRepository {
                     is_background: is_bg,
                 });
                 buf.push_str(wt);
+                if let Some(wr) = w.get("romanized").and_then(Value::as_str) {
+                    roman_buf.push_str(wr);
+                    if !is_part && i < word_objs.len() - 1 && !wr.ends_with(' ') {
+                        roman_buf.push(' ');
+                    }
+                }
                 if !is_part && i < word_objs.len() - 1 {
                     buf.push(' ');
                 }
@@ -1699,11 +1760,18 @@ impl LyricsRepository {
             if text.is_empty() {
                 continue;
             }
+            let transliteration = if !line_roman.is_empty() {
+                line_roman
+            } else {
+                roman_buf.trim().to_string()
+            };
             parsed.push(ParsedLine {
                 start,
                 duration,
                 text,
                 syllables,
+                transliteration,
+                agent,
             });
         }
 
@@ -1721,8 +1789,8 @@ impl LyricsRepository {
                 duration_ms: p.duration,
                 text: p.text,
                 syllables: if word_synced { p.syllables } else { Vec::new() },
-                transliteration: String::new(),
-                agent: None,
+                transliteration: p.transliteration,
+                agent: p.agent,
             })
             .collect();
 

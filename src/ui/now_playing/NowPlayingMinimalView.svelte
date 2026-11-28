@@ -23,7 +23,10 @@
 
   let track = $derived(playerStore.currentTrack);
   let doc = $derived(track ? featuresStore.getLyrics(track.id) : null);
-  let lyricsMissing = $derived(!featuresStore.lyricsLoading && (!doc || doc.lines.length === 0));
+  let lyricsMissing = $derived(
+    !featuresStore.lyricsLoading &&
+      (!doc || Boolean(doc.isInstrumental) || doc.lines.length === 0)
+  );
   let showLyrics = $derived(lyricsVisible && !lyricsMissing);
   let ambientEnabled = $state(true);
 </script>

@@ -5,7 +5,6 @@
   import AmbientStage from '$src/ui/components/AmbientStage.svelte';
   import AnimatedArtworkVideo from '$src/ui/components/AnimatedArtworkVideo.svelte';
   import { waveTooltip } from '$src/ui/components/tooltip';
-  import { waveSmoothScroll } from '$src/ui/theme/smoothScroll';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import { immersiveState } from './immersive.svelte';
   import NowPlayingOverflowMenu from './NowPlayingOverflowMenu.svelte';
@@ -20,7 +19,11 @@
 
   let track = $derived(playerStore.currentTrack);
   let doc = $derived(track ? featuresStore.getLyrics(track.id) : null);
-  let lyricsMissing = $derived(!featuresStore.lyricsLoading && (!doc || doc.lines.length === 0));
+  let lyricsMissing = $derived(
+    !featuresStore.lyricsLoading &&
+      (!doc || Boolean(doc.isInstrumental) || doc.lines.length === 0)
+  );
+  let isInstrumental = $derived(Boolean(doc?.isInstrumental));
 </script>
 
 {#if track}
@@ -84,11 +87,11 @@
           style:opacity={immersiveState.controlsIdle ? 0 : 1}
         >
           <span class="text-[16px] font-medium tracking-[-0.1px] text-[var(--lw-text-secondary)]">
-            Lyrics not found
+            {isInstrumental ? 'Instrumental' : 'Lyrics not found'}
           </span>
         </div>
       {:else}
-        <div use:waveSmoothScroll class="lw-scroll h-full min-h-0 flex-1 overflow-y-auto">
+        <div class="h-full min-h-0 flex-1 overflow-hidden">
           <KaraokeLyricsView fontSize={34} showHeaderControls={false} />
         </div>
       {/if}

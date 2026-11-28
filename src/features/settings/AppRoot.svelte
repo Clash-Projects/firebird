@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import AuthGate from '$src/app/AuthGate.svelte';
   import { attachWindowLifecycle } from '$src/app/windowLifecycle';
+  import { lyricsPlausibleDuration } from '$src/features/lyrics/lyricAdapter';
   import { ipcInvoke, ipcListen, isTauriRuntime } from '$src/lib/ipc';
   import { pluginManager } from '$src/lib/plugins/pluginManager.svelte';
   import { featuresStore } from '$src/state/features.svelte';
@@ -55,6 +56,31 @@
     const current = playerStore.currentTrack;
     if (current) {
       void featuresStore.fetchLyricsForTrack(current);
+    }
+  });
+
+  // Re-validate or re-fetch lyrics when live playback duration arrives after initial 0s buffering
+  $effect(() => {
+    const current = playerStore.currentTrack;
+    const durSec = Math.round(playerStore.durationSec);
+    if (!current || durSec <= 0) return;
+    const fetchedDur = featuresStore.lyricsFetchedDurationSec[current.id];
+    if (fetchedDur === undefined || fetchedDur > 0) return;
+    const doc = featuresStore.lyricsByTrack[current.id];
+    const needsRefetch =
+      !doc ||
+      (!doc.isInstrumental && doc.lines.length === 0) ||
+      (doc.synced && !lyricsPlausibleDuration(doc.lines, durSec));
+    if (needsRefetch) {
+      void featuresStore.fetchLyricsForTrack(current, {
+        forceRefresh: true,
+        durationOverrideSec: durSec,
+      });
+    } else {
+      featuresStore.lyricsFetchedDurationSec = {
+        ...featuresStore.lyricsFetchedDurationSec,
+        [current.id]: durSec,
+      };
     }
   });
 
