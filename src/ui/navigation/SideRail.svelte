@@ -46,7 +46,7 @@
       {@render navItem(item.route, t(item.labelKey, item.fallbackLabel), item.icon, activePath === item.route || activePath.startsWith(`${item.route}/`))}
     {/snippet}
 
-    <div class="lw-scroll flex-1 overflow-x-hidden" use:waveSmoothScroll={{ axis: 'y' }}>
+    <div class="rail-scroll flex-1 overflow-x-hidden" use:waveSmoothScroll={{ axis: 'y' }}>
       <div class="rail-group">
         {#each listen as item (item.id)}{@render destination(item)}{/each}
       </div>
@@ -99,6 +99,15 @@
     height: 100%;
     flex-direction: column;
     padding: 6px 6px 8px;
+  }
+
+  .rail-scroll {
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .rail-scroll::-webkit-scrollbar {
+    display: none;
   }
 
   .rail-group {
@@ -171,7 +180,7 @@
 
   .rail-icon {
     display: grid;
-    width: 46px;
+    width: 48px;
     flex: none;
     place-items: center;
     transition: color var(--lw-motion-fast) ease;

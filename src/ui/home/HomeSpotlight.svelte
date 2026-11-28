@@ -16,6 +16,18 @@
     queue.filter((item) => !track || item.id !== track.id).slice(0, 3)
   );
 
+  function shortTitle(raw: string): string {
+    let s = raw.trim();
+    if (!s) return s;
+    const pipeIdx = s.indexOf(' | ');
+    if (pipeIdx > 2) s = s.slice(0, pipeIdx).trim();
+    s = s
+      .replace(/\s*[(\[](?:official|music|lyric|lyrics|audio|video|full\s*hd|4k|hd|visualizer)[^)\]]*[)\]]/gi, '')
+      .replace(/\s+(?:official\s+)?(?:music\s+video|lyric\s+video|official\s+audio|full\s+video|full\s+hd)\b.*$/i, '')
+      .trim();
+    return s || raw.trim();
+  }
+
   function playHero(radio = false) {
     if (!track) return;
     playTrackNow(track, radio ? [...queue].reverse() : queue);
@@ -56,9 +68,9 @@
           </div>
           <h2
             id="spotlight-title"
-            class="line-clamp-2 text-[22px] leading-[1.18] font-bold tracking-[-0.02em] sm:text-[24px]"
+            class="truncate text-[22px] leading-[1.18] font-bold tracking-[-0.02em] sm:text-[24px]"
           >
-            {track.title}
+            {shortTitle(track.title)}
           </h2>
           <p class="truncate text-[13.5px] text-[var(--lw-text-secondary)]">
             {track.artist}
@@ -67,18 +79,18 @@
             <button
               type="button"
               onclick={() => playHero(false)}
-              class="lw-press inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border border-transparent bg-[var(--lw-accent)] px-4 text-[13px] font-semibold text-[var(--lw-on-accent)] transition-all hover:brightness-105"
+              class="lw-press lw-btn-label inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border border-transparent bg-[var(--lw-accent)] px-4 text-[13px] font-semibold text-[var(--lw-on-accent)] transition-all hover:brightness-105"
             >
               <WaveIcon name="play" size={15} filled />
-              Play
+              <span>Play</span>
             </button>
             <button
               type="button"
               onclick={() => playHero(true)}
-              class="lw-press inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border border-[var(--lw-outline)] bg-[var(--lw-surface-overlay)] px-4 text-[13px] font-semibold text-[var(--lw-text-primary)] transition-colors hover:bg-[var(--lw-wash-hover)]"
+              class="lw-press lw-btn-label inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border border-[var(--lw-outline)] bg-[var(--lw-surface-overlay)] px-4 text-[13px] font-semibold text-[var(--lw-text-primary)] transition-colors hover:bg-[var(--lw-wash-hover)]"
             >
               <WaveIcon name="radio" size={15} />
-              Radio
+              <span>Radio</span>
             </button>
           </div>
         </div>
@@ -105,7 +117,7 @@
                 </div>
                 <div class="min-w-0 flex-1">
                   <div class="truncate text-[13px] font-semibold text-[var(--lw-text-primary)]">
-                    {item.title}
+                    {shortTitle(item.title)}
                   </div>
                   <div class="truncate text-[11.5px] text-[var(--lw-text-secondary)]">
                     {item.artist}

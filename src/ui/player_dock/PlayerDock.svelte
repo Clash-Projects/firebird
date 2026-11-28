@@ -531,7 +531,18 @@
 
     <button
       type="button"
-      class="dock-glyph dock-press"
+      class="dock-glyph dock-expand-btn dock-press"
+      onclick={() => router.navigate(router.path === '/now-playing' ? '/home' : '/now-playing')}
+      use:waveTooltip={'Now Playing'}
+      aria-label="Now Playing"
+      aria-pressed={router.path === '/now-playing'}
+    >
+      <WaveIcon name="maximize" size={15} />
+    </button>
+
+    <button
+      type="button"
+      class="dock-glyph dock-mini-btn dock-press"
       onclick={() => windowState.toggleMiniPlayer()}
       use:waveTooltip={'Mini player'}
       aria-label="Mini player"

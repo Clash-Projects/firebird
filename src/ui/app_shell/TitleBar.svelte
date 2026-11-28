@@ -368,10 +368,6 @@
           >
             <WaveIcon name="close" size={11} />
           </button>
-        {:else if !searchFocused}
-          <span class="pointer-events-none absolute right-2.5 text-[10px] font-medium tracking-[0.2px] text-[var(--lw-text-tertiary)] opacity-70">
-            Ctrl F
-          </span>
         {/if}
       </form>
 
@@ -686,6 +682,11 @@
     background: var(--lw-rail-translucent);
   }
 
+  :global(:root[data-glass="true"]) .title-bar {
+    border-bottom-color: transparent;
+    background: transparent;
+  }
+
   .bar-btn {
     display: flex;
     width: 36px;
@@ -720,9 +721,9 @@
   .title-search-input {
     width: 100%;
     height: 30px;
-    padding: 0 44px 0 30px;
-    border: 1px solid var(--lw-outline);
-    border-radius: 8px;
+    padding: 0 28px 0 30px;
+    border: 1px solid var(--lw-outline-soft);
+    border-radius: 10px;
     background: var(--lw-surface);
     color: var(--lw-text-primary);
     font-size: 13px;

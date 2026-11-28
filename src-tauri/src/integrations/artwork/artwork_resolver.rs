@@ -83,6 +83,8 @@ const TLS_HOSTS: &[&str] = &[
     "i.scdn.co",
     "qobuz.com",
     "static.qobuz.com",
+    "tidal.com",
+    "resources.tidal.com",
 ];
 
 static WHITESPACE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\s+").unwrap());

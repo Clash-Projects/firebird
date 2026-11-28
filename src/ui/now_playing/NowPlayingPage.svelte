@@ -193,10 +193,6 @@
               <div class="now-meta">
                 <h1>{track.title}</h1>
                 <p>{track.artist}</p>
-                <div class="now-format lw-tabular">
-                  <WaveIcon name="activity" size={13} />
-                  {track.codec} · {track.bitDepth}-bit / {(track.sampleRateHz / 1000).toFixed(0)} kHz
-                </div>
                 {#if nextTrack}
                   <p class="now-next">
                     <strong>Up next</strong> <span>{nextTrack.title} · {nextTrack.artist}</span>
@@ -274,7 +270,6 @@
     line-clamp: 2;
   }
   .now-meta p { overflow: hidden; margin-top: 4px; color: var(--lw-text-secondary); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
-  .now-format { display: inline-flex; align-items: center; gap: 5px; margin-top: 9px; padding: 3px 7px; border: 1px solid var(--lw-outline); border-radius: 6px; background: var(--lw-surface); color: var(--lw-accent); font-size: 10.5px; font-weight: 600; }
   .now-meta .now-next { display: flex; align-items: baseline; gap: 7px; margin-top: 10px; font-size: 11.5px; }
   .now-next strong { flex: none; color: var(--lw-text-primary); }
   .now-next span { overflow: hidden; text-overflow: ellipsis; }

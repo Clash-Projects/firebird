@@ -20,9 +20,41 @@
     onArtworkLoad?: (url: string) => void;
   }
 
-  // Session cache of studio-upgraded URLs so tiles across routes swap instantaneously.
+  // Session cache of studio-upgraded URLs & seen URLs so tiles swap instantaneously.
   const upgradedCache = new Map<string, string>();
+  const shownUrls = new Set<string>();
   const UPGRADED_CAP = 500;
+
+  function bucketPx(target: number): number {
+    if (target <= 96) return 96;
+    if (target <= 160) return 160;
+    if (target <= 320) return 320;
+    if (target <= 600) return 600;
+    return 1024;
+  }
+
+  function sizedUrl(raw: string, displaySize?: number): string {
+    const url = raw.trim();
+    if (!url) return '';
+    const px = bucketPx((displaySize ?? 160) * 2);
+    if (url.includes('mzstatic.com') || url.includes('apple.com')) {
+      return url
+        .replace(/\d+x\d+bb/, `${px}x${px}bb`)
+        .replace('{w}', String(px))
+        .replace('{h}', String(px))
+        .replace('{f}', 'jpg');
+    }
+    if (url.includes('googleusercontent.com') || url.includes('ggpht.com')) {
+      const next = url.replace(/=w\d+(-h\d+)?(-c)?(-p)?(-l\d+)?(-rj)?/, `=w${px}-h${px}-l90-rj`);
+      if (next !== url) return next;
+      const slash = url.replace(/\/w\d+(-h\d+)?\//, `/w${px}-h${px}/`);
+      if (slash !== url) return slash;
+    }
+    if (url.includes('ytimg.com') && px < 300 && url.includes('hqdefault')) {
+      return url.replace('hqdefault', 'mqdefault');
+    }
+    return url;
+  }
 
   let {
     src = '',
@@ -48,6 +80,8 @@
   let loaded = $state(false);
   let resolvedUrl = $state('');
   let largerUrl = $derived(highResolution ? largerArtworkUrl(src) : '');
+  let imgEl = $state<HTMLImageElement | null>(null);
+  let lastActiveUrl = '';
   let resolveSeq = 0;
 
   let displayLabel = $derived((label || album || alt || artist || '').trim());
@@ -76,8 +110,12 @@
     return (
       lower.includes('mzstatic.com') ||
       lower.includes('dzcdn.net') ||
+      lower.includes('scdn.co') ||
+      lower.includes('qobuz.com') ||
+      lower.includes('resources.tidal.com') ||
       lower.includes('lastfm.freetls.fastly.net') ||
       lower.includes('lh3.googleusercontent.com') ||
+      lower.includes('yt3.googleusercontent.com') ||
       lower.includes('yt3.ggpht.com') ||
       lower.startsWith('asset:') ||
       lower.startsWith('data:')
@@ -123,7 +161,6 @@
     failedPrimary = false;
     failedLarger = false;
     failedResolved = false;
-    loaded = false;
     resolvedUrl = '';
 
     if (!upgrade || !isTauriRuntime() || !currentLabel || (!verifiedCover && isOfficialUrl(currentSrc))) {
@@ -161,19 +198,36 @@
           if (oldest !== undefined) upgradedCache.delete(oldest);
         }
         upgradedCache.set(cacheKey, url);
-        if (url && !failedResolved) resolvedUrl = url;
+        if (url && !failedResolved) {
+          const sized = sizedUrl(url, size);
+          const preloader = new Image();
+          preloader.onload = () => {
+            if (seq === resolveSeq && !failedResolved) resolvedUrl = sized;
+          };
+          preloader.src = sized;
+        }
       })
       .catch(() => {});
   });
 
   let activeUrl = $derived.by(() => {
-    if (resolvedUrl && !failedResolved) return resolvedUrl;
+    if (resolvedUrl && !failedResolved) return sizedUrl(resolvedUrl, size);
     if (largerUrl && !failedLarger) return largerUrl;
-    if (src && !failedPrimary) return src;
+    if (src && !failedPrimary) return sizedUrl(src, size);
     return '';
   });
 
-  let skipFade = $derived((size ?? 64) <= 56 || Boolean(resolvedUrl));
+  $effect(() => {
+    const url = activeUrl;
+    if (url !== lastActiveUrl) {
+      lastActiveUrl = url;
+      loaded = Boolean(url && (shownUrls.has(url) || (imgEl?.complete && imgEl.naturalWidth > 0)));
+    } else if (url && imgEl?.complete && imgEl.naturalWidth > 0) {
+      loaded = true;
+    }
+  });
+
+  let skipFade = $derived((size ?? 64) <= 56 || Boolean(resolvedUrl) || (activeUrl ? shownUrls.has(activeUrl) : false));
 
   let shadowStyle = $derived(
     shadow === 'artwork'
@@ -204,12 +258,20 @@
 >
   {#if activeUrl}
     <img
+      bind:this={imgEl}
       src={activeUrl}
       {alt}
       loading={highResolution ? 'eager' : undefined}
       decoding="async"
       onload={(event) => {
         loaded = true;
+        if (activeUrl) {
+          if (shownUrls.size >= UPGRADED_CAP) {
+            const first = shownUrls.values().next().value;
+            if (first !== undefined) shownUrls.delete(first);
+          }
+          shownUrls.add(activeUrl);
+        }
         onArtworkLoad?.((event.currentTarget as HTMLImageElement).currentSrc);
       }}
       onerror={handleError}

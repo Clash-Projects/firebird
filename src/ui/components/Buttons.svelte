@@ -52,7 +52,7 @@
   {onclick}
   use:waveTooltip={tooltip}
   aria-pressed={variant === 'chip' || active ? active : undefined}
-  class="lw-press inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 text-center leading-none whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-45 {variant === 'chip' ? 'rounded-full' : 'rounded-[8px]'} {sizeClasses[size]} {variantClasses[variant]} {active ? '!bg-[var(--lw-accent)] !text-[var(--lw-on-accent)] !border-transparent' : ''} {className}"
+  class="lw-press lw-btn-label inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 text-center leading-none whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-45 {variant === 'chip' ? 'rounded-full' : 'rounded-[8px]'} {sizeClasses[size]} {variantClasses[variant]} {active ? '!bg-[var(--lw-accent)] !text-[var(--lw-on-accent)] !border-transparent' : ''} {className}"
 >
   {@render children()}
 </button>

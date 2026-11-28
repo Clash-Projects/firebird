@@ -21,7 +21,7 @@
   let {
     tracks,
     showAlbum = true,
-    showQuality = true,
+    showQuality = false,
     maxHeight,
     removeLabel,
     onRemove,

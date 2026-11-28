@@ -211,7 +211,7 @@
 
 :root[data-glass="true"] {
   --lw-bg: transparent;
-  --lw-rail-translucent: rgba(12, 12, 16, 0.52);
+  --lw-rail-translucent: transparent;
   --lw-surface: rgba(255, 255, 255, 0.055);
   --lw-surface-overlay: rgba(255, 255, 255, 0.085);
   --lw-panel-translucent: rgba(18, 18, 22, 0.84);
@@ -224,7 +224,7 @@
 :root[data-liquid-glass="true"]:not([data-haze-material="solid"]):not([data-performance="true"]) {
   --lw-panel-translucent: rgba(18, 18, 22, 0.78);
   --lw-dock-translucent: rgba(12, 12, 16, 0.74);
-  --lw-rail-translucent: rgba(12, 12, 16, 0.56);
+  --lw-rail-translucent: transparent;
 }
 
 :root[data-theme="light"][data-glass="true"] {
@@ -232,7 +232,7 @@
   --lw-surface-overlay: rgba(0, 0, 0, 0.06);
   --lw-panel-translucent: rgba(255, 255, 255, 0.82);
   --lw-dock-translucent: rgba(255, 255, 255, 0.80);
-  --lw-rail-translucent: rgba(243, 243, 243, 0.65);
+  --lw-rail-translucent: transparent;
   --lw-outline: rgba(0, 0, 0, 0.12);
   --lw-outline-soft: rgba(0, 0, 0, 0.07);
   --lw-divider: rgba(0, 0, 0, 0.07);
@@ -241,7 +241,7 @@
 :root[data-theme="light"][data-liquid-glass="true"]:not([data-haze-material="solid"]):not([data-performance="true"]) {
   --lw-panel-translucent: rgba(255, 255, 255, 0.78);
   --lw-dock-translucent: rgba(255, 255, 255, 0.76);
-  --lw-rail-translucent: rgba(243, 243, 243, 0.68);
+  --lw-rail-translucent: transparent;
 }
 
 html,
@@ -469,6 +469,12 @@ dialog[open]::backdrop {
   button, input, select {
     transition: background-color var(--lw-motion-fast), border-color var(--lw-motion-fast), color var(--lw-motion-fast);
   }
+}
+
+.lw-btn-label {
+  line-height: 1;
+  text-box-trim: trim-both;
+  text-box-edge: cap alphabetic;
 }
 
 button.lw-press {

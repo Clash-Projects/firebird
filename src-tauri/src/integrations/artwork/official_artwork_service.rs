@@ -52,7 +52,13 @@ const OFFICIAL_CDNS: &[&str] = &[
     "spotifycdn.com",
     "deezer.com",
     "dzcdn.net",
+    "tidal.com",
+    "resources.tidal.com",
 ];
+
+const TIDAL_SEARCH_URL: &str = "https://api.tidal.com/v1/search";
+const TIDAL_EMBED_TOKEN: &str = "vNVdglQOjFJJGG2U";
+const QOBUZ_APP_ID: &str = "950096963";
 
 const YOUTUBE_CDNS: &[&str] = &["ytimg.com", "googleusercontent.com", "ggpht.com"];
 
@@ -112,6 +118,9 @@ struct ServiceState {
     fallback_order: Vec<String>,
     itunes_403_streak: u32,
     itunes_skip_until_ms: i64,
+    spotify_token: Option<(String, i64)>,
+    spotify_skip_until_ms: i64,
+    qobuz_skip_until_ms: i64,
 }
 
 impl ServiceState {
@@ -672,6 +681,351 @@ impl OfficialArtworkService {
             .collect()
     }
 
+    fn tidal_cover_url(uuid: &str, dim: u32) -> Option<String> {
+        let parts: Vec<&str> = uuid.trim().split('-').collect();
+        if parts.len() != 5 || parts.iter().any(|p| p.is_empty()) {
+            return None;
+        }
+        Some(format!(
+            "https://resources.tidal.com/images/{}/{dim}x{dim}.jpg",
+            parts.join("/")
+        ))
+    }
+
+    async fn tidal_search(&self, query: &str, types: &str) -> Option<Value> {
+        let res = self
+            .http
+            .get(TIDAL_SEARCH_URL)
+            .header("X-Tidal-Token", TIDAL_EMBED_TOKEN)
+            .query(&[
+                ("query", query),
+                ("limit", "10"),
+                ("types", types),
+                ("countryCode", "US"),
+            ])
+            .send()
+            .await
+            .ok()?;
+        if !res.status().is_success() {
+            return None;
+        }
+        res.json::<Value>().await.ok()
+    }
+
+    async fn tidal_track_hits(&self, query: &str) -> Vec<Value> {
+        let Some(root) = self.tidal_search(query, "TRACKS").await else {
+            return Vec::new();
+        };
+        let Some(items) = root
+            .get("tracks")
+            .and_then(|t| t.get("items"))
+            .and_then(Value::as_array)
+        else {
+            return Vec::new();
+        };
+        items
+            .iter()
+            .filter_map(|item| {
+                let obj = item.as_object()?;
+                let album = obj.get("album").and_then(Value::as_object);
+                let uuid = album.and_then(|a| a.get("cover")).and_then(Value::as_str)?;
+                let cover = Self::tidal_cover_url(uuid, 1280)?;
+                let artist_name = obj
+                    .get("artists")
+                    .and_then(Value::as_array)
+                    .and_then(|arr| arr.first())
+                    .and_then(|a| a.get("name"))
+                    .and_then(Value::as_str)
+                    .or_else(|| {
+                        obj.get("artist")
+                            .and_then(|a| a.get("name"))
+                            .and_then(Value::as_str)
+                    })
+                    .unwrap_or("");
+                Some(json!({
+                    "trackName": obj.get("title").and_then(Value::as_str).unwrap_or(""),
+                    "artistName": artist_name,
+                    "collectionName": album.and_then(|a| a.get("title")).and_then(Value::as_str).unwrap_or(""),
+                    "artworkUrl100": cover,
+                    "releaseDate": obj.get("streamStartDate").and_then(Value::as_str).unwrap_or(""),
+                }))
+            })
+            .collect()
+    }
+
+    async fn tidal_album_hits(&self, query: &str) -> Vec<Value> {
+        let Some(root) = self.tidal_search(query, "ALBUMS").await else {
+            return Vec::new();
+        };
+        let Some(items) = root
+            .get("albums")
+            .and_then(|t| t.get("items"))
+            .and_then(Value::as_array)
+        else {
+            return Vec::new();
+        };
+        items
+            .iter()
+            .filter_map(|item| {
+                let obj = item.as_object()?;
+                let uuid = obj.get("cover").and_then(Value::as_str)?;
+                let cover = Self::tidal_cover_url(uuid, 1280)?;
+                let artist_name = obj
+                    .get("artists")
+                    .and_then(Value::as_array)
+                    .and_then(|arr| arr.first())
+                    .and_then(|a| a.get("name"))
+                    .and_then(Value::as_str)
+                    .or_else(|| {
+                        obj.get("artist")
+                            .and_then(|a| a.get("name"))
+                            .and_then(Value::as_str)
+                    })
+                    .unwrap_or("");
+                Some(json!({
+                    "collectionName": obj.get("title").and_then(Value::as_str).unwrap_or(""),
+                    "artistName": artist_name,
+                    "artworkUrl100": cover,
+                }))
+            })
+            .collect()
+    }
+
+    async fn spotify_access_token(&self) -> Option<String> {
+        {
+            let st = self.state.lock().await;
+            if now_ms() < st.spotify_skip_until_ms {
+                return None;
+            }
+            if let Some((ref tok, exp)) = st.spotify_token {
+                if now_ms() + 15_000 < exp {
+                    return Some(tok.clone());
+                }
+            }
+        }
+        let res = self
+            .http
+            .get("https://open.spotify.com/get_access_token?reason=transport&productType=web_player")
+            .send()
+            .await
+            .ok()?;
+        if !res.status().is_success() {
+            self.state.lock().await.spotify_skip_until_ms = now_ms() + 10 * 60 * 1000;
+            return None;
+        }
+        let body: Value = res.json().await.ok()?;
+        let token = body
+            .get("accessToken")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())?
+            .to_string();
+        let exp = body
+            .get("accessTokenExpirationTimestampMs")
+            .and_then(Value::as_i64)
+            .unwrap_or_else(|| now_ms() + 20 * 60 * 1000);
+        self.state.lock().await.spotify_token = Some((token.clone(), exp));
+        Some(token)
+    }
+
+    async fn spotify_search(&self, query: &str, kind: &str) -> Option<Value> {
+        let token = self.spotify_access_token().await?;
+        let res = self
+            .http
+            .get("https://api.spotify.com/v1/search")
+            .bearer_auth(token)
+            .query(&[("q", query), ("type", kind), ("limit", "10")])
+            .send()
+            .await
+            .ok()?;
+        if res.status().as_u16() == 401 || res.status().as_u16() == 429 {
+            let mut st = self.state.lock().await;
+            st.spotify_token = None;
+            st.spotify_skip_until_ms = now_ms() + 5 * 60 * 1000;
+            return None;
+        }
+        if !res.status().is_success() {
+            return None;
+        }
+        res.json::<Value>().await.ok()
+    }
+
+    async fn spotify_track_hits(&self, query: &str) -> Vec<Value> {
+        let Some(root) = self.spotify_search(query, "track").await else {
+            return Vec::new();
+        };
+        let Some(items) = root
+            .get("tracks")
+            .and_then(|t| t.get("items"))
+            .and_then(Value::as_array)
+        else {
+            return Vec::new();
+        };
+        items
+            .iter()
+            .filter_map(|item| {
+                let obj = item.as_object()?;
+                let album = obj.get("album").and_then(Value::as_object)?;
+                let cover = album
+                    .get("images")
+                    .and_then(Value::as_array)
+                    .and_then(|imgs| imgs.first())
+                    .and_then(|i| i.get("url"))
+                    .and_then(Value::as_str)?;
+                let artist_name = obj
+                    .get("artists")
+                    .and_then(Value::as_array)
+                    .and_then(|arr| arr.first())
+                    .and_then(|a| a.get("name"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                Some(json!({
+                    "trackName": obj.get("name").and_then(Value::as_str).unwrap_or(""),
+                    "artistName": artist_name,
+                    "collectionName": album.get("name").and_then(Value::as_str).unwrap_or(""),
+                    "artworkUrl100": cover,
+                    "releaseDate": album.get("release_date").and_then(Value::as_str).unwrap_or(""),
+                }))
+            })
+            .collect()
+    }
+
+    async fn spotify_album_hits(&self, query: &str) -> Vec<Value> {
+        let Some(root) = self.spotify_search(query, "album").await else {
+            return Vec::new();
+        };
+        let Some(items) = root
+            .get("albums")
+            .and_then(|t| t.get("items"))
+            .and_then(Value::as_array)
+        else {
+            return Vec::new();
+        };
+        items
+            .iter()
+            .filter_map(|item| {
+                let obj = item.as_object()?;
+                let cover = obj
+                    .get("images")
+                    .and_then(Value::as_array)
+                    .and_then(|imgs| imgs.first())
+                    .and_then(|i| i.get("url"))
+                    .and_then(Value::as_str)?;
+                let artist_name = obj
+                    .get("artists")
+                    .and_then(Value::as_array)
+                    .and_then(|arr| arr.first())
+                    .and_then(|a| a.get("name"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                Some(json!({
+                    "collectionName": obj.get("name").and_then(Value::as_str).unwrap_or(""),
+                    "artistName": artist_name,
+                    "artworkUrl100": cover,
+                }))
+            })
+            .collect()
+    }
+
+    async fn qobuz_search(&self, endpoint: &str, query: &str) -> Option<Value> {
+        if now_ms() < self.state.lock().await.qobuz_skip_until_ms {
+            return None;
+        }
+        let url = format!("https://www.qobuz.com/api.json/0.2/{endpoint}");
+        let res = self
+            .http
+            .get(&url)
+            .query(&[("query", query), ("limit", "10"), ("app_id", QOBUZ_APP_ID)])
+            .send()
+            .await
+            .ok()?;
+        let code = res.status().as_u16();
+        if code == 400 || code == 401 || code == 403 || code == 429 {
+            self.state.lock().await.qobuz_skip_until_ms = now_ms() + 15 * 60 * 1000;
+            return None;
+        }
+        if !res.status().is_success() {
+            return None;
+        }
+        res.json::<Value>().await.ok()
+    }
+
+    async fn qobuz_track_hits(&self, query: &str) -> Vec<Value> {
+        let Some(root) = self.qobuz_search("track/search", query).await else {
+            return Vec::new();
+        };
+        let Some(items) = root
+            .get("tracks")
+            .and_then(|t| t.get("items"))
+            .and_then(Value::as_array)
+        else {
+            return Vec::new();
+        };
+        items
+            .iter()
+            .filter_map(|item| {
+                let obj = item.as_object()?;
+                let album = obj.get("album").and_then(Value::as_object)?;
+                let img = album.get("image").and_then(Value::as_object)?;
+                let cover = img
+                    .get("large")
+                    .or_else(|| img.get("small"))
+                    .and_then(Value::as_str)?;
+                let artist_name = obj
+                    .get("performer")
+                    .and_then(|p| p.get("name"))
+                    .and_then(Value::as_str)
+                    .or_else(|| {
+                        album
+                            .get("artist")
+                            .and_then(|a| a.get("name"))
+                            .and_then(Value::as_str)
+                    })
+                    .unwrap_or("");
+                Some(json!({
+                    "trackName": obj.get("title").and_then(Value::as_str).unwrap_or(""),
+                    "artistName": artist_name,
+                    "collectionName": album.get("title").and_then(Value::as_str).unwrap_or(""),
+                    "artworkUrl100": cover,
+                    "releaseDate": album.get("release_date_original").and_then(Value::as_str).unwrap_or(""),
+                }))
+            })
+            .collect()
+    }
+
+    async fn qobuz_album_hits(&self, query: &str) -> Vec<Value> {
+        let Some(root) = self.qobuz_search("album/search", query).await else {
+            return Vec::new();
+        };
+        let Some(items) = root
+            .get("albums")
+            .and_then(|t| t.get("items"))
+            .and_then(Value::as_array)
+        else {
+            return Vec::new();
+        };
+        items
+            .iter()
+            .filter_map(|item| {
+                let obj = item.as_object()?;
+                let img = obj.get("image").and_then(Value::as_object)?;
+                let cover = img
+                    .get("large")
+                    .or_else(|| img.get("small"))
+                    .and_then(Value::as_str)?;
+                let artist_name = obj
+                    .get("artist")
+                    .and_then(|a| a.get("name"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                Some(json!({
+                    "collectionName": obj.get("title").and_then(Value::as_str).unwrap_or(""),
+                    "artistName": artist_name,
+                    "artworkUrl100": cover,
+                }))
+            })
+            .collect()
+    }
+
     async fn deezer_photo_is_stock(&self, url: &str) -> bool {
         let no_redir = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
@@ -732,36 +1086,7 @@ impl OfficialArtworkService {
             }
         }
 
-        if best.is_none() {
-            let mut contain_fans = -1i64;
-            for item in items {
-                let Some(obj) = item.as_object() else {
-                    continue;
-                };
-                let fans = obj.get("nb_fan").and_then(Value::as_i64).unwrap_or(0);
-                let name = Self::normalize_for_search(
-                    obj.get("name").and_then(Value::as_str).unwrap_or(""),
-                );
-                if name.is_empty() {
-                    continue;
-                }
-                let matches_either = (name.len() >= 4
-                    && clean.len() >= 4
-                    && (name.contains(clean) || clean.contains(&name)))
-                    || (name.len() >= 4
-                        && clean_search_name.len() >= 4
-                        && (name.contains(&clean_search_name)
-                            || clean_search_name.contains(&name)));
-                if matches_either && fans > contain_fans {
-                    contain_fans = fans;
-                    best = Some(obj);
-                }
-            }
-        }
-
-        let chosen = best
-            .or(most_popular)
-            .or_else(|| items.first().and_then(Value::as_object))?;
+        let chosen = best?;
         let pic = ["picture_xl", "picture_big", "picture_medium"]
             .iter()
             .filter_map(|k| chosen.get(*k).and_then(Value::as_str))
@@ -801,13 +1126,13 @@ impl OfficialArtworkService {
                 continue;
             }
             let title_score = Self::artwork_title_score(&collection, clean_album);
-            if title_score < 90 {
+            if title_score < 100 {
                 continue;
             }
             let mut score = title_score;
             if !clean_artist.is_empty() {
                 let artist_score = Self::artwork_artist_score(&artist_name, clean_artist);
-                if artist_score < 80 {
+                if artist_score < 95 {
                     continue;
                 }
                 score += artist_score;
@@ -853,11 +1178,11 @@ impl OfficialArtworkService {
                 continue;
             }
             let title_score = Self::artwork_title_score(&collection, clean_album);
-            if title_score < 90 {
+            if title_score < 100 {
                 continue;
             }
             let artist_score = Self::artwork_artist_score(&artist_name, clean_artist);
-            if artist_score < 80 {
+            if artist_score < 95 {
                 continue;
             }
             let mut score = title_score + artist_score;
@@ -941,6 +1266,26 @@ impl OfficialArtworkService {
             }
         }
 
+        let album_q = if clean_artist.is_empty() {
+            clean_album.to_string()
+        } else {
+            format!("{clean_artist} {clean_album}")
+        };
+        let (t_hits, s_hits, q_hits) = tokio::join!(
+            self.tidal_album_hits(&album_q),
+            self.spotify_album_hits(&album_q),
+            self.qobuz_album_hits(&album_q),
+        );
+        let mut extra_mapped: Vec<Value> = Vec::new();
+        extra_mapped.extend(t_hits);
+        extra_mapped.extend(s_hits);
+        extra_mapped.extend(q_hits);
+        if let Some(hit) = Self::match_album(&extra_mapped, clean_album, clean_artist) {
+            if let Some(res) = Self::album_result_from(&hit.1, raw_album, raw_artist) {
+                return Some(res);
+            }
+        }
+
         // Deezer album catalog fallback
         let q = if clean_artist.is_empty() {
             clean_album.to_string()
@@ -1005,7 +1350,13 @@ impl OfficialArtworkService {
         let raw_primary = primary_artist_name(raw_artist);
         let clean_primary = Self::normalize_for_search(&raw_primary);
 
-        let (c1, c2, c3, d1, d2, d3) = tokio::join!(
+        let track_q = if clean_artist.is_empty() {
+            clean_title.to_string()
+        } else {
+            format!("{clean_artist} {clean_title}")
+        };
+
+        let (c1, c2, c3, d1, d2, d3, t1, s1, q1) = tokio::join!(
             async {
                 if !clean_artist.is_empty() {
                     self.itunes_search(&format!("{clean_artist} {clean_title}"), "song", "25")
@@ -1040,6 +1391,9 @@ impl OfficialArtworkService {
                 }
             },
             self.deezer_track_hits(raw_title),
+            self.tidal_track_hits(&track_q),
+            self.spotify_track_hits(&track_q),
+            self.qobuz_track_hits(&track_q),
         );
 
         let mut all_items = Vec::new();
@@ -1049,6 +1403,9 @@ impl OfficialArtworkService {
         all_items.extend(d1);
         all_items.extend(d2);
         all_items.extend(d3);
+        all_items.extend(t1);
+        all_items.extend(s1);
+        all_items.extend(q1);
 
         let mut found = Self::find_best_match(&all_items, clean_title, clean_artist);
         if found.is_none() && !clean_primary.is_empty() && clean_primary != clean_artist {
@@ -1123,24 +1480,7 @@ impl OfficialArtworkService {
         if a == b {
             return 100;
         }
-        if Self::is_near_typo(&a, &b) {
-            return 90;
-        }
-        let ta = Self::name_tokens(&a);
-        let tb = Self::name_tokens(&b);
-        if ta.is_empty() || tb.is_empty() {
-            return 0;
-        }
-        let common = ta.intersection(&tb).count();
-        if common == 0 {
-            return 0;
-        }
-        let dice = (200 * common) / (ta.len() + tb.len());
-        if dice >= 92 {
-            90
-        } else {
-            0
-        }
+        0
     }
 
     pub fn artwork_artist_score(candidate: &str, target: &str) -> i32 {
@@ -1152,15 +1492,10 @@ impl OfficialArtworkService {
         if a == b || Self::artists_aliased(&a, &b) {
             return 100;
         }
-        let ta = Self::name_tokens(&a);
-        let tb = Self::name_tokens(&b);
-        if ta.is_empty() || tb.is_empty() {
-            return 0;
-        }
-        if ta.is_superset(&tb) || tb.is_superset(&ta) {
-            let shorter = if ta.len() <= tb.len() { &ta } else { &tb };
-            if shorter.len() >= 2 || shorter.iter().all(|t| t.len() >= 3) {
-                return 80;
+        for part in split_artist_credits(candidate) {
+            let norm = Self::normalize_for_search(&part);
+            if !norm.is_empty() && (norm == b || Self::artists_aliased(&norm, &b)) {
+                return 95;
             }
         }
         0
@@ -1254,11 +1589,11 @@ impl OfficialArtworkService {
             );
 
             let title_score = Self::artwork_title_score(track_name, target_title);
-            if title_score < 90 {
+            if title_score < 100 {
                 continue;
             }
             let artist_score = Self::artwork_artist_score(raw_artist_name, target_artist);
-            if artist_score < 80 {
+            if artist_score < 95 {
                 continue;
             }
 
