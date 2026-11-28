@@ -1,4 +1,5 @@
 import { router } from '$src/app/router.svelte';
+import { libraryStore } from '$src/state/library.svelte';
 
 export function goHome() {
   router.navigate('/home');
@@ -10,6 +11,16 @@ export function goAlbum(id: string) {
 
 export function goArtist(id: string) {
   router.navigate(`/artist/${id}`);
+}
+
+export function goArtistByName(name: string) {
+  const clean = name.trim();
+  if (!clean) return;
+  const lower = clean.toLowerCase();
+  const match =
+    libraryStore.artists.find((a) => a.name.toLowerCase() === lower) ??
+    libraryStore.artists.find((a) => a.name.toLowerCase().includes(lower));
+  goArtist(match?.id ?? `name:${encodeURIComponent(clean)}`);
 }
 
 export function goArtistPopularTracks(id: string) {

@@ -16,7 +16,7 @@
   import type { Playlist, Track } from '$src/state/types';
   import PlaylistDialogs from '$src/ui/collections/PlaylistDialogs.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
-  import { goAlbum, goArtist } from '$src/ui/navigation/waveNav';
+  import { goAlbum, goArtistByName } from '$src/ui/navigation/waveNav';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import { contextMenu } from './contextMenuState.svelte';
 
@@ -158,11 +158,7 @@
   }
 
   function openArtistTrack(name: string) {
-    const clean = name.trim();
-    const match =
-      libraryStore.artists.find((a) => a.name.toLowerCase() === clean.toLowerCase()) ??
-      libraryStore.artists.find((a) => a.name.toLowerCase().includes(clean.toLowerCase()));
-    goArtist(match?.id ?? encodeURIComponent(clean));
+    goArtistByName(name);
   }
 
   function resolveAlbumId(t: Track): string | null {

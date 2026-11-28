@@ -1,9 +1,10 @@
 import { Channel } from '@tauri-apps/api/core';
 import { ipcInvoke } from '$src/lib/ipc';
-import type { mapYtTrack } from '$src/state/library.svelte';
+import type { mapYtArtist, mapYtTrack } from '$src/state/library.svelte';
 import type { ArtistReleaseShelf } from './artistReleases';
 
 type ArtistSong = Parameters<typeof mapYtTrack>[0];
+type YtArtistResult = Parameters<typeof mapYtArtist>[0];
 
 export interface ArtistPageResponse {
   name?: string;
@@ -28,7 +29,25 @@ const CACHE_TTL = 5 * 60 * 1000;
 const CACHE_LIMIT = 24;
 const cache = new Map<string, { page: ArtistPageResponse; expiresAt: number }>();
 const pending = new Map<string, ArtistRequest>();
+const nameCache = new Map<string, string>();
 const motionCache = new Map<string, { result: Promise<string | null>; expiresAt: number }>();
+
+export async function resolveArtistBrowseId(name: string): Promise<string | null> {
+  const clean = name.trim();
+  if (!clean) return null;
+  const key = clean.toLowerCase();
+  const cached = nameCache.get(key);
+  if (cached) return cached;
+
+  const results = await ipcInvoke<YtArtistResult[]>('yt_search_artists', { query: clean, limit: 5 });
+  if (!Array.isArray(results)) return null;
+  const withId = results.filter((entry) => Boolean(entry.browseId));
+  const exact = withId.find((entry) => entry.name?.trim().toLowerCase() === key);
+  const match = exact ?? withId[0];
+  if (!match?.browseId) return null;
+  nameCache.set(key, match.browseId);
+  return match.browseId;
+}
 
 export function loadArtistBannerMotion(artistId: string, artist: string, trackTitles: string[]): Promise<string | null> {
   const key = JSON.stringify([artistId, artist, trackTitles]);

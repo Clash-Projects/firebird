@@ -15,7 +15,7 @@
   import { goAlbum, goArtistPopularTracks } from '$src/ui/navigation/waveNav';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
   import ArtistPopularTracksPage from './ArtistPopularTracksPage.svelte';
-  import { loadArtistBannerMotion, subscribeToArtistPage, type ArtistPageResponse } from './artistPageLoader';
+  import { loadArtistBannerMotion, resolveArtistBrowseId, subscribeToArtistPage, type ArtistPageResponse } from './artistPageLoader';
   import { readArtistReleases, selectEssentialAlbums, selectLatestAlbum } from './artistReleases';
 
   const TRACKS_PER_COLUMN = 3;
@@ -30,14 +30,16 @@
   let stillArtwork = $state<{ artistId: string; url: string } | null>(null);
   let systemReduceMotion = $state(true);
   let artistMotion = $state<{ artistId: string; url: string | null } | null>(null);
+  let resolvedBrowseId = $state('');
 
-  let artist = $derived(libraryStore.artists.find((entry) => entry.id === artistId));
+  let effectiveArtistId = $derived(artistId.startsWith('name:') ? resolvedBrowseId : artistId);
+  let artist = $derived(effectiveArtistId ? libraryStore.artists.find((entry) => entry.id === effectiveArtistId) : undefined);
   let profileArtwork = $derived(artist?.bannerUrl || artist?.artworkUrl);
-  let stillUrl = $derived(stillArtwork?.artistId === artistId ? stillArtwork.url : '');
+  let stillUrl = $derived(effectiveArtistId && stillArtwork?.artistId === effectiveArtistId ? stillArtwork.url : '');
   let motionEnabled = $derived(
     settingsStore.canvasEnabled && !settingsStore.reduceMotion && !settingsStore.performanceMode && !systemReduceMotion,
   );
-  let motionUrl = $derived(motionEnabled && artistMotion?.artistId === artistId ? artistMotion.url : null);
+  let motionUrl = $derived(motionEnabled && effectiveArtistId && artistMotion?.artistId === effectiveArtistId ? artistMotion.url : null);
   let topTracks = $derived(
     remoteSongs.length ? remoteSongs : libraryStore.tracksByIds(artist?.topTrackIds ?? [])
   );
@@ -84,14 +86,14 @@
   }
 
   $effect(() => {
-    const browseId = artistId;
+    const browseId = effectiveArtistId;
     const sources = [bannerUrl, profileArtwork].filter((src): src is string => Boolean(src));
     const urls = [...new Set([
       ...sources.map((src) => artistImageAtSize(src, 0)),
       ...sources.map((src) => artistImageAtSize(src, 1600)),
       ...sources,
     ])];
-    if (!urls.length) return;
+    if (!browseId || !urls.length) return;
 
     const image = new Image();
     image.referrerPolicy = 'no-referrer';
@@ -114,7 +116,7 @@
 
   $effect(() => {
     const name = artist?.name;
-    const browseId = artistId;
+    const browseId = effectiveArtistId;
     if (!name || !browseId || !motionEnabled || showPopularTracks || !isTauriRuntime()) return;
     if (loading && !remoteSongs.length) return;
 
@@ -131,7 +133,7 @@
   });
 
   $effect(() => {
-    const browseId = artistId;
+    const rawId = artistId;
     const allTracksPage = showPopularTracks;
     const accountScope = settingsStore.ytConnected
       ? JSON.stringify([settingsStore.ytAccountEmail, settingsStore.ytAccountName])
@@ -139,38 +141,69 @@
     remoteSongs = [];
     remoteCatalog = null;
     bannerUrl = '';
+    resolvedBrowseId = '';
 
-    const needsFetch = Boolean(browseId && isTauriRuntime());
-    loading = needsFetch;
-    if (!needsFetch) return;
+    if (!rawId || !isTauriRuntime()) {
+      loading = false;
+      return;
+    }
 
-    let previousSongs: ArtistPageResponse['songs'];
-    let previousShelves: ArtistPageResponse['shelves'];
-    return untrack(() => subscribeToArtistPage(browseId, accountScope, (page, complete) => {
-      loading = !complete;
-      if (!page) return;
+    loading = true;
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
 
-      const existingArtist = libraryStore.artists.find((entry) => entry.id === browseId);
-      const entry = existingArtist ?? (page.name ? mapYtArtist({ kind: 'artist', name: page.name, browseId }) : undefined);
-      if (page.songs !== previousSongs) {
-        previousSongs = page.songs;
-        const songs = (page.songs ?? []).map(mapYtTrack);
-        libraryStore.upsertTracks(songs);
-        remoteSongs = songs;
-      }
-      if (complete && entry && remoteSongs.length) entry.topTrackIds = remoteSongs.map((song) => song.id);
-      if (entry && !existingArtist) libraryStore.upsertArtists([entry]);
+    const startFetch = (browseId: string) => {
+      if (cancelled) return;
+      let previousSongs: ArtistPageResponse['songs'];
+      let previousShelves: ArtistPageResponse['shelves'];
+      unsubscribe = untrack(() => subscribeToArtistPage(browseId, accountScope, (page, complete) => {
+        if (cancelled) return;
+        loading = !complete;
+        if (!page) return;
 
-      if (!allTracksPage) {
-        if (page.shelves !== previousShelves || !remoteCatalog) {
-          previousShelves = page.shelves;
-          const catalog = readArtistReleases(page.shelves ?? [], page.name || entry?.name || '');
-          libraryStore.upsertAlbums(catalog.albums);
-          remoteCatalog = catalog;
+        const existingArtist = libraryStore.artists.find((entry) => entry.id === browseId);
+        const entry = existingArtist ?? (page.name ? mapYtArtist({ kind: 'artist', name: page.name, browseId }) : undefined);
+        if (page.songs !== previousSongs) {
+          previousSongs = page.songs;
+          const songs = (page.songs ?? []).map(mapYtTrack);
+          libraryStore.upsertTracks(songs);
+          remoteSongs = songs;
         }
-        bannerUrl = page.bannerUrl ?? '';
-      }
-    }));
+        if (complete && entry && remoteSongs.length) entry.topTrackIds = remoteSongs.map((song) => song.id);
+        if (entry && !existingArtist) libraryStore.upsertArtists([entry]);
+
+        if (!allTracksPage) {
+          if (page.shelves !== previousShelves || !remoteCatalog) {
+            previousShelves = page.shelves;
+            const catalog = readArtistReleases(page.shelves ?? [], page.name || entry?.name || '');
+            libraryStore.upsertAlbums(catalog.albums);
+            remoteCatalog = catalog;
+          }
+          bannerUrl = page.bannerUrl ?? '';
+        }
+      }));
+    };
+
+    if (rawId.startsWith('name:')) {
+      let queryName = rawId.slice(5);
+      try { queryName = decodeURIComponent(queryName); } catch { /* keep raw */ }
+      void resolveArtistBrowseId(queryName).then((browseId) => {
+        if (cancelled) return;
+        if (!browseId) {
+          loading = false;
+          return;
+        }
+        resolvedBrowseId = browseId;
+        startFetch(browseId);
+      });
+    } else {
+      startFetch(rawId);
+    }
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
   });
 
   function playPopular(shuffle = false) {
@@ -229,7 +262,7 @@
           <Buttons class="artist-action" disabled={topTracks.length === 0} onclick={() => playPopular(true)}>
             <WaveIcon name="shuffle" size={14} /> Shuffle
           </Buttons>
-          <Buttons variant="toggle" active={Boolean(artist.isFollowing)} class="artist-action" onclick={() => libraryStore.toggleFollowArtist(artistId)}>
+          <Buttons variant="toggle" active={Boolean(artist.isFollowing)} class="artist-action" onclick={() => libraryStore.toggleFollowArtist(effectiveArtistId)}>
             {artist.isFollowing ? 'Following' : 'Follow'}
           </Buttons>
         </div>
@@ -286,7 +319,7 @@
               <ShelfRail
                 title="Popular tracks"
                 seeAllLabel="Show all"
-                onSeeAll={() => goArtistPopularTracks(artistId)}
+                onSeeAll={() => goArtistPopularTracks(effectiveArtistId || artistId)}
                 preferredCardWidth={394}
                 maxVisibleCards={2}
               >
@@ -351,7 +384,7 @@
 {/snippet}
 
 {#if showPopularTracks}
-  <ArtistPopularTracksPage {artistId} {artist} tracks={topTracks} {loading} />
+  <ArtistPopularTracksPage artistId={effectiveArtistId || artistId} {artist} tracks={topTracks} {loading} />
 {:else}
   {@render artistOverview()}
 {/if}

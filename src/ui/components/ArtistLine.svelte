@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { libraryStore } from '$src/state/library.svelte';
-  import { goArtist } from '$src/ui/navigation/waveNav';
+  import { goArtistByName } from '$src/ui/navigation/waveNav';
 
   interface Props {
     artists: string[];
@@ -11,10 +10,7 @@
 
   function openArtist(name: string, e: MouseEvent) {
     e.stopPropagation();
-    const target = name.trim().toLowerCase();
-    const match = libraryStore.artists.find((a) => a.name.toLowerCase() === target)
-      ?? libraryStore.artists.find((a) => a.name.toLowerCase().includes(target));
-    goArtist(match?.id ?? encodeURIComponent(name.trim()));
+    goArtistByName(name);
   }
 </script>
 

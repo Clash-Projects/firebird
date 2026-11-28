@@ -6,7 +6,7 @@
   import type { Track } from '$src/state/types';
   import Artwork from '$src/ui/components/Artwork.svelte';
   import Buttons from '$src/ui/components/Buttons.svelte';
-  import { goAlbum, goArtist, goGenre } from '$src/ui/navigation/waveNav';
+  import { goAlbum, goArtistByName, goGenre } from '$src/ui/navigation/waveNav';
   import WaveIcon from '$src/ui/theme/WaveIcon.svelte';
 
   type Period = '7d' | '1m' | 'all';
@@ -142,10 +142,7 @@
     return new Date(ms).toLocaleDateString();
   }
   function openArtistByName(name: string) {
-    const clean = name.trim();
-    const match = libraryStore.artists.find((a) => a.name.toLowerCase() === clean.toLowerCase())
-      ?? libraryStore.artists.find((a) => a.name.toLowerCase().includes(clean.toLowerCase()));
-    goArtist(match?.id ?? encodeURIComponent(clean));
+    goArtistByName(name);
   }
 
   function openAlbumByName(name: string, artist: string) {
