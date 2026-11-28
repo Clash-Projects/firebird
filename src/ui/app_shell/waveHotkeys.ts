@@ -31,7 +31,6 @@ export function attachWaveHotkeys(): () => void {
     if (isInput) return;
 
     if (e.code === 'Space') {
-      if (target?.closest('button, a[href], [role="button"]')) return;
       e.preventDefault();
       if (playerStore.currentTrack) playerStore.togglePlay();
     } else if (e.key === 'ArrowRight' && e.altKey) {
