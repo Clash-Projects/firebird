@@ -323,7 +323,7 @@
         aria-label="Back"
         class="bar-btn"
       >
-        <WaveIcon name="chevronLeft" size={15} />
+        <WaveIcon name="chevronLeft" size={13} />
       </button>
       <button
         type="button"
@@ -333,7 +333,7 @@
         aria-label="Forward"
         class="bar-btn"
       >
-        <WaveIcon name="chevronRight" size={15} />
+        <WaveIcon name="chevronRight" size={13} />
       </button>
     </div>
 
@@ -348,7 +348,7 @@
       }}
     >
       <form onsubmit={submitSearch} class="relative flex items-center">
-        <WaveIcon name="search" size={14} class="pointer-events-none absolute left-2.5 text-[var(--lw-text-tertiary)]" />
+        <WaveIcon name="search" size={13} class="pointer-events-none absolute left-2.5 text-[var(--lw-text-tertiary)]" />
         <input
           type="text"
           data-lw="title-search"

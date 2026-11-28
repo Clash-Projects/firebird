@@ -104,14 +104,14 @@
     aria-hidden="true"
   >
     {#if name === 'home'}
-      <path d="M3.2 8.7L9.35 3.35C9.72 3.03 10.28 3.03 10.65 3.35L16.8 8.7C17.08 8.94 17.25 9.3 17.25 9.67V15.75C17.25 16.44 16.69 17 16 17H12.5V12.4C12.5 11.79 12.01 11.3 11.4 11.3H8.6C7.99 11.3 7.5 11.79 7.5 12.4V17H4C3.31 17 2.75 16.44 2.75 15.75V9.67C2.75 9.3 2.92 8.94 3.2 8.7Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
+      <path d="M3.5 9L10 3.3L16.5 9V16C16.5 16.55 16.05 17 15.5 17H12V11.8H8V17H4.5C3.95 17 3.5 16.55 3.5 16V9Z" stroke="currentColor" stroke-width="1.05" stroke-linejoin="round" />
     {:else if name === 'stats'}
       <rect x="3" y="8" width="3.5" height="9" rx="0.7" stroke="currentColor" stroke-width="1.3" />
       <rect x="8.25" y="3" width="3.5" height="14" rx="0.7" stroke="currentColor" stroke-width="1.3" />
       <rect x="13.5" y="10.5" width="3.5" height="6.5" rx="0.7" stroke="currentColor" stroke-width="1.3" />
     {:else if name === 'search'}
-      <circle cx="8.8" cy="8.8" r="5.5" stroke="currentColor" stroke-width="1.35" />
-      <path d="M13 13L17 17" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
+      <circle cx="8.8" cy="8.8" r="5.5" stroke="currentColor" stroke-width="1.1" />
+      <path d="M13 13L17 17" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" />
     {:else if name === 'podcast'}
       <path d="M4.2 11V9.5C4.2 6.3 6.8 3.7 10 3.7C13.2 3.7 15.8 6.3 15.8 9.5V11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
       <rect x="3" y="10" width="2.8" height="4.8" rx="1.2" stroke="currentColor" stroke-width="1.3" />
@@ -206,13 +206,13 @@
     {:else if name === 'close'}
       <path d="M4.8 4.8L15.2 15.2M15.2 4.8L4.8 15.2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
     {:else if name === 'chevronLeft'}
-      <path d="M12.2 4.6L6.8 10L12.2 15.4" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M12.2 4.6L6.8 10L12.2 15.4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
     {:else if name === 'chevronRight'}
-      <path d="M7.8 4.6L13.2 10L7.8 15.4" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M7.8 4.6L13.2 10L7.8 15.4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
     {:else if name === 'chevronUp'}
-      <path d="M4.6 12.2L10 6.8L15.4 12.2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M4.6 12.2L10 6.8L15.4 12.2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
     {:else if name === 'chevronDown'}
-      <path d="M4.6 7.8L10 13.2L15.4 7.8" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M4.6 7.8L10 13.2L15.4 7.8" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
     {:else if name === 'arrowLeft'}
       <path d="M16.5 10H3.8M8.8 5L3.8 10L8.8 15" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" />
     {:else if name === 'arrowRight'}
@@ -301,8 +301,7 @@
       <circle cx="14.5" cy="14.8" r="2" stroke="currentColor" stroke-width="1.3" />
       <path d="M7.3 9.1L12.7 6.1M7.3 10.9L12.7 13.9" stroke="currentColor" stroke-width="1.25" />
     {:else if name === 'terminal'}
-      <rect x="3" y="4" width="14" height="12" rx="1.8" stroke="currentColor" stroke-width="1.3" />
-      <path d="M6.2 8.2L8.7 10.3L6.2 12.4M10.4 12.4H13.8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M4 6.5L8.2 10L4 13.5M10 13.5H16" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
     {:else if name === 'sparkles' || name === 'wand'}
       <path d="M10 3L11.3 7.5L15.8 8.8L11.3 10.1L10 14.6L8.7 10.1L4.2 8.8L8.7 7.5L10 3Z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" />
       <path d="M15.2 13.5V16.5M13.7 15H16.7" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" />
