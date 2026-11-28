@@ -171,6 +171,7 @@ pub fn prefs_get_all_settings(state: State<'_, AppState>) -> Value {
     m.insert("spotifyCanvasEnabled".into(), Value::Bool(p.spotify_canvas_enabled()));
     m.insert("preferSpotifyCanvas".into(), Value::Bool(p.prefer_spotify_canvas()));
     m.insert("recommendationSource".into(), Value::String(p.recommendation_source()));
+    m.insert("syncYtLibrary".into(), Value::Bool(p.sync_yt_library()));
     m.insert("verboseLogs".into(), Value::Bool(p.verbose_logs()));
     Value::Object(m)
 }
